@@ -1,6 +1,6 @@
 ---
 name: messaging-game-over
-description: When and how a game posts state, score, and game-over transitions to the host via the engine runtime. Invoke when wiring scene transitions, score updates, or win/lose reporting — or when host messaging looks missing or wrong.
+description: Use when wiring scene transitions, score updates, or win/lose reporting — or when host messaging looks missing or wrong. Covers when and how a game posts state, score, and game-over transitions to the host via the engine runtime.
 ---
 
 # Messaging game over (and every other transition)

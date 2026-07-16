@@ -1,6 +1,6 @@
 ---
 name: creating-a-game
-description: Orchestrates creating a new retro game from a chat description — elicit, route, clone the template, develop, validate, checkpoint. Invoke whenever the user asks for a new game, or as the entry point when it is unclear which Retrovibe skill applies (this skill owns the routing list).
+description: Use when the user asks for a new game, or as the entry point when it is unclear which Retrovibe skill applies (this skill owns the routing list). Orchestrates creating a retro game from a chat description — elicit, route, clone the template, develop, validate, checkpoint.
 ---
 
 # Creating a game

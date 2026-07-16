@@ -1,6 +1,6 @@
 ---
 name: adding-easter-egg
-description: Adds hidden surprises to a game — palette-swap toggles and secret input sequences (↑↑↓↓…). Invoke when the user asks for an easter egg, a secret, a cheat code, or an unlockable color scheme.
+description: Use when the user asks for an easter egg, a secret, a cheat code, or an unlockable color scheme. Adds hidden surprises to a game — palette-swap toggles and secret input sequences (↑↑↓↓…).
 ---
 
 # Adding an easter egg

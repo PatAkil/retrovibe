@@ -1,6 +1,6 @@
 ---
 name: iterating-on-a-game
-description: Edits an existing game in place — the default path for any request naming a game whose workspace folder already exists ("make the ship faster", "add a second enemy"). Never clones; runs the same validation loop, smoke check, and checkpoint commit as creating-a-game.
+description: Use when the request names a game whose workspace folder already exists ("make the ship faster", "add a second enemy") — the default path for edits. Modifies the game in place; never clones; same validation loop, smoke check, and checkpoint commit as creating-a-game.
 ---
 
 # Iterating on a game

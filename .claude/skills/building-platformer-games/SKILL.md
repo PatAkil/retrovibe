@@ -1,6 +1,6 @@
 ---
 name: building-platformer-games
-description: Provides the tuned platformer controller recipe for Retrovibe games — variable jump height, coyote time, jump buffering, gravity constants, AABB collision resolution order, one-way platforms, and WIN-state goal levels. Invoke whenever the requested game is a platformer or has jumping/gravity movement.
+description: Use when the requested game is a platformer or has jumping/gravity movement. Provides the tuned controller recipe — variable jump height, coyote time, jump buffering, gravity constants, AABB collision resolution order, one-way platforms, and WIN-state goal levels.
 ---
 
 # Building platformer games

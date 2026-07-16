@@ -1,6 +1,6 @@
 ---
 name: ensuring-arcade-visuals
-description: Ensures a Retrovibe game looks like a real arcade cabinet — palette discipline, low pixel resolution, ASCII sprites, retro bitmap text, CRT filter, ambient particles. Invoke when creating or editing any game's visual presentation, or when a game looks flat, modern, or off-brand.
+description: Use when creating or editing a game's visual presentation, or when a game looks flat, modern, or off-brand. Ensures the arcade-cabinet look — palette discipline, low pixel resolution, ASCII sprites, retro bitmap text, CRT filter, ambient particles.
 ---
 
 # Ensuring arcade visuals

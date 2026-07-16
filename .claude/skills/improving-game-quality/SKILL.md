@@ -1,6 +1,6 @@
 ---
 name: improving-game-quality
-description: Runs the feel-and-correctness quality pass on a Retrovibe game — the repo's ONLY quality checklist. Invoke before any handoff to the user, after substantial gameplay changes, or whenever a game feels flat, unfair, broken on resume, or is missing feedback (particles, shake, sound, HUD).
+description: Use when a game is about to be handed off to the user, after substantial gameplay changes, or when it feels flat, unfair, broken on resume, or is missing feedback (particles, shake, sound, HUD). Runs the feel-and-correctness pass — the repo's ONLY quality checklist.
 ---
 
 # Improving game quality

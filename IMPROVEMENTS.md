@@ -201,13 +201,54 @@ floor against the starfield background; pickup and hazard remain
 unambiguous when rendered in grayscale; no skill example recommends a
 red-vs-green-only distinction.
 
+## ☐ 10. Visual variety across generated games
+
+**Feedback:** particle effects and character designs are too similar across
+different generated games.
+
+**Root causes (address all three):**
+1. **The reference game is an attractor** — writers adapt `main.ts`, so its
+   starfield + blue ship + yellow `+` pickup + red `x` hazard leak into
+   every game.
+2. **Hardcoded engine defaults** — `burst()` defaults to the same yellow
+   1–2px particles everywhere; `'stars'` is the path-of-least-resistance
+   ambient.
+3. **Model house-style** — without forced divergence, a writer model settles
+   into one fixed aesthetic across runs.
+
+**Change:**
+- **Style card before code** (creating-a-game step 4): before the first
+  milestone save, the writer derives 2–3 distinct visual directions from the
+  game's fiction — each a one-liner: palette + background/actor color
+  indices, ambient preset, sprite silhouette language (round/angular/tall/
+  chunky), juice personality (snappy/heavy/floaty) — picks the best fit,
+  and records it as a comment block atop `main.ts`. Proposing options before
+  building is the reliable way to break a model's default aesthetic.
+- **Reference-divergence rule** (ensuring-arcade-visuals): the reference
+  game's exact combination is reserved; new games must not reuse its sprite
+  maps or effect recipe verbatim — sprites are designed from the fiction's
+  silhouettes, bursts use the game's own palette colors (never the engine
+  default yellow), ambient preset chosen from the fiction table.
+- **Widen the engine's raw material** (template fix): add 2–3 more curated
+  palettes to `palette.ts` (e.g. a neon/synthwave ramp, a warm
+  sunset/desert ramp, a cold ocean/ice ramp) so palette choice is a real
+  decision; make `burst()`'s color a required-in-practice parameter in skill
+  guidance.
+- **Quality check** (improving-game-quality): "would a screenshot of this
+  game be mistaken for the reference game or the previous game? If yes, the
+  visual pass failed."
+
+**Acceptance:** two games generated from different fictions share neither
+palette-index scheme, ambient preset, sprite silhouettes, nor burst colors;
+the style card comment exists atop each game's `main.ts`.
+
 ---
 
 ### Sequencing note
 
 Items 2+3 land together (recoverability moves from create-time to
 reset-time). Item 5 is a small playing-the-game + creating-a-game edit and
-can land first. Items 4 and 6–9 all touch the template (engine + reference
+can land first. Items 4 and 6–10 all touch the template (engine + reference
 game) and skills — land them as one "controls & feel" template-fix pass with
 a single re-verification (mechanical skill check, clone build/smoke, hint
 rendering, contrast/grayscale checks).

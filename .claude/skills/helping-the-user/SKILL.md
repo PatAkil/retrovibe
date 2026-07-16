@@ -1,6 +1,6 @@
 ---
 name: helping-the-user
-description: Turns a vague game request into a buildable spec through behavior-elicitation questions. Invoked as creating-a-game's Step 1 gate whenever the core loop, lose condition, or controls are unknown; also useful whenever the user is unsure what they want.
+description: Use when the core loop, lose condition, or controls are unknown (creating-a-game's Step 1 gate), or when the user is unsure what they want. Turns a vague game request into a buildable spec through behavior-elicitation questions.
 ---
 
 # Helping the user

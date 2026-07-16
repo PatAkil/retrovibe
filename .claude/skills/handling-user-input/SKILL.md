@@ -1,6 +1,6 @@
 ---
 name: handling-user-input
-description: The unified keyboard contract and owner of the A/B/X/Y action model. Invoke for anything touching controls — declaring or relabeling actions, movement handling, edge-vs-held semantics (pressed/held/released, endFrame), title-screen control hints, or audio unlock on first keypress.
+description: Use when anything touches controls — declaring or relabeling actions, movement handling, edge-vs-held semantics (pressed/held/released, endFrame), title-screen control hints, or audio unlock on first keypress. The unified keyboard contract and owner of the A/B/X/Y action model.
 ---
 
 # Handling user input

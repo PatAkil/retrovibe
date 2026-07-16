@@ -1,6 +1,6 @@
 ---
 name: playing-the-game
-description: Runs the dev-server lifecycle and headless smoke check for a game in workspace/ — reclaim port 5173, launch Vite in the background, run the smoke gate, and hand the URL to the user for playtesting. Invoked by creating-a-game and iterating-on-a-game as the pre-handoff runtime gate, and whenever the user asks to play, run, or try a game.
+description: Use when the user asks to play, run, or try a game — and as the pre-handoff runtime gate invoked by creating-a-game and iterating-on-a-game. Runs the dev-server lifecycle and headless smoke check — reclaim port 5173, launch Vite in the background, run the smoke gate, hand the URL to the user for playtesting.
 ---
 
 # Playing the game

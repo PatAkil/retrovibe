@@ -48,6 +48,9 @@ retrovibe/
 - **Checkpoint commits are scoped**: `git add workspace/<game-name> && git commit -m "..."` —
   never `git add -A`. Committed games stay recoverable after a reset.
 - **No helper scripts.** Skills carry all commands inline.
+- **Skill frontmatter convention**: every SKILL.md description starts with
+  `Use when <trigger conditions>.` followed by one sentence on what it does —
+  triggers first, so the right skill is inferred before reading further.
 - **Done means**: `npm run check` after every edit; `npm run build` **and**
   `npm run smoke` green before handing off. A green build alone is never
   "done" — and the user, not Claude, is the playtester. Claude reports

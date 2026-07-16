@@ -1,6 +1,6 @@
 ---
 name: resetting-the-workspace
-description: Wipes user-created game folders from workspace/ after explicit per-name confirmation, preserving the pristine game-template and any games the user chooses to keep or checkpoint-commit. Invoked when the user asks to reset, wipe, clean up, or start over with the workspace. Destructive — every step is guarded.
+description: Use when the user asks to reset, wipe, clean up, or start over with the workspace. Destructive and fully guarded — wipes user-created game folders after explicit per-name confirmation, preserving the pristine game-template and any games the user chooses to keep or checkpoint-commit.
 ---
 
 # Resetting the workspace
