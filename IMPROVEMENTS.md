@@ -43,29 +43,41 @@ everything", "start over from scratch"). A request that plausibly targets one
 game ("this one's boring, let's start over", or any phrasing naming a
 specific game) routes to iterating-on-a-game / creating-a-game instead — the
 skill's trigger description and the orchestrator routing row are narrowed to
-say exactly this.
+say exactly this. **"Clean up" is dropped from the trigger set entirely**: it
+is workspace-scoped but ambiguous about the *operation* (tidy vs delete);
+"clean up" alone must never trigger a wipe.
 
 **Exact git flow** (non-interactive-safe; the naive
 commit-then-`rm` leaves permanent ` D` porcelain noise and can fail outright):
 
 1. Stop the dev server (port-based, as today).
-2. **Safety commit — only if needed, pathspec-limited:** if
-   `git status --porcelain workspace/` (template excluded by its own
-   cleanliness gate) prints anything, run
-   `git add workspace/<name> …` for each game folder, then
-   `git commit -m "checkpoint before reset" -- workspace/` — the pathspec
-   ensures unrelated staged changes never ride along; skip the commit
-   entirely when there is nothing to commit (already-committed games must not
-   crash a zero-question flow with "nothing to commit").
+2. **Safety commit — only if needed, pathspec-limited, triggered per game
+   folder:** the commit trigger is `git status --porcelain workspace/<name>`
+   non-empty for **at least one enumerated game folder** — not bare
+   `workspace/` (a stray non-game file like `workspace/notes.txt` would trip
+   a workspace-wide trigger, stage nothing, and fail the commit with
+   "nothing to commit"). When triggered: `git add workspace/<name> …` for
+   the dirty game folders, then
+   `git commit -m "checkpoint before reset" -- workspace/<name> …`
+   (pathspecs = exactly those folders) — unrelated staged changes never ride
+   along; skip the commit entirely when no game folder is dirty.
 3. Allowlist delete, exactly as today (`rm -rf workspace/<name>` per literal
    path; never a glob; CWD + template-exists + template-porcelain guards
-   before and after).
+   before and after). **Stray non-game files under `workspace/` are never
+   deleted** — they are named in the completion report for the user to deal
+   with.
 4. **Commit the deletions:** `git add workspace/<name> …` (stages the
-   removals), `git commit -m "reset workspace" -- workspace/` — the tree ends
-   clean; without this every reset leaves permanent uncommitted deletions.
+   removals), `git commit -m "reset workspace" -- workspace/<name> …` — the
+   reset leaves no uncommitted deletions behind.
 
-**End state ("neutral"):** only `game-template` in `workspace/`, no dev
-server on 5173, template porcelain clean, **repo-root `git status` clean**.
+**End state ("neutral") — scoped to what reset owns:** only `game-template`
+among the game folders in `workspace/`, no dev server on 5173, template
+porcelain clean, and **zero reset-induced porcelain** (`git status
+--porcelain workspace/` shows nothing except stray non-game files that
+pre-dated the reset, which are reported). Pre-existing changes *outside*
+`workspace/` are untouched — an unconditional "repo-root clean" would force
+the skill to commit or destroy unrelated work, contradicting step 2's own
+guarantee.
 
 **Report:** the completion message names the safety commit hash and the exact
 restore command (`git show <hash>:workspace/<name>/game/main.ts`) — the
@@ -76,10 +88,14 @@ exist.
 (skip that folder in steps 3–4) — the skill just never *asks*.
 
 **Acceptance:** an unambiguous "reset the workspace" completes with zero
-questions and reaches the end state above (including root porcelain clean,
-twice in a row — no noise compounding); "start over" while discussing a
-specific game routes to an edit/recreate of that game, not a wipe; a wiped
-game is retrievable via the reported restore command.
+questions and reaches the scoped end state above, twice in a row — no
+reset-induced porcelain compounding; a run with a pre-existing unrelated
+change outside `workspace/` completes without committing or touching it;
+a run whose only `workspace/` dirt is a stray non-game file completes
+without a failed commit and reports the stray; "start over" while
+discussing a specific game routes to an edit/recreate of that game, not a
+wipe; "clean up" alone never wipes; a wiped game is retrievable via the
+reported restore command.
 
 ## ☐ 3. No commits during the create/iterate interaction
 
@@ -97,19 +113,29 @@ touches git zero times; the working tree simply holds the current game.
   there: pathspec-limited checkpoint of `workspace/<name>` before the
   delete, deletion staged and committed with the clone. Without this, item 3
   makes "overwrite space-miner" the only unrecoverable data loss in the
-  product.
+  product. **Recovery must be discoverable, same as reset's** (item 2's own
+  principle: recovery the user isn't told about doesn't exist): the
+  overwrite handoff message names the safety commit hash and the exact
+  restore command.
 - Explicit "commit/save my game" requests still commit, scoped as before.
 
-**Surface sweep:** `grep -rn "checkpoint" .claude/ CLAUDE.md` and update
-every hit — known: creating-a-game step 6 and its routing table row,
-iterating-on-a-game step 5 and its frontmatter description,
+**Surface sweep — case-insensitive, two patterns** (the naive lowercase
+`grep "checkpoint"` misses four of the five known hits — capitalized step
+headers and CLAUDE.md's "Checkpoint commits", and matches nothing in
+lifecycle-runner, whose stale text says "scoped commits" without the word):
+`grep -rni "checkpoint" .claude/ CLAUDE.md` **and**
+`grep -rniE "scoped.*commit|git commit" .claude/ CLAUDE.md`; update every
+hit — known: creating-a-game step 6 header + routing table row,
+iterating-on-a-game step 5 header + frontmatter description,
 resetting-the-workspace step 2 (keep/commit interview text),
-lifecycle-runner agent ("scoped commits"), CLAUDE.md conventions
-("Checkpoint commits are scoped").
+lifecycle-runner agent lines 3 and 15–16 ("scoped commits" / "Commits:
+scoped `git add …`"), CLAUDE.md conventions ("Checkpoint commits are
+scoped").
 
 **Acceptance:** a full create run makes no commits (git log unchanged); the
-overwrite branch and reset both leave the destroyed game recoverable from a
-safety commit; the grep returns no stale checkpoint-commit instructions.
+overwrite branch and reset both leave the destroyed game recoverable **via a
+reported restore command**; both sweep greps return no stale
+commit instructions.
 
 ## ☐ 4. Sensible keyboard controls
 
@@ -275,10 +301,20 @@ color — that can't happen. Also make it red-green color-blind friendly.
 **Change — the floor is the gate; the role partition is only guidance.**
 Computed check: `contrast(a, b)` relative-luminance helper added to
 `engine/palette.ts`; floor **≥ 3:1** between every gameplay-critical entity
-color and **every surface it can overlap** — the clear color, drawn
-scenery/terrain, and ambient particles. (A partition alone provably fails:
-PICO8 red-vs-dark-grey is 1.81:1, red-vs-dark-purple 2.35:1 — both
+color and every **static** surface it can overlap — the clear color and
+drawn scenery/terrain. (A partition alone provably fails: PICO8
+red-vs-dark-grey is 1.81:1, red-vs-dark-purple 2.35:1 — both
 "partition-legal" and both invisible.)
+
+**Ambient particles get a prominence band, not the actor floor** — a 3:1
+actor-vs-ambient requirement is degenerately satisfiable only by an
+invisible starfield: red's luminance caps a 3:1-compliant ambient below
+perception for 1–2px dots under CRT darkening (computed: every visible
+PICO8 dim color fails at least one of the reference's actor colors).
+Instead: ambient particle colors sit in a band **just above the
+background** — contrast vs the clear color between ~1.2:1 and ~2.5:1 —
+at 1–2 px sizes. That keeps atmosphere visible while structurally incapable
+of competing with actors (which clear ≥3:1 over the same background).
 - **All 16 indices get roles** in `palette.ts` docs: background (0/1/2/5),
   scenery (3/4/6/13/15 — usable for terrain, still subject to the floor
   vs actors), actor (7/8/9/10/11/12/14). Roles guide selection; the floor
@@ -286,10 +322,8 @@ PICO8 red-vs-dark-grey is 1.81:1, red-vs-dark-purple 2.35:1 — both
 - **Ambient presets are an engine surface:** `particles.ts` hardcodes
   `#FFF1E8` (white — the brightest actor color) for stars/snow and the
   reference ship's exact blue for rain, and exposes no color option — game
-  code cannot comply today. Dim the preset colors (or add a color option
-  with dim defaults) so ambient sits below actor brightness; without this
-  the reference game itself fails the floor (blue ship vs white star pixel:
-  2.23:1).
+  code cannot comply today. Retune the preset colors into the prominence
+  band above (or add a color option with band-compliant defaults).
 - **Red-green safety:** a red-vs-green hue difference may never be the only
   distinction between critical entity classes; require two of hue-family
   (prefer blue/orange/yellow pairs), brightness, silhouette. Grayscale
@@ -300,8 +334,9 @@ PICO8 red-vs-dark-grey is 1.81:1, red-vs-dark-purple 2.35:1 — both
 improving-game-quality.
 
 **Acceptance:** in the reference game, every critical entity passes the
-3:1 floor against the clear color AND the (post-dim) ambient particle
-color, verified with `contrast()`; pickup and hazard remain unambiguous in
+3:1 floor against the clear color (and any scenery), verified with
+`contrast()`; the retuned ambient colors sit inside the 1.2–2.5:1 band vs
+the clear color (visible, subdued); pickup and hazard remain unambiguous in
 grayscale; no skill example recommends a red-vs-green-only distinction.
 
 ## ☐ 10. Visual variety across generated games
@@ -333,11 +368,16 @@ different generated games.
   colors — never the engine default yellow.
 - **Widen the raw material AND make it reachable** (template fix): add 2–3
   curated palettes to `palette.ts` (neon/synthwave, warm sunset, cold
-  ocean) — and update every surface writers actually read, or the new
-  palettes don't exist for them: **CLAUDE.md's API-table palette row**,
-  **ensuring-arcade-visuals' palette table** (list all palettes; drop
-  "PICO8 … the default choice"), **adding-easter-egg's palette
-  enumeration**.
+  ocean) — and update every surface that enumerates the palette universe,
+  or the new palettes don't exist for writers: **CLAUDE.md's API-table
+  palette row**, **ensuring-arcade-visuals' palette table** (list all
+  palettes; drop "PICO8 … the default choice"), **ensuring-arcade-visuals'
+  visual-pass checklist** (independently hard-enumerates
+  "PICO8/GAMEBOY/DUSK" — a synthwave game would flag its own palette as a
+  violation at the gate writers actually run), **adding-easter-egg's
+  palette enumeration**. **Sweep rule:**
+  `grep -rni "gameboy" .claude/ CLAUDE.md` — every hit that enumerates
+  palettes must list the full set.
 - **Quality check** (improving-game-quality): "would a screenshot of this
   game be mistaken for the reference game or another game currently in the
   workspace? If yes, the visual pass failed."
@@ -347,11 +387,15 @@ to diverge from, no persistent style history) is NOT solved by this item —
 a durable style-history store belongs to the deploy epic. Within one
 workspace lifetime, the mechanisms above are enforceable.
 
-**Acceptance:** any two games coexisting in `workspace/` share neither
-palette-index scheme, ambient preset, sprite silhouettes, nor burst colors;
-every generated game carries a style-card comment atop `main.ts`; every new
-game differs from the reference on at least palette-or-ambient AND
-silhouette.
+**Acceptance:** any two games coexisting in `workspace/` differ on **at
+least two of the four axes** (palette-index scheme, ambient preset, sprite
+silhouettes, burst colors) — **ambient is exempt from the count when the
+fiction locks it** (two space games may both use `'stars'` per
+improving-game-quality's fiction-fit check, but must then differ on palette
+AND silhouette; an all-four-axes demand would put this item at war with
+that check and hard-cap coexisting games at the preset count); every
+generated game carries a style-card comment atop `main.ts`; every new game
+differs from the reference on at least palette-or-ambient AND silhouette.
 
 ---
 
