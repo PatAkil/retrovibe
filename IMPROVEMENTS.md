@@ -440,3 +440,46 @@ reference game), the harness, and skills — land them as one "controls &
 feel" template-fix pass with a single re-verification (mechanical skill
 check, clone build/smoke, harness run incl. the new pause binding, hint
 rendering, contrast/grayscale checks, size-floor measurements).
+
+---
+
+## Execution prompt (paste into a fresh session to implement this spec)
+
+> Read `IMPROVEMENTS.md` in full — it is the sole spec for this work and has
+> survived three adversarial review rounds; treat every mandate, floor,
+> exemption, and acceptance bar in it as settled. `CLAUDE.md` holds the repo
+> conventions — follow them exactly. Do not relitigate decisions recorded in
+> either file; if you find a genuine contradiction, stop and surface it.
+>
+> Implement all open items in this order:
+> 1. **Item 5** (server-up handoff) — small, lands first.
+> 2. **Items 2+3 together** (questionless reset + commit-free interaction) —
+>    recoverability moves to reset/overwrite-time; run every sweep grep the
+>    items specify and update every hit.
+> 3. **Items 4+6+7+8+9+10 as ONE "controls & feel" template pass** — engine,
+>    reference game, harness, skills, and CLAUDE.md updated together.
+>
+> Rules:
+> - Work on branch `claude/funny-tesla-lclnmj`; one commit per group above,
+>   each pushed; a failed commit is a hard error. No PR unless asked.
+> - The template is never run in place — verify every template change against
+>   a clone (`cd workspace/<clone> && npm run check/build/smoke`, dev-server
+>   lifecycle per playing-the-game).
+> - After skill edits, mechanically verify every command, path, engine
+>   export, and constant named in all 11 SKILL.md files exists in the
+>   template as written — a dangling reference is a hard failure; frontmatter
+>   descriptions must start "Use when ...".
+> - After the template pass, run `node harness/verify.mjs` against a running
+>   clone — it must exercise the NEW pause binding — and re-run the full gate
+>   set.
+> - Execute each item's Acceptance bar explicitly: machine-checkable bars run
+>   for real (`contrast()` computations, size measurements, item 2's git-flow
+>   cases including twice-in-a-row reset and the stray-directory case);
+>   human-only bars (arm's-length test, "reads at a glance") go to the user
+>   as a short playtest list — never claimed as passed.
+> - Finish with two adversarial reviewers (engine/runtime lens;
+>   workflow/docs lens) reviewing the implementation against this spec; fix
+>   and loop until both return NO FINDINGS.
+> - End state: all items marked ☑ here, `workspace/` holds only a pristine
+>   `game-template`, no server on 5173, `git status` clean, branch pushed.
+>   Report per item: what changed, gate results, and the user playtest list.
