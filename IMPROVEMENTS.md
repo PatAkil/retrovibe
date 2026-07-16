@@ -201,7 +201,7 @@ re-triggers `pressed`; title hints show the real keys; harness run exercises
 the new pause binding and still observes the PAUSED `stateChanged`;
 `check`/`build`/`smoke` green; mechanical skill verification green.
 
-## ☐ 5. Game must actually be running at handoff
+## ☑ 5. Game must actually be running at handoff
 
 **Feedback:** "make sure the game is running when you tell the user" — there
 were handoffs where the server was already down (the gate-only flow tears

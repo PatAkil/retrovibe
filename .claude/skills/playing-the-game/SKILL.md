@@ -51,7 +51,16 @@ It exits nonzero on any failure — treat a nonzero exit as a hard gate failure:
 
 **Run smoke only immediately after steps 1–2 launched *this* game's server.** The gate validates whatever is serving port 5173, not the folder you run it from — out of order (another game's server still holding the port), a green result belongs to the wrong game.
 
-### 4. Hand off to the user
+### 4. Hand off to the user — with the server UP
+
+**The handoff state is server up.** After the smoke gate passes, LEAVE the dev server running. Immediately before sending the handoff message, re-verify liveness:
+
+```bash
+lsof -ti:5173   # must print a PID
+curl -s -o /dev/null -w '%{http_code}' http://localhost:5173/   # must print 200
+```
+
+If either check fails, relaunch (steps 1–2) and re-verify before handing off — never send "ready to play" against a dead port.
 
 The handoff is the payoff moment — the user is a **player**, not QA. Give exactly three things, nothing else:
 
@@ -77,14 +86,12 @@ The checklist below is **Claude's, never the user's**. The full quality bar stil
 - Ambient background particles and the CRT filter are visible
 - HUD respects the safe margins from the viewport edges
 
-### 5. Teardown
+### 5. Teardown — only on three triggers
 
-When the user is done, or before resetting-the-workspace runs:
+Teardown happens **only** on: a workspace reset (resetting-the-workspace), creating or switching to a *different* game (port handover — step 1 reclaims it), or the user explicitly asking to stop the server. Never tear down just because the smoke gate finished — the default post-gate state is server up, URL live.
 
 ```bash
 lsof -ti:5173 | xargs -r kill
 ```
 
 Same port-based kill as step 1, so it works even on a server this session didn't start. Note: killing the server makes its background task report a nonzero exit (SIGTERM, typically 143) — that is the expected result of teardown, not a gate failure.
-
-When the smoke check runs purely as a pre-handoff gate (no live playtester right now), tear down immediately after it passes and tell the user the game is ready — they get the URL and this skill relaunches the server (steps 1–2) when they want to play.

@@ -83,7 +83,7 @@ Write `game/main.ts` in 2–3 coherent milestone saves, not one monolithic write
   ```
   **and** the runtime smoke check via **playing-the-game** (which owns the dev-server lifecycle and runs `npm run smoke`).
 
-A green build alone never triggers "done" — it proves compilation, not that the game boots. And Claude never claims to have played the game: report "builds, boots clean, ready to play at <URL>". **The user is the playtester.**
+A green build alone never triggers "done" — it proves compilation, not that the game boots. The handoff state is **server up** (playing-the-game step 4): the dev server stays running after the gate and its liveness is re-verified immediately before the message is sent. And Claude never claims to have played the game: report "builds, boots clean, ready to play at <URL>". **The user is the playtester.**
 
 **Escalation rule**: if `npm run check` or the smoke gate fails twice on the same approach, escalate the writer one model tier for a fresh attempt instead of a third patch (see CLAUDE.md → Models & orchestration).
 
