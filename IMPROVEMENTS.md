@@ -63,9 +63,16 @@ commit-then-`rm` leaves permanent ` D` porcelain noise and can fail outright):
    along; skip the commit entirely when no game folder is dirty.
 3. Allowlist delete, exactly as today (`rm -rf workspace/<name>` per literal
    path; never a glob; CWD + template-exists + template-porcelain guards
-   before and after). **Stray non-game files under `workspace/` are never
-   deleted** — they are named in the completion report for the user to deal
-   with.
+   before and after). **Game-folder classifier (replaces the confirmation
+   interview as the thing that keeps strays out of the delete list):** a
+   directory under `workspace/` is enumerated as a game ONLY if it looks
+   like a template clone — contains `game/main.ts` AND `package.json`.
+   Anything else (`workspace/screenshots/`, `workspace/old-backup/`, stray
+   files) is a stray: **never enumerated, never committed, never deleted** —
+   named in the completion report for the user to deal with. (Without the
+   classifier, "every directory except game-template" + zero questions
+   silently wipes non-game directories the old named-list confirmation used
+   to catch.)
 4. **Commit the deletions:** `git add workspace/<name> …` (stages the
    removals), `git commit -m "reset workspace" -- workspace/<name> …` — the
    reset leaves no uncommitted deletions behind.
@@ -80,9 +87,11 @@ the skill to commit or destroy unrelated work, contradicting step 2's own
 guarantee.
 
 **Report:** the completion message names the safety commit hash and the exact
-restore command (`git show <hash>:workspace/<name>/game/main.ts`) — the
-product's audience is git-naive; recovery they aren't told about doesn't
-exist.
+**whole-game** restore command — `git checkout <hash> -- workspace/<name>`
+(restores the folder in place; `main.ts` alone is not the game — `index.html`
+is an explicit writer surface, and `git show` only prints one file to the
+terminal). The product's audience is git-naive; recovery they aren't told
+about doesn't exist.
 
 **Kept-game escape hatch:** "reset everything except cave-hopper" is honored
 (skip that folder in steps 3–4) — the skill just never *asks*.
@@ -92,10 +101,11 @@ questions and reaches the scoped end state above, twice in a row — no
 reset-induced porcelain compounding; a run with a pre-existing unrelated
 change outside `workspace/` completes without committing or touching it;
 a run whose only `workspace/` dirt is a stray non-game file completes
-without a failed commit and reports the stray; "start over" while
-discussing a specific game routes to an edit/recreate of that game, not a
-wipe; "clean up" alone never wipes; a wiped game is retrievable via the
-reported restore command.
+without a failed commit and reports the stray; a stray non-game *directory*
+(`workspace/screenshots/`) survives a full reset untouched; "start over"
+while discussing a specific game routes to an edit/recreate of that game,
+not a wipe; "clean up" alone never wipes; a wiped game is fully restored —
+including a customized `index.html` — by the reported command.
 
 ## ☐ 3. No commits during the create/iterate interaction
 
@@ -113,10 +123,16 @@ touches git zero times; the working tree simply holds the current game.
   there: pathspec-limited checkpoint of `workspace/<name>` before the
   delete, deletion staged and committed with the clone. Without this, item 3
   makes "overwrite space-miner" the only unrecoverable data loss in the
-  product. **Recovery must be discoverable, same as reset's** (item 2's own
-  principle: recovery the user isn't told about doesn't exist): the
-  overwrite handoff message names the safety commit hash and the exact
-  restore command.
+  product. **Recovery must be discoverable, same as reset's — and durable
+  beyond the session that destroyed the game** (item 2's own principle:
+  recovery the user isn't told about doesn't exist): the overwrite handoff
+  message names the safety commit hash and the whole-game restore command
+  (`git checkout <hash> -- workspace/<name>`); the commit message follows a
+  fixed convention (`checkpoint <name> before overwrite`); and
+  creating-a-game/iterating-on-a-game gain one durable routing line —
+  restore-flavored requests ("the old one was better", "bring back …")
+  check `git log --oneline -- workspace/<name>` for checkpoint commits, so
+  a fresh session can find the recovery without the original chat message.
 - Explicit "commit/save my game" requests still commit, scoped as before.
 
 **Surface sweep — case-insensitive, two patterns** (the naive lowercase
@@ -134,8 +150,10 @@ scoped").
 
 **Acceptance:** a full create run makes no commits (git log unchanged); the
 overwrite branch and reset both leave the destroyed game recoverable **via a
-reported restore command**; both sweep greps return no stale
-commit instructions.
+reported whole-game restore command**; a *fresh session* asked "bring back
+the old space-miner" finds and restores the checkpoint without the user
+supplying git knowledge; both sweep greps return no stale commit
+instructions.
 
 ## ☐ 4. Sensible keyboard controls
 
@@ -312,9 +330,12 @@ invisible starfield: red's luminance caps a 3:1-compliant ambient below
 perception for 1–2px dots under CRT darkening (computed: every visible
 PICO8 dim color fails at least one of the reference's actor colors).
 Instead: ambient particle colors sit in a band **just above the
-background** — contrast vs the clear color between ~1.2:1 and ~2.5:1 —
-at 1–2 px sizes. That keeps atmosphere visible while structurally incapable
-of competing with actors (which clear ≥3:1 over the same background).
+background** — contrast vs the clear color between **~1.8:1 and ~2.5:1,
+retuned toward the top of the band** — at 1–2 px sizes. The floor is 1.8
+(not lower) because the CRT pass darkens everything (scanlines alpha 0.18,
+vignette at edges): a 1.2:1 dot renders sub-perceptual after CRT. This
+keeps atmosphere visible while structurally incapable of competing with
+actors (which clear ≥3:1 over the same background).
 - **All 16 indices get roles** in `palette.ts` docs: background (0/1/2/5),
   scenery (3/4/6/13/15 — usable for terrain, still subject to the floor
   vs actors), actor (7/8/9/10/11/12/14). Roles guide selection; the floor
@@ -335,9 +356,11 @@ improving-game-quality.
 
 **Acceptance:** in the reference game, every critical entity passes the
 3:1 floor against the clear color (and any scenery), verified with
-`contrast()`; the retuned ambient colors sit inside the 1.2–2.5:1 band vs
-the clear color (visible, subdued); pickup and hazard remain unambiguous in
-grayscale; no skill example recommends a red-vs-green-only distinction.
+`contrast()`; the retuned ambient colors sit inside the 1.8–2.5:1 band vs
+the clear color AND the ambient layer passes item 8's arm's-length test
+with the CRT filter on (visible atmosphere — "the background is empty" is
+a failure); pickup and hazard remain unambiguous in grayscale; no skill
+example recommends a red-vs-green-only distinction.
 
 ## ☐ 10. Visual variety across generated games
 
@@ -375,9 +398,13 @@ different generated games.
   visual-pass checklist** (independently hard-enumerates
   "PICO8/GAMEBOY/DUSK" — a synthwave game would flag its own palette as a
   violation at the gate writers actually run), **adding-easter-egg's
-  palette enumeration**. **Sweep rule:**
-  `grep -rni "gameboy" .claude/ CLAUDE.md` — every hit that enumerates
-  palettes must list the full set.
+  palette enumeration**, and — the surface that actually gates
+  reachability — **the engine barrel `engine/index.ts`** (it hard-enumerates
+  the palette exports; skills mandate barrel-only imports, so a palette
+  missing there fails `npm run check` for every writer regardless of what
+  the docs say). **Sweep rule:**
+  `grep -rni "gameboy" .claude/ CLAUDE.md workspace/game-template/` — every
+  hit that enumerates palettes must list the full set.
 - **Quality check** (improving-game-quality): "would a screenshot of this
   game be mistaken for the reference game or another game currently in the
   workspace? If yes, the visual pass failed."
@@ -387,15 +414,20 @@ to diverge from, no persistent style history) is NOT solved by this item —
 a durable style-history store belongs to the deploy epic. Within one
 workspace lifetime, the mechanisms above are enforceable.
 
-**Acceptance:** any two games coexisting in `workspace/` differ on **at
-least two of the four axes** (palette-index scheme, ambient preset, sprite
-silhouettes, burst colors) — **ambient is exempt from the count when the
-fiction locks it** (two space games may both use `'stars'` per
-improving-game-quality's fiction-fit check, but must then differ on palette
-AND silhouette; an all-four-axes demand would put this item at war with
-that check and hard-cap coexisting games at the preset count); every
-generated game carries a style-card comment atop `main.ts`; every new game
-differs from the reference on at least palette-or-ambient AND silhouette.
+**Acceptance:** any two games coexisting in `workspace/` differ on
+**sprite silhouettes AND at least one other axis** (palette-index scheme,
+ambient preset, or burst colors *beyond the palette mapping* — burst color
+is a function of the palette per this item's own mandate, so a pure
+palette swap must not count twice; without the silhouette requirement, a
+recolor of the same game passes, which is literally what adding-easter-egg
+ships as a toggle). **Ambient is exempt from the count when the fiction
+locks it** (two space games may both use `'stars'` per
+improving-game-quality's fiction-fit check — they must still differ on
+silhouette plus another axis; an all-four-axes demand would put this item
+at war with that check and hard-cap coexisting games at the preset count).
+Every generated game carries a style-card comment atop `main.ts`; every new
+game differs from the reference on at least palette-or-ambient AND
+silhouette.
 
 ---
 
