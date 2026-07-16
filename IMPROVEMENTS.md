@@ -28,7 +28,7 @@ JetBrains project folders must never dirty `git status` (the template-integrity
 check reads porcelain output; IDE cruft inside `workspace/game-template/.idea`
 would trip it). Added to the root `.gitignore`.
 
-## ☐ 2. Reset without questions
+## ☑ 2. Reset without questions
 
 **Feedback:** resetting-the-workspace should not ask the user any questions —
 it should remove the games and reach a neutral starting state.
@@ -107,7 +107,7 @@ while discussing a specific game routes to an edit/recreate of that game,
 not a wipe; "clean up" alone never wipes; a wiped game is fully restored —
 including a customized `index.html` — by the reported command.
 
-## ☐ 3. No commits during the create/iterate interaction
+## ☑ 3. No commits during the create/iterate interaction
 
 **Feedback:** there should be no commits in between while creating the user's
 game as part of the interaction.

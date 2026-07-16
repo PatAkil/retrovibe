@@ -45,8 +45,13 @@ retrovibe/
 - **Template integrity** (before every clone and every reset):
   `git status --porcelain workspace/game-template` must print nothing.
   Restore: `git checkout -- workspace/game-template && git clean -fd workspace/game-template`.
-- **Checkpoint commits are scoped**: `git add workspace/<game-name> && git commit -m "..."` —
-  never `git add -A`. Committed games stay recoverable after a reset.
+- **No commits during the create/iterate loop.** Git is touched only at
+  deletion moments — resetting-the-workspace's safety commit and
+  creating-a-game's overwrite branch — or on an explicit "commit/save my
+  game" request. Every commit is pathspec-scoped
+  (`git add workspace/<name> && git commit ... -- workspace/<name>`), never
+  `git add -A`; deleted games stay recoverable via the reported
+  `git checkout <hash> -- workspace/<name>`.
 - **No helper scripts.** Skills carry all commands inline.
 - **Skill frontmatter convention**: every SKILL.md description starts with
   `Use when <trigger conditions>.` followed by one sentence on what it does —
@@ -80,7 +85,7 @@ Two repo agents in `.claude/agents/` make the tiering mechanical:
 
 | Agent | Model tier | Owns |
 |---|---|---|
-| `lifecycle-runner` | fast/cheap (Haiku-class) | Clone, integrity checks, ports, dev server, smoke, scoped commits, resets — command-following only |
+| `lifecycle-runner` | fast/cheap (Haiku-class) | Clone, integrity checks, ports, dev server, smoke, reset/overwrite safety commits, resets — command-following only |
 | `game-writer` | strong/fast (Sonnet-class) | Writing/editing game code — milestone saves, per-save `npm run check` |
 
 - **Escalation rule**: if `npm run check` or the smoke gate fails **twice on
