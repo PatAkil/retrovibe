@@ -21,11 +21,20 @@ export interface CreatePixelCanvasOptions {
   width: number;
   height: number;
   scale?: number;
-  /** Element to append the canvas to. Defaults to document.body. */
+  /**
+   * Element to append the canvas to. Omit for document.body. An EXPLICIT null
+   * (e.g. a failed getElementById) throws — a missing mount point must fail
+   * loudly so the smoke gate catches it, never silently mount elsewhere.
+   */
   parent?: HTMLElement | null;
 }
 
 export function createPixelCanvas(opts: CreatePixelCanvasOptions): PixelCanvas {
+  if (opts.parent === null) {
+    throw new Error(
+      'createPixelCanvas: parent is null — mount point not found (check the id passed to getElementById against index.html)',
+    );
+  }
   const { width, height } = opts;
   const scale = opts.scale ?? 3;
   const canvas = document.createElement('canvas');

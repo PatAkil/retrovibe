@@ -13,5 +13,5 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["engine", "game"]
+  "include": ["engine", "game", "vite.config.ts"]
 }
