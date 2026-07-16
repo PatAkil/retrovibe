@@ -47,10 +47,11 @@ try {
   if (!frame) throw new Error('game iframe did not load — is the dev server running on 5173?');
   await frame.waitForSelector('canvas', { state: 'attached', timeout: 8000 });
 
-  // Focus the game frame, then drive it: Z starts (TITLE→PLAYING), Space
-  // pauses/resumes (deterministic stateChanged), then chase the hazard/pickups
-  // with a sweep pattern until gameOver and scoreChanged have both been seen,
-  // pressing Z to restart after each game over.
+  // Focus the game frame, then drive it: Space starts (TITLE→PLAYING; button A
+  // = Space/Z), P pauses/resumes (the dedicated PAUSE button, P/Escape —
+  // deterministic stateChanged), then chase the hazard/pickups with a sweep
+  // pattern until gameOver and scoreChanged have both been seen, pressing
+  // Space to restart after each game over.
   await page.locator('#game').click();
   const received = () => page.evaluate(() => ({
     types: [...new Set(window.__messages.map((m) => m.type))],
@@ -58,18 +59,18 @@ try {
     violations: window.__violations,
   }));
 
-  await page.keyboard.press('KeyZ'); // start
+  await page.keyboard.press('Space'); // start (button A)
   await page.waitForTimeout(300);
-  await page.keyboard.press('Space'); // pause
+  await page.keyboard.press('KeyP'); // pause (button PAUSE)
   await page.waitForTimeout(200);
-  await page.keyboard.press('Space'); // resume
+  await page.keyboard.press('KeyP'); // resume
   await page.waitForTimeout(200);
 
   // Deterministic boustrophedon sweep: cover the arena in horizontal passes
-  // spaced <= 6 logical px — the 4px-tall ship then overlaps any 3px pickup
+  // spaced <= 6 logical px — the 8px-tall ship then overlaps any 6px pickup
   // whose band it crosses, so a full uninterrupted sweep MUST collect one
   // (scoreChanged). Hazard contact just ends the round (gameOver, also
-  // required); restart with Z and sweep again. Break once all three types
+  // required); restart with Space and sweep again. Break once all three types
   // have been seen. The step-down duration is computed from the reference
   // ship speed (90 px/s) and padded for keyboard/evaluate overhead so the
   // real step stays under 6px — timers alone under-measure the held time.
@@ -102,8 +103,8 @@ try {
   };
   sweep: while (Date.now() < deadline && !(await allSeen())) {
     if (await gameOverNow()) {
-      await page.keyboard.press('KeyZ');
-      await page.waitForTimeout(150);
+      await page.keyboard.press('Space');
+      await page.waitForTimeout(300); // covers the deferred death transition + restart
     }
     // to the top-left corner, then serpentine down (26 rows x ~5px covers the
     // ship's full clamped y-range, a superset of the pickup spawn band)
@@ -119,6 +120,11 @@ try {
   for (const t of ['stateChanged', 'scoreChanged', 'gameOver']) {
     if (!r.types.includes(t)) failures.push(`never received a '${t}' message (got: ${r.types.join(', ') || 'none'})`);
   }
+  // The pause binding (P) must actually work: a PAUSED stateChanged must have
+  // arrived — generic stateChanged traffic from TITLE/PLAYING/GAME_OVER must
+  // not let a broken pause path pass green.
+  if (!r.msgs.some((m) => m.type === 'stateChanged' && m.payload?.state === 'PAUSED'))
+    failures.push(`never observed a PAUSED stateChanged — the P pause binding did not register`);
   if (r.violations.length > 0) {
     failures.push(`envelope violations: ${JSON.stringify(r.violations.slice(0, 3))}`);
   }

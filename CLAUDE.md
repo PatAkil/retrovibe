@@ -45,9 +45,17 @@ retrovibe/
 - **Template integrity** (before every clone and every reset):
   `git status --porcelain workspace/game-template` must print nothing.
   Restore: `git checkout -- workspace/game-template && git clean -fd workspace/game-template`.
-- **Checkpoint commits are scoped**: `git add workspace/<game-name> && git commit -m "..."` —
-  never `git add -A`. Committed games stay recoverable after a reset.
+- **No commits during the create/iterate loop.** Git is touched only at
+  deletion moments — resetting-the-workspace's safety commit and
+  creating-a-game's overwrite branch — or on an explicit "commit/save my
+  game" request. Every commit is pathspec-scoped
+  (`git add workspace/<name> && git commit ... -- workspace/<name>`), never
+  `git add -A`; deleted games stay recoverable via the reported
+  `git checkout <hash> -- workspace/<name>`.
 - **No helper scripts.** Skills carry all commands inline.
+- **Skill frontmatter convention**: every SKILL.md description starts with
+  `Use when <trigger conditions>.` followed by one sentence on what it does —
+  triggers first, so the right skill is inferred before reading further.
 - **Done means**: `npm run check` after every edit; `npm run build` **and**
   `npm run smoke` green before handing off. A green build alone is never
   "done" — and the user, not Claude, is the playtester. Claude reports
@@ -60,16 +68,38 @@ Games import from `'../engine'`:
 | Module | Key exports | Purpose |
 |---|---|---|
 | loop.ts | `createLoop({update, render})` → `.start()/.stop()` | Fixed-timestep (60 Hz) accumulator loop; frame-delta clamp (250 ms) + clock reset on focus; auto-pause on blur |
-| input.ts | `createInput(actions, {onFirstKey})`, `controlHints(input)`, `BUTTON_KEY` | Arrows/WASD → `input.dir`; four buttons A/B/X/Y = Z/X/Space/Enter; `pressed/held/released`, `endFrame()` per tick; labels declared in code |
+| input.ts | `createInput(actions, {onFirstKey})`, `controlHints(input)`, `BUTTON_KEY` | Arrows/WASD → `input.dir`; buttons A = Space/Z, B = X/C, PAUSE = P/Esc (dedicated, aliased — down while ≥1 alias down); `pressed/held/released`, `endFrame()` per tick; labels declared in code |
 | scenes.ts | `createScenes()` → `.current/.is/.to/.onEnter` | Enforced machine `TITLE → PLAYING ⇄ PAUSED → (GAME_OVER | WIN) → restart` |
 | draw.ts | `createPixelCanvas`, `makeSprite`, `drawSprite`, `drawText`, `drawTextCentered`, `textWidth` | Pixel-scaled canvas, ASCII-art sprites, 3×5 bitmap font |
-| palette.ts | `PICO8`, `GAMEBOY`, `DUSK`, `PALETTES`, `swapPalette` | Curated retro palettes + swap support |
-| particles.ts | `createParticles({width, height, ambient})` → `.update/.render/.burst/.setAmbient` | Ambient presets (stars/rain/snow/embers/bubbles) + impact bursts |
+| palette.ts | `PICO8`, `GAMEBOY`, `DUSK`, `NEON`, `SUNSET`, `OCEAN`, `PALETTES`, `swapPalette`, `contrast` | Curated retro palettes (roles documented per index) + swap support + `contrast(a,b)` legality check (actors ≥3:1 vs static surfaces; ambient 1.8–2.5:1 band) |
+| particles.ts | `createParticles({width, height, ambient, ambientColor})` → `.update/.render/.burst/.setAmbient` | Ambient presets (stars/rain/snow/embers/bubbles; band-compliant default colors, overridable) + 2–3 px impact bursts |
 | juice.ts | `createJuice()` → `.shake/.flash/.hitStop/.frozen/.update/.preRender/.postRender` | Screen shake, flash, hit-stop. Order: clear → `preRender` → world → `postRender` → CRT |
 | audio.ts | `createAudio()` → `.unlock/.play/.ready` | WebAudio chiptune sfx (`jump/pickup/explosion/hit/blip`); `unlock()` inside the first user gesture |
 | ui.ts | `SAFE_MARGIN`, `drawScore`, `drawLives`, `hudText` | HUD helpers, enforced edge margin |
 | crt.ts | `createCrt()` → `.render(ctx, w, h, dt)` | Scanlines + vignette + flicker; draw LAST |
 | runtime.ts | `createRuntime()` → `.gameOver/.scoreChanged/.stateChanged/.embedded/.send` | Host contract, pinned wire format `{source:'retrovibe', type, payload}` |
+
+## Models & orchestration (revisit as models change — roles, not benchmarks)
+
+Two repo agents in `.claude/agents/` make the tiering mechanical:
+
+| Agent | Model tier | Owns |
+|---|---|---|
+| `lifecycle-runner` | fast/cheap (Haiku-class) | Clone, integrity checks, ports, dev server, smoke, reset/overwrite safety commits, resets — command-following only |
+| `game-writer` | strong/fast (Sonnet-class) | Writing/editing game code — milestone saves, per-save `npm run check` |
+
+- **Escalation rule**: if `npm run check` or the smoke gate fails **twice on
+  the same approach**, escalate the writer one model tier (Sonnet → Opus;
+  fast mode when available) for a fresh attempt instead of a third patch —
+  a retry cascade costs more wall-clock than one stronger pass.
+- **Warm-server ordering**: launch the dev server (per playing-the-game's
+  port discipline) at the *start* of development, in the background — each
+  milestone save hot-reloads, and the final smoke gate pays no startup. The
+  handoff contract is unchanged: the user gets the URL only after build and
+  smoke are green.
+- **Read budget for writers**: CLAUDE.md's engine API table + the cloned
+  `game/main.ts` suffice to start; open a companion skill only when its
+  domain is actually touched.
 
 ## Skill routing
 

@@ -1,6 +1,6 @@
 ---
 name: ensuring-arcade-visuals
-description: Ensures a Retrovibe game looks like a real arcade cabinet — palette discipline, low pixel resolution, ASCII sprites, retro bitmap text, CRT filter, ambient particles. Invoke when creating or editing any game's visual presentation, or when a game looks flat, modern, or off-brand.
+description: Use when creating or editing a game's visual presentation, or when a game looks flat, modern, or off-brand. Ensures the arcade-cabinet look — palette discipline, low pixel resolution, ASCII sprites, retro bitmap text, CRT filter, ambient particles.
 ---
 
 # Ensuring arcade visuals
@@ -9,17 +9,31 @@ This skill covers the game's **look** only. Readability and HUD margins (`SAFE_M
 
 All engine imports come from the barrel: `import { ... } from '../engine';` (from `game/main.ts`). The reference implementation for everything below is `workspace/game-template/game/main.ts`. After every edit: `cd workspace/<game-name> && npm run check`.
 
+## 0. Style card BEFORE code — forced divergence
+
+Before the first milestone save, derive **2–3 distinct visual directions** from the game's fiction — each a one-liner: palette + background/actor color indices, ambient preset, sprite silhouette language, juice personality. Pick one and record it as a comment block atop `game/main.ts` (the reference game shows the format).
+
+**Divergence rule — a concrete comparison set.** The chosen style card must differ from:
+
+- **(a) the reference game's combination** — PICO8 / black bg / blue arrow-ship / yellow `+` pickup / red `x` hazard / `'stars'` — **always reserved**; and
+- **(b) the style cards of every game currently in `workspace/`** — read the comment blocks atop their `main.ts` files before choosing.
+
+Any two coexisting games must differ on **sprite silhouettes AND at least one other axis** (palette-index scheme, ambient preset, or burst colors beyond the palette mapping). Ambient is exempt from the count when the fiction locks it (two space games may both use `'stars'` — they still differ on silhouette plus another axis). Bursts use the game's **own palette colors** — never the engine default yellow.
+
 ## 1. Palette discipline — one named palette, indexed colors
 
 Pick **ONE** named palette for the game and take every color from it by index. Never write ad-hoc hex strings in game code.
 
-Available palettes (from `engine/palette.ts`, all of type `Palette`):
+Available palettes (from `engine/palette.ts`, all of type `Palette` — pick the one that fits the fiction):
 
 | Export | Character | Size |
 |---|---|---|
-| `PICO8` | Bright, versatile PICO-8 16-color set — the default choice | 16 |
+| `PICO8` | Bright, versatile PICO-8 16-color set | 16 |
 | `GAMEBOY` | Muted 4-tone green Game Boy ramp (index 0 = darkest) | 4 |
 | `DUSK` | Purple dusk/twilight ramp for moody scenes | 8 |
+| `NEON` | Synthwave — hot magenta/cyan on deep violet | 8 |
+| `SUNSET` | Warm sunset — dusk sky to ember highlights | 8 |
+| `OCEAN` | Cold ocean — abyss blues to foam | 8 |
 
 ```ts
 import { PICO8, type Palette } from '../engine';
@@ -31,9 +45,15 @@ const COLOR_DANGER = PAL[8];     // red
 const COLOR_TEXT = PAL[7];       // white
 ```
 
-Why indices, not hex: a single indexed palette keeps every sprite, particle, and text color harmonious, and it makes palette-swap easter eggs (`swapPalette`, `PALETTES` — owned by **adding-easter-egg**) work for free. PICO8 index stability: 0 black, 1 dark-blue, 2 dark-purple, 3 dark-green, 4 brown, 5 dark-grey, 6 light-grey, 7 white, 8 red, 9 orange, 10 yellow, 11 green, 12 blue, 13 lavender, 14 pink, 15 peach.
+Why indices, not hex: a single indexed palette keeps every sprite, particle, and text color harmonious, and it makes palette-swap easter eggs (`swapPalette`, `PALETTES` — owned by **adding-easter-egg**) work for free. PICO8 roles (documented in `palette.ts`): background 0/1/2/5, scenery 3/4/6/13/15, actor 7/8/9/10/11/12/14. Roles guide selection; the contrast floor below decides legality.
 
 An ad-hoc `'#ff00ff'` in game code is a visual bug: fix it by finding the nearest palette index.
+
+## 1b. Contrast floor + red-green safety — the floor is the gate
+
+- **Actor floor:** every gameplay-critical entity color must have `contrast(entity, surface) >= 3.0` (the `contrast()` helper is exported from the barrel) against **every static surface it can overlap** — the clear color AND drawn scenery/terrain. A role partition alone provably fails (PICO8 red vs dark-grey is 1.81:1 — "partition-legal" and invisible); compute the ratio.
+- **Ambient prominence band:** ambient particle colors sit **just above the background** — contrast vs the clear color between ~1.8:1 and ~2.5:1, tuned toward the top of the band, at 1–2 px sizes. The engine preset defaults are band-compliant vs a **black** clear color; a brighter background needs `ambientColor` (or `setAmbient(preset, color)`) retuned into the band. The floor is 1.8 because the CRT pass darkens everything — a 1.2:1 dot renders sub-perceptual.
+- **Red-green safety:** a red-vs-green hue difference may never be the ONLY distinction between critical entity classes. Require two of: hue family (prefer blue/orange/yellow pairs), brightness, silhouette. Check: would the entities still be distinguishable in grayscale?
 
 ## 2. Pixel scale — low logical resolution, integer scale-up
 
@@ -59,7 +79,16 @@ If a game looks "HD" instead of retro, the logical resolution is too high. Stay 
 
 ## 3. Sprite discipline — ASCII art via makeSprite / drawSprite
 
-Sprites are ASCII-art rows colored from the palette. Keep them **3–8 rows** tall and readable at a glance — a player must identify ship vs. pickup vs. hazard instantly at 1 logical pixel per cell.
+Sprites are ASCII-art rows colored from the palette, readable at a glance — a player must identify ship vs. pickup vs. hazard instantly.
+
+**Size floors (relative to logical height, so they transfer across the 160–320-wide range):**
+
+- player character ≥ **1/16 of logical height** in its larger rendered dimension (≈10 px at 160-high);
+- other gameplay-critical entities (hazards, pickups, projectiles) ≥ **1/26 of logical height** (≈6 px at 160).
+
+Two levers, both legitimate: a bigger ASCII sprite map, or `drawSprite`'s `px` cell-size parameter (a 6-row sprite at `px: 2` renders 12 px — the reference game renders everything at `PX = 2`).
+
+**Hitboxes must follow the visuals:** every entity's `{w, h}` — and everything derived from it (collision, clamps, bounce margins, spawn offsets, burst anchors) — within ~1 logical px of the **rendered** size (`px × cell count`). Scaling only the sprite gives a big-looking ship with a tiny hitbox: visibly-touching hazards don't kill, visibly-touched pickups don't collect.
 
 ```ts
 import { makeSprite, drawSprite, PICO8 } from '../engine';
@@ -155,10 +184,12 @@ Call `particles.update(dt)` in the update tick and `particles.render(pc.ctx)` in
 
 ## Visual pass checklist (look only)
 
-- [ ] One named palette (`PICO8` / `GAMEBOY` / `DUSK`); zero ad-hoc hex strings in `game/`.
+- [ ] Style card comment atop `main.ts`; differs from the reference game AND every other game in `workspace/` per the divergence rule (§0).
+- [ ] One named palette (`PICO8` / `GAMEBOY` / `DUSK` / `NEON` / `SUNSET` / `OCEAN`); zero ad-hoc hex strings in `game/`.
+- [ ] Every gameplay-critical entity color clears `contrast() >= 3.0` vs the clear color and any scenery it overlaps; ambient color in the 1.8–2.5:1 band; entities distinguishable in grayscale (§1b).
 - [ ] Logical resolution low (reference: 240×160, scale 3); all drawing in logical units.
-- [ ] Sprites are `makeSprite` ASCII art, 3–8 rows, distinct silhouettes + colors per entity type.
+- [ ] Sprites are `makeSprite` ASCII art, distinct silhouettes + colors per entity type; size floors met (player ≥ H/16, other critical entities ≥ H/26) and hitboxes within ~1 px of rendered size (§3).
 - [ ] All text via `drawText` / `drawTextCentered`; hierarchy from `scale` + palette index.
 - [ ] `crt.render` is the last call of every frame, after `juice.postRender`.
-- [ ] Ambient preset fits the fiction.
+- [ ] Ambient preset fits the fiction; bursts use the game's own palette colors, never the engine default.
 - [ ] `cd workspace/<game-name> && npm run check` passes.

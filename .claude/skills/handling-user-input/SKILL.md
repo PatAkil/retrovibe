@@ -1,6 +1,6 @@
 ---
 name: handling-user-input
-description: The unified keyboard contract and owner of the A/B/X/Y action model. Invoke for anything touching controls — declaring or relabeling actions, movement handling, edge-vs-held semantics (pressed/held/released, endFrame), title-screen control hints, or audio unlock on first keypress.
+description: Use when anything touches controls — declaring or relabeling actions, movement handling, edge-vs-held semantics (pressed/held/released, endFrame), title-screen control hints, or audio unlock on first keypress. The unified keyboard contract and owner of the A/B/PAUSE action model.
 ---
 
 # Handling user input
@@ -16,18 +16,19 @@ ship.x += input.dir.x * SHIP_SPEED * dt;
 ship.y += input.dir.y * SHIP_SPEED * dt;
 ```
 
-## The four buttons — A/B/X/Y
+## The buttons — A / B / PAUSE
 
-Actions are formalized as four buttons, each bound to a fixed physical key. The binding lives in the engine's `BUTTON_KEY` export (`Readonly<Record<ButtonName, { code: string; hint: string }>>`):
+Actions are two action buttons plus a dedicated pause button, each bound to fixed physical key **aliases**. The binding lives in the engine's `BUTTON_KEY` export (`Readonly<Record<ButtonName, { codes: string[]; hint: string }>>`):
 
-| Button (`ButtonName`) | Key (`code`) | Hint shown |
-|---|---|---|
-| `'A'` | `KeyZ` | `Z` |
-| `'B'` | `KeyX` | `X` |
-| `'X'` | `Space` | `SPACE` |
-| `'Y'` | `Enter` | `ENTER` |
+| Button (`ButtonName`) | Keys (`codes`) | Hint shown | Conventional role |
+|---|---|---|---|
+| `'A'` (primary) | `Space`, `KeyZ` | `SPACE` | jump / fire / confirm / start |
+| `'B'` (secondary) | `KeyX`, `KeyC` | `X` | alt-fire / dash / cancel |
+| `'PAUSE'` | `KeyP`, `Escape` | `P` | pause toggle — dedicated, **never remap to gameplay** |
 
-Games never rebind keys. They choose *which buttons mean what* via action declarations.
+Games never rebind keys. They choose *which buttons mean what* via action declarations. Shift is deliberately not a key: five rapid presses opens the OS Sticky Keys dialog on Windows (unpreventable from the browser), stealing focus → blur → auto-pause on exactly the tap pattern a dash key invites.
+
+**Multi-key edge semantics (normative):** a logical button is **down while ≥1 of its alias keys is down**. `pressed()` fires on the 0→≥1 transition; `released()` fires only on the ≥1→0 transition (last alias key up); `held()` checks all alias codes. This is load-bearing for variable jump height wired to `released('A')`: holding Space and tapping Z neither cuts the jump nor re-triggers `pressed`.
 
 ## Actions are DECLARED IN CODE — the single source of truth
 
@@ -35,8 +36,8 @@ Games never rebind keys. They choose *which buttons mean what* via action declar
 
 This declaration is the **only** place a button's meaning is written down:
 
-- Title-screen hints render **from** it via `controlHints(input)` — which returns lines like `['Z JUMP', 'X FIRE']` (key hint + uppercased label). Movement is implicit (arrows/WASD) and not included; render a movement line separately if desired, as the reference game does.
-- **Never hand-write the title-screen control hints anywhere else.** A hand-written hint is a second source of truth that drifts. (Other screens may show contextual button text — e.g. the reference game-over screen's `Z RESTART` — but the key name must come from the same physical binding `BUTTON_KEY` documents, and the title screen always renders from the declarations.)
+- Title-screen hints render **from** it via `controlHints(input)` — which returns lines like `['SPACE JUMP', 'X FIRE']` (key hint + uppercased label). Movement is implicit (arrows/WASD) and not included; render a movement line separately if desired, as the reference game does.
+- **Never hand-write the title-screen control hints anywhere else.** A hand-written hint is a second source of truth that drifts. (Other screens may show contextual button text — e.g. the reference game-over screen's `` `${BUTTON_KEY.A.hint} RESTART` `` — but the key name must come from the same physical binding `BUTTON_KEY` documents, and the title screen always renders from the declarations.)
 - When an edit changes what a button does, change the `label` in the **same declaration** in the same edit. There is no separate file to keep in sync — a wrong or missing label is visible the moment the game is played.
 
 Complete setup, from `workspace/game-template/game/main.ts`:
@@ -50,7 +51,7 @@ const audio = createAudio();
 const input = createInput(
   [
     { button: 'A', label: 'start' },
-    { button: 'X', label: 'pause' },
+    { button: 'PAUSE', label: 'pause' },
   ],
   { onFirstKey: () => audio.unlock() },
 );
@@ -75,6 +76,8 @@ The `Input` interface exposes three queries per button:
 - `pressed(button)` — went down **this frame**. Use for one-shot actions: start, pause toggle, fire-per-press, menu confirm.
 - `held(button)` — currently down. Use for continuous actions: charging, thrusting, variable jump height.
 - `released(button)` — went up **this frame**. Use for release-triggered actions (e.g. cutting a jump short).
+
+Because buttons have alias keys, these are **button-level** edges: switching from one alias to another mid-hold (Space held, Z tapped) produces no `pressed` and no `released` — only the whole button going down or fully up does.
 
 **`endFrame()` must be called exactly once per update tick, after all input reads** — it clears the `pressed`/`released` edges. The reference game calls it as the last line of `update(dt)`:
 

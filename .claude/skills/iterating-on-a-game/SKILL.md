@@ -1,6 +1,6 @@
 ---
 name: iterating-on-a-game
-description: Edits an existing game in place — the default path for any request naming a game whose workspace folder already exists ("make the ship faster", "add a second enemy"). Never clones; runs the same validation loop, smoke check, and checkpoint commit as creating-a-game.
+description: Use when the request names a game whose workspace folder already exists ("make the ship faster", "add a second enemy") — the default path for edits. Modifies the game in place; never clones; same validation loop and smoke check as creating-a-game, with no commits during the interaction.
 ---
 
 # Iterating on a game
@@ -28,8 +28,8 @@ Before touching anything, check that `workspace/<name>` exists (e.g. `ls workspa
    ```
    cd workspace/<game-name> && npm run build
    ```
-   **and** the runtime smoke check via **playing-the-game** (it owns the dev-server lifecycle and runs `npm run smoke`). A green build alone never means done. Claude never claims to have played the game — report "builds, boots clean, ready to play at <URL>"; the user is the playtester.
-5. **Checkpoint commit** — scoped to the game folder, never `git add -A`:
-   ```
-   git add workspace/<game-name> && git commit -m "<game-name>: <what changed>"
-   ```
+   **and** the runtime smoke check via **playing-the-game** (it owns the dev-server lifecycle and runs `npm run smoke`). A green build alone never means done. Claude never claims to have played the game — report "builds, boots clean, ready to play at <URL>"; the user is the playtester. Escalation rule: if the typecheck or smoke gate fails twice on the same approach, escalate the writer one model tier for a fresh attempt (CLAUDE.md → Models & orchestration).
+
+**No commits during the interaction** — the working tree holds the current game; recoverability lives at deletion moments (reset / overwrite safety commits). Explicit "commit/save my game" requests still commit, scoped to `workspace/<game-name>`, never `git add -A`.
+
+**Restore routing:** for restore-flavored requests ("the old one was better", "bring back …"), check `git log --oneline -- workspace/<name>` for checkpoint commits and restore the whole folder with `git checkout <hash> -- workspace/<name>` — works in a fresh session with no chat history.
