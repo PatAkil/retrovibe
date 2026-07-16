@@ -1,9 +1,13 @@
 // particles.ts — ambient background presets + a burst emitter for impacts.
 //
 // Ambient particles (stars/rain/snow/embers/bubbles) persist and wrap around the
-// screen. burst() spawns short-lived particles that radiate out and fade — tune
-// the count to the event's significance (see improving-game-quality: ~5-10 on
-// destruction/death, smaller for minor hits).
+// screen. Their default colors sit in the prominence band — contrast ~1.8-2.5:1
+// vs a black clear color (see palette.ts contrast()) — visible atmosphere that
+// never competes with actors; pass `ambientColor` to retune for a non-black
+// background. burst() spawns short-lived 2-3 px particles that radiate out and
+// fade — tune the count to the event's significance (see improving-game-quality:
+// ~5-10 on destruction/death, smaller for minor hits) and pass the game's own
+// palette color; speeds should clear the sprite silhouette.
 
 export type AmbientPreset = 'stars' | 'rain' | 'snow' | 'embers' | 'bubbles';
 
@@ -31,7 +35,7 @@ export interface ParticleSystem {
   update(dt: number): void;
   render(ctx: CanvasRenderingContext2D): void;
   burst(x: number, y: number, opts?: BurstOptions): void;
-  setAmbient(preset: AmbientPreset | null): void;
+  setAmbient(preset: AmbientPreset | null, color?: string): void;
 }
 
 export interface ParticleOptions {
@@ -40,6 +44,12 @@ export interface ParticleOptions {
   ambient?: AmbientPreset | null;
   /** Ambient particle count (default 48). */
   ambientCount?: number;
+  /**
+   * Override the preset's ambient color. Defaults are tuned to the 1.8-2.5:1
+   * prominence band against a BLACK clear color — games with a brighter
+   * background should pass a color in the same band vs their own clear color.
+   */
+  ambientColor?: string;
 }
 
 const rand = (a: number, b: number): number => a + Math.random() * (b - a);
@@ -48,23 +58,35 @@ export function createParticles(opts: ParticleOptions): ParticleSystem {
   const { width, height } = opts;
   const ambientCount = opts.ambientCount ?? 48;
   let ambientPreset: AmbientPreset | null = opts.ambient ?? null;
+  let ambientColor: string | undefined = opts.ambientColor;
   let ambient: Particle[] = [];
   const transient: Particle[] = [];
+
+  // Preset default colors: dimmed variants of the classic hues, each ~2.3:1
+  // vs black (inside the 1.8-2.5 prominence band, toward the top).
+  const AMBIENT_COLOR: Record<AmbientPreset, string> = {
+    stars: '#4D4846',
+    rain: '#124E73',
+    snow: '#424B54',
+    embers: '#664100',
+    bubbles: '#4D465C',
+  };
 
   function spawnAmbient(preset: AmbientPreset): Particle {
     const x = rand(0, width);
     const y = rand(0, height);
+    const color = ambientColor ?? AMBIENT_COLOR[preset];
     switch (preset) {
       case 'stars':
-        return { x, y, vx: 0, vy: rand(2, 10), size: rand(1, 2), color: '#FFF1E8', life: Infinity, maxLife: Infinity };
+        return { x, y, vx: 0, vy: rand(2, 10), size: rand(1, 2), color, life: Infinity, maxLife: Infinity };
       case 'rain':
-        return { x, y, vx: -30, vy: rand(160, 240), size: 1, color: '#29ADFF', life: Infinity, maxLife: Infinity };
+        return { x, y, vx: -30, vy: rand(160, 240), size: 1, color, life: Infinity, maxLife: Infinity };
       case 'snow':
-        return { x, y, vx: rand(-12, 12), vy: rand(14, 30), size: rand(1, 2), color: '#FFF1E8', life: Infinity, maxLife: Infinity };
+        return { x, y, vx: rand(-12, 12), vy: rand(14, 30), size: rand(1, 2), color, life: Infinity, maxLife: Infinity };
       case 'embers':
-        return { x, y, vx: rand(-8, 8), vy: rand(-40, -18), size: rand(1, 2), color: '#FFA300', life: Infinity, maxLife: Infinity };
+        return { x, y, vx: rand(-8, 8), vy: rand(-40, -18), size: rand(1, 2), color, life: Infinity, maxLife: Infinity };
       case 'bubbles':
-        return { x, y, vx: rand(-6, 6), vy: rand(-30, -12), size: rand(1, 3), color: '#83769C', life: Infinity, maxLife: Infinity };
+        return { x, y, vx: rand(-6, 6), vy: rand(-30, -12), size: rand(1, 2), color, life: Infinity, maxLife: Infinity };
     }
   }
 
@@ -125,15 +147,16 @@ export function createParticles(opts: ParticleOptions): ParticleSystem {
           x, y,
           vx: Math.cos(a) * s,
           vy: Math.sin(a) * s,
-          size: rand(1, 2),
+          size: rand(2, 3), // 2-3 logical px — 1-2 px is barely visible under CRT darkening
           color,
           life,
           maxLife: life,
         });
       }
     },
-    setAmbient(preset) {
+    setAmbient(preset, color) {
       ambientPreset = preset;
+      if (color !== undefined) ambientColor = color;
       rebuildAmbient();
     },
   };

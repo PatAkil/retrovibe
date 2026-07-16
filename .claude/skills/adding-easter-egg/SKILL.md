@@ -9,7 +9,7 @@ Easter eggs combine two engine features: **palette swaps** (`engine/palette.ts`)
 
 ## Palette swaps
 
-`type Palette = readonly string[]` — plain hex-string arrays, indexed by role. Named palettes: `PICO8` (16-color, stable indices — e.g. 8 red, 10 yellow, 12 blue), `GAMEBOY` (4-tone), `DUSK` (8-tone twilight ramp), and `PALETTES` (`Readonly<Record<string, Palette>>` with keys `pico8`, `gameboy`, `dusk`).
+`type Palette = readonly string[]` — plain hex-string arrays, indexed by role. Named palettes: `PICO8` (16-color, stable indices — e.g. 8 red, 10 yellow, 12 blue), `GAMEBOY` (4-tone), `DUSK` (8-tone twilight ramp), `NEON` (8-tone synthwave), `SUNSET` (8-tone warm), `OCEAN` (8-tone cold), and `PALETTES` (`Readonly<Record<string, Palette>>` with keys `pico8`, `gameboy`, `dusk`, `neon`, `sunset`, `ocean`).
 
 `swapPalette(p: Palette, mapping: Record<number, number>): Palette` returns a **new** palette with the index→index remap applied; unmapped indices keep their color, the original is untouched. From the engine's own doc comment:
 

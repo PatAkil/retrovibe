@@ -1,9 +1,15 @@
 // Reference game — the minimal complete game every skill points to.
 // Title → play (move a ship, collect pickups, dodge a hazard; contact = lose)
-// → game over → restart. Proves every engine rule: fixed-step loop, A/B/X/Y
-// actions with labels-in-code, scene machine, starfield, burst+shake+flash on
-// hit, chiptune sfx (unlocked on first keypress), safe-margin HUD, CRT filter,
-// runtime messaging.
+// → game over → restart. Proves every engine rule: fixed-step loop, A/B/PAUSE
+// actions with labels-in-code, scene machine, starfield, burst+shake+flash+
+// hit-stop (with the freeze-frame actually rendered) on death, chiptune sfx
+// (unlocked on first keypress), safe-margin HUD, CRT filter, runtime messaging.
+//
+// STYLE CARD (this combination is RESERVED for the reference game — every
+// generated game must diverge, see ensuring-arcade-visuals):
+//   palette PICO8 — bg 0 (black), ship 12 (blue), pickup 10 (yellow),
+//   hazard 8 (red) · ambient 'stars' · silhouettes: arrow-ship / plus / cross
+//   · juice: red death flash, hard freeze-frame.
 
 import {
   createPixelCanvas,
@@ -21,6 +27,7 @@ import {
   drawTextCentered,
   drawScore,
   hudText,
+  BUTTON_KEY,
   PICO8,
   SAFE_MARGIN,
 } from '../engine';
@@ -43,7 +50,7 @@ const audio = createAudio();
 const input = createInput(
   [
     { button: 'A', label: 'start' },
-    { button: 'X', label: 'pause' },
+    { button: 'PAUSE', label: 'pause' },
   ],
   { onFirstKey: () => audio.unlock() },
 );
@@ -54,19 +61,24 @@ const crt = createCrt();
 const runtime = createRuntime();
 
 // --- Sprites -----------------------------------------------------------------
+// Rendered at PX=2 logical px per cell so gameplay entities meet the size
+// floors (player >= H/16 = 10 px, other critical entities >= H/26 ≈ 6 px in
+// their larger dimension). Entity hitboxes below match the rendered size.
+
+const PX = 2;
 
 const shipSprite = makeSprite(
   ['..#..', '.###.', '#####', '#.#.#'],
   { '#': PICO8[12] },
-);
+); // 5x4 cells → 10x8 px rendered
 const pickupSprite = makeSprite(
   ['.#.', '###', '.#.'],
   { '#': PICO8[10] },
-);
+); // 3x3 cells → 6x6 px rendered
 const hazardSprite = makeSprite(
   ['#.#', '.#.', '#.#'],
   { '#': PICO8[8] },
-);
+); // 3x3 cells → 6x6 px rendered
 
 // --- World state -------------------------------------------------------------
 
@@ -78,28 +90,40 @@ interface Entity {
 }
 
 const SHIP_SPEED = 90;
-const ship: Entity = { x: W / 2 - 2, y: H - 30, w: 5, h: 4 };
-let pickup: Entity = { x: 0, y: 0, w: 3, h: 3 };
-const hazard: Entity & { vx: number; vy: number } = { x: 20, y: 20, w: 3, h: 3, vx: 55, vy: 40 };
+// Hitboxes match the rendered sprite sizes (PX * cell counts) within 1 px.
+const SHIP_W = 10;
+const SHIP_H = 8;
+const ITEM_SIZE = 6;
+// Difficulty ramp: felt inside 30 s, threatening by ~2 min (endless game bar).
+const PICKUP_SPEEDUP = 1.12; // per pickup
+const TIME_SPEEDUP = 0.01; // +1%/s compounding, so idling doesn't stall the ramp
+
+const ship: Entity = { x: W / 2 - SHIP_W / 2, y: H - 30, w: SHIP_W, h: SHIP_H };
+let pickup: Entity = { x: 0, y: 0, w: ITEM_SIZE, h: ITEM_SIZE };
+const hazard: Entity & { vx: number; vy: number } = {
+  x: 20, y: 20, w: ITEM_SIZE, h: ITEM_SIZE, vx: 55, vy: 40,
+};
 let score = 0;
+let dying = false; // death seen; GAME_OVER deferred until the hit-stop expires
 
 function placePickup(): void {
   pickup = {
-    x: SAFE_MARGIN + Math.random() * (W - 2 * SAFE_MARGIN - 3),
-    y: SAFE_MARGIN + 12 + Math.random() * (H - 2 * SAFE_MARGIN - 40),
-    w: 3,
-    h: 3,
+    x: SAFE_MARGIN + Math.random() * (W - 2 * SAFE_MARGIN - ITEM_SIZE),
+    y: SAFE_MARGIN + 12 + Math.random() * (H - 2 * SAFE_MARGIN - 12 - 28 - ITEM_SIZE),
+    w: ITEM_SIZE,
+    h: ITEM_SIZE,
   };
 }
 
 function resetWorld(): void {
-  ship.x = W / 2 - 2;
+  ship.x = W / 2 - SHIP_W / 2;
   ship.y = H - 30;
   hazard.x = 20;
   hazard.y = 20;
   hazard.vx = 55;
   hazard.vy = 40;
   score = 0;
+  dying = false;
   placePickup();
 }
 
@@ -139,7 +163,13 @@ function update(dt: number): void {
       break;
     }
     case 'PLAYING': {
-      if (input.pressed('X')) {
+      // Death flow: the frozen tableau renders for the whole hit-stop —
+      // transition to GAME_OVER only when it expires (see juice.ts floors).
+      if (dying) {
+        if (!juice.frozen) scenes.to('GAME_OVER');
+        break;
+      }
+      if (input.pressed('PAUSE')) {
         audio.play('blip');
         scenes.to('PAUSED');
         break;
@@ -152,37 +182,46 @@ function update(dt: number): void {
       ship.x = Math.max(SAFE_MARGIN, Math.min(W - SAFE_MARGIN - ship.w, ship.x));
       ship.y = Math.max(SAFE_MARGIN, Math.min(H - SAFE_MARGIN - ship.h, ship.y));
 
-      // Hazard bounces around the arena.
+      // Hazard bounces around the arena — and creeps faster over time, so the
+      // ramp is felt even without collecting pickups.
+      const timeRamp = 1 + TIME_SPEEDUP * dt;
+      hazard.vx *= timeRamp;
+      hazard.vy *= timeRamp;
       hazard.x += hazard.vx * dt;
       hazard.y += hazard.vy * dt;
       if (hazard.x < SAFE_MARGIN || hazard.x > W - SAFE_MARGIN - hazard.w) hazard.vx *= -1;
       if (hazard.y < SAFE_MARGIN || hazard.y > H - SAFE_MARGIN - hazard.h) hazard.vy *= -1;
 
-      // Pickup: score + small celebratory burst.
+      // Pickup: score + small celebratory burst (game-palette color, centered).
       if (overlaps(ship, pickup)) {
         score += 10;
         runtime.scoreChanged(score);
         audio.play('pickup');
-        particles.burst(pickup.x + 1, pickup.y + 1, { count: 5, color: PICO8[10] });
-        // Speed the hazard up slightly so difficulty ramps and losing stays reachable.
-        hazard.vx *= 1.06;
-        hazard.vy *= 1.06;
+        particles.burst(pickup.x + pickup.w / 2, pickup.y + pickup.h / 2, {
+          count: 5, color: PICO8[10],
+        });
+        // Speed the hazard up so difficulty ramps and losing stays reachable.
+        hazard.vx *= PICKUP_SPEEDUP;
+        hazard.vy *= PICKUP_SPEEDUP;
         placePickup();
       }
 
-      // Hazard contact = lose: big burst, shake, flash, hit-stop, explosion sfx.
+      // Hazard contact = lose: big burst, shake, flash, hit-stop — the world
+      // freezes in PLAYING so the tableau is visible; GAME_OVER comes after.
       if (overlaps(ship, hazard)) {
         audio.play('explosion');
-        particles.burst(ship.x + 2, ship.y + 2, { count: 10, color: PICO8[8], speed: 120 });
-        juice.shake(3, 0.35);
-        juice.flash(PICO8[8], 0.25);
-        juice.hitStop(0.12);
-        scenes.to('GAME_OVER');
+        particles.burst(ship.x + ship.w / 2, ship.y + ship.h / 2, {
+          count: 10, color: PICO8[8], speed: 140,
+        });
+        juice.shake(5, 0.45);
+        juice.flash(PICO8[8], 0.35);
+        juice.hitStop(0.15);
+        dying = true;
       }
       break;
     }
     case 'PAUSED': {
-      if (input.pressed('X')) {
+      if (input.pressed('PAUSE')) {
         audio.play('blip');
         scenes.to('PLAYING');
       }
@@ -225,9 +264,9 @@ function render(): void {
     }
     case 'PLAYING':
     case 'PAUSED': {
-      drawSprite(pc.ctx, pickupSprite, pickup.x, pickup.y);
-      drawSprite(pc.ctx, hazardSprite, hazard.x, hazard.y);
-      drawSprite(pc.ctx, shipSprite, ship.x, ship.y);
+      drawSprite(pc.ctx, pickupSprite, pickup.x, pickup.y, PX);
+      drawSprite(pc.ctx, hazardSprite, hazard.x, hazard.y, PX);
+      drawSprite(pc.ctx, shipSprite, ship.x, ship.y, PX);
       drawScore(pc, score);
       if (scenes.is('PAUSED')) {
         hudText(pc, 'PAUSED', 'center', 'middle', { color: PICO8[10], scale: 2 });
@@ -237,13 +276,13 @@ function render(): void {
     case 'GAME_OVER': {
       drawTextCentered(pc.ctx, 'GAME OVER', W, 56, { color: PICO8[8], scale: 2 });
       drawTextCentered(pc.ctx, `SCORE ${score}`, W, 80, { color: PICO8[7] });
-      drawTextCentered(pc.ctx, 'Z RESTART', W, 100, { color: PICO8[6] });
+      drawTextCentered(pc.ctx, `${BUTTON_KEY.A.hint} RESTART`, W, 100, { color: PICO8[6] });
       break;
     }
     case 'WIN': {
       drawTextCentered(pc.ctx, 'YOU WIN', W, 56, { color: PICO8[11], scale: 2 });
       drawTextCentered(pc.ctx, `SCORE ${score}`, W, 80, { color: PICO8[7] });
-      drawTextCentered(pc.ctx, 'Z RESTART', W, 100, { color: PICO8[6] });
+      drawTextCentered(pc.ctx, `${BUTTON_KEY.A.hint} RESTART`, W, 100, { color: PICO8[6] });
       break;
     }
   }

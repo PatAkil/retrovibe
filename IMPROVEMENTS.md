@@ -155,7 +155,7 @@ the old space-miner" finds and restores the checkpoint without the user
 supplying git knowledge; both sweep greps return no stale commit
 instructions.
 
-## ☐ 4. Sensible keyboard controls
+## ☑ 4. Sensible keyboard controls
 
 **Feedback:** controls should make sense — WASD + arrows for movement, two
 primary action keys, a pause button, space potentially for action.
@@ -219,7 +219,7 @@ reset, creating/switching to a different game (port handover), or an explicit
 `lsof -ti:5173` returns a PID and the URL serves the game; the
 "builds, boots clean" wording stays (the user is still the playtester).
 
-## ☐ 6. Characters are too small
+## ☑ 6. Characters are too small
 
 **Feedback:** character sizes are sometimes quite small.
 
@@ -252,7 +252,7 @@ the fractions above in the reference game and in generated games' quality
 pass; hitbox-vs-rendered mismatch ≤1 px; the human check ("reads clearly at
 a glance") remains as confirmation, not as the only bar.
 
-## ☐ 7. Difficulty scaling is too slow
+## ☑ 7. Difficulty scaling is too slow
 
 **Feedback:** the ramp is barely felt.
 
@@ -275,7 +275,7 @@ within 30s and genuinely threatening by 2min without collecting unusually
 many pickups; a goal-platformer generated after this change gets no ramp
 demanded of it by the quality pass.
 
-## ☐ 8. Animations are too subtle
+## ☑ 8. Animations are too subtle
 
 **Feedback:** shake/flash/burst effects are hard to see.
 
@@ -311,7 +311,7 @@ unmissable from arm's length; the death freeze-frame is actually rendered
 (≥1 frame of frozen PLAYING world visible before the GAME_OVER screen); no
 skill example specifies juice below the floors.
 
-## ☐ 9. Contrast floor + red-green color-blind safety
+## ☑ 9. Contrast floor + red-green color-blind safety
 
 **Feedback:** the background color sometimes blends in with the character
 color — that can't happen. Also make it red-green color-blind friendly.
@@ -362,7 +362,7 @@ with the CRT filter on (visible atmosphere — "the background is empty" is
 a failure); pickup and hazard remain unambiguous in grayscale; no skill
 example recommends a red-vs-green-only distinction.
 
-## ☐ 10. Visual variety across generated games
+## ☑ 10. Visual variety across generated games
 
 **Feedback:** particle effects and character designs are too similar across
 different generated games.

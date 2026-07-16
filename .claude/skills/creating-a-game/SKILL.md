@@ -21,7 +21,7 @@ This is the canonical routing list for all eleven Retrovibe skills. CLAUDE.md li
 | iterating-on-a-game | The request names a game whose `workspace/<name>` folder already exists ("make the ship faster"). |
 | helping-the-user | The request is too vague to build from — elicit core loop, lose condition, controls. |
 | ensuring-arcade-visuals | Work on the game's look: palette discipline, pixel scale, CRT filter integration. |
-| handling-user-input | Anything touching controls: A/B/X/Y action declarations and labels, edge-vs-held semantics, audio unlock on first keypress. |
+| handling-user-input | Anything touching controls: A/B/PAUSE action declarations and labels, edge-vs-held semantics, audio unlock on first keypress. |
 | building-platformer-games | The game is a platformer — jump feel, coyote time, jump buffering, AABB collision. |
 | improving-game-quality | Feel & correctness pass — this skill owns the only quality checklist. |
 | messaging-game-over | Posting state/score transitions to the host via the engine runtime. |
@@ -78,6 +78,8 @@ No dependency install is needed — devDeps live once at the repo root and games
 Start by launching the dev server in the background for this game (steps 1–2 of **playing-the-game** — port discipline as written). It hot-reloads every save, so runtime feedback is continuous and the final gate pays no startup cost.
 
 Read budget: the engine API table in CLAUDE.md plus the cloned `workspace/<game-name>/game/main.ts` (the reference game) suffice to start; the API barrel is `workspace/<game-name>/engine/index.ts` — frozen, import only from there. Open a companion skill only when its domain is touched: **building-platformer-games** (platformers), **handling-user-input** (changing what buttons do), **ensuring-arcade-visuals**, **messaging-game-over**, **adding-easter-egg**. Run **improving-game-quality**'s checklist once before Step 5's full gate.
+
+**Style card before code:** before the first milestone save, derive 2–3 distinct visual directions from the game's fiction, pick one, and record it as a comment block atop `main.ts` — it must diverge from the reference game and from every game currently in `workspace/` (the rule and comparison set live in **ensuring-arcade-visuals** §0).
 
 Write `game/main.ts` in 2–3 coherent milestone saves, not one monolithic write: (1) title + input declarations + movement, (2) core loop + lose condition, (3) juice/audio/difficulty/polish. Each milestone must pass `npm run check` before the next begins.
 

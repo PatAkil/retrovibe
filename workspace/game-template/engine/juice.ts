@@ -1,5 +1,13 @@
 // juice.ts — screen shake, screen flash, and hit-stop (freeze frames).
 //
+// Magnitude floors (feedback must be unmissable — see improving-game-quality):
+//   shake: major events (death/explosion) >= 4-6 px amplitude, >= 0.4 s
+//   flash: full-screen death flash holds >= 0.3 s
+//   hit-stop: the frozen tableau must actually RENDER — stay in PLAYING while
+//     frozen (~0.15 s, burst/shake/flash visible over the frozen world) and
+//     transition to GAME_OVER only when the hit-stop expires. Transitioning in
+//     the same tick as hitStop() means the freeze-frame is never drawn.
+//
 // Usage per frame:
 //   juice.update(dt);              // always — counts down timers
 //   if (!juice.frozen) { ...world simulation... }   // hit-stop pauses the world

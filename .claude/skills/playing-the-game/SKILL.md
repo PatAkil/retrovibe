@@ -65,7 +65,7 @@ If either check fails, relaunch (steps 1–2) and re-verify before handing off �
 The handoff is the payoff moment — the user is a **player**, not QA. Give exactly three things, nothing else:
 
 1. **The URL**: http://localhost:5173/
-2. **The controls**, read from the game's declared action labels (the same declarations `controlHints` renders) plus movement — e.g. "Arrows/WASD move · Z punch · X kick".
+2. **The controls**, read from the game's declared action labels (the same declarations `controlHints` renders) plus movement — e.g. "Arrows/WASD move · SPACE punch · X kick · P pause".
 3. **The goal and lose condition in one line** — e.g. "catch the stars — miss three and it's game over."
 
 Report exactly: "builds, boots clean, ready to play at http://localhost:5173/" — never "playtested", never any claim of having seen or played the game. **The user is the playtester**; Claude cannot see the canvas. Do **not** send a checklist at handoff.
