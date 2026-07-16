@@ -53,7 +53,20 @@ It exits nonzero on any failure — treat a nonzero exit as a hard gate failure:
 
 ### 4. Hand off to the user
 
-Give the user the URL **http://localhost:5173/** and this human playtest checklist:
+The handoff is the payoff moment — the user is a **player**, not QA. Give exactly three things, nothing else:
+
+1. **The URL**: http://localhost:5173/
+2. **The controls**, read from the game's declared action labels (the same declarations `controlHints` renders) plus movement — e.g. "Arrows/WASD move · Z punch · X kick".
+3. **The goal and lose condition in one line** — e.g. "catch the stars — miss three and it's game over."
+
+Report exactly: "builds, boots clean, ready to play at http://localhost:5173/" — never "playtested", never any claim of having seen or played the game. **The user is the playtester**; Claude cannot see the canvas. Do **not** send a checklist at handoff.
+
+### 4b. After they've played — the internal verification frame
+
+The checklist below is **Claude's, never the user's**. The full quality bar still lives in **improving-game-quality**, and the machine gates (`npm run smoke`, `harness/verify.mjs`) are unchanged — this frame is for the conversation after play. It has exactly two uses:
+
+1. **One light follow-up** once the user has actually played: a single open question — "anything feel off — sound, restart, difficulty?" — never the list itself.
+2. **Triage** when the user reports something wrong: walk the items privately to localize which layer failed before editing anything.
 
 - Title screen renders, with control hints that match the actual controls
 - Controls work (move, action buttons)
@@ -63,8 +76,6 @@ Give the user the URL **http://localhost:5173/** and this human playtest checkli
 - Restart works after game over (and after WIN, if the game has one)
 - Ambient background particles and the CRT filter are visible
 - HUD respects the safe margins from the viewport edges
-
-**The user is the playtester.** Claude cannot see the canvas. Report exactly: "builds, boots clean, ready to play at http://localhost:5173/" — never "playtested", never any claim of having seen or played the game. (The full quality bar lives in improving-game-quality; this checklist is only what the human verifies at handoff.)
 
 ### 5. Teardown
 
