@@ -30,6 +30,10 @@ retrovibe/
   `build` (`tsc --noEmit && vite build`), `smoke` (`node smoke.mjs`).
 - **No install step per game.** Bins and modules resolve by walking up to the
   root `node_modules`. Never run `npm install` inside a game folder.
+- **The smoke gate needs a browser once**: `npx playwright install chromium`
+  at the root after `npm install` — unless the environment already provides
+  Playwright browsers (`PLAYWRIGHT_BROWSERS_PATH` set, as in this container).
+  Without it, `npm run smoke` fails with "Executable doesn't exist".
 - **Dev server lifecycle is port-based** (handles don't survive sessions):
   reclaim/teardown with `lsof -ti:5173 | xargs -r kill`; always launch
   `npm run dev` in the background and poll for the readiness line

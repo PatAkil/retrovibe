@@ -7,6 +7,8 @@ description: Edits an existing game in place — the default path for any reques
 
 Modify an existing game in `workspace/<game-name>`. This skill **never clones** the template and never creates a game folder.
 
+**`workspace/game-template` is never a game and never a valid target.** If a request resolves to it (e.g. a game named "game template"), refuse and route to **creating-a-game** under a different name — editing, committing, or deleting the template corrupts the baseline every future game is cloned from.
+
 ## Inverse guard — verify the target exists first
 
 Before touching anything, check that `workspace/<name>` exists (e.g. `ls workspace/`). If it does **not** exist — after a reset, or a name mismatch — **never edit or create a missing folder**. Instead:

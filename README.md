@@ -11,8 +11,12 @@ but every game already builds to a self-contained, subpath-deployable `dist/`.
 ## Quickstart
 
 ```sh
-npm install          # once, at the root — games share these devDeps
+npm install                        # once, at the root — games share these devDeps
+npx playwright install chromium    # once — the headless browser the smoke gate drives
 ```
+
+(Skip the browser install only if your environment already provides Playwright
+browsers via `PLAYWRIGHT_BROWSERS_PATH`.)
 
 Then ask Claude for a game ("make me a game where a frog dodges traffic").
 Claude clones `workspace/game-template` to `workspace/<game-name>`, writes the
