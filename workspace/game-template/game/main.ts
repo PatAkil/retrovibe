@@ -204,8 +204,10 @@ function update(dt: number): void {
 // --- Render ------------------------------------------------------------------
 
 function render(): void {
-  juice.preRender(pc.ctx);
+  // Clear FIRST, un-shaken — clearing inside the shake translate would leave
+  // stale pixels along the canvas edges for the duration of the shake.
   pc.clear(PICO8[0]);
+  juice.preRender(pc.ctx);
   particles.render(pc.ctx);
 
   switch (scenes.current) {

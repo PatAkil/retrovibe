@@ -3,6 +3,9 @@
 // Usage per frame:
 //   juice.update(dt);              // always — counts down timers
 //   if (!juice.frozen) { ...world simulation... }   // hit-stop pauses the world
+//   pc.clear(bg);                  // clear FIRST, un-shaken — clearing inside
+//                                  //   the shake translate leaves stale pixels
+//                                  //   at the canvas edges during a shake
 //   juice.preRender(ctx);          // save + apply shake translate
 //   ...render world...
 //   juice.postRender(ctx, w, h);   // restore + draw flash overlay
