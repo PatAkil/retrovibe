@@ -49,6 +49,8 @@ This runs the game's `smoke.mjs` (template code, copied into every game), which 
 
 It exits nonzero on any failure — treat a nonzero exit as a hard gate failure: read the `SMOKE FAIL` output, fix the game, and repeat from step 2. A real browser executes the JS; curl could never make these assertions.
 
+**Run smoke only immediately after steps 1–2 launched *this* game's server.** The gate validates whatever is serving port 5173, not the folder you run it from — out of order (another game's server still holding the port), a green result belongs to the wrong game.
+
 ### 4. Hand off to the user
 
 Give the user the URL **http://localhost:5173/** and this human playtest checklist:

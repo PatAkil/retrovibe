@@ -45,7 +45,7 @@ Example — user says: "an underwater game, you're a fish, there's treasure, and
 
 Resulting spec to hand back to **creating-a-game**:
 
-> **deep-sea-dash** — Arcade collector. You are a fish; swim with arrows/WASD, collect treasure (+10 each). Sharks patrol and speed up with every treasure taken. Dash action for a brief burst of speed. Touch a shark → game over, show score, restart. Loses reachable from second one; difficulty ramps forever.
+> **deep-sea-dash** — Arcade collector. You are a fish; swim with arrows/WASD, collect treasure (+10 each). Sharks patrol and speed up with every treasure taken. Dash action for a brief burst of speed. Touch a shark → game over, show score, restart. Losing is possible from the first second of play; difficulty ramps forever.
 
 ## Scoping guidance — what fits a small arcade game
 

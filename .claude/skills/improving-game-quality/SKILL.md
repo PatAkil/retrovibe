@@ -125,7 +125,7 @@ Movement (arrows/WASD) is implicit and not in `controlHints` — add a static li
 
 **Check:** The engine loop (`createLoop`) already clamps the per-frame delta and resets the clock on refocus — so the *engine* is safe. What fails this check is **game code** that assumes unclamped wall time: anything using `Date.now()` / `performance.now()` deltas for gameplay, timers counted in real time instead of accumulated `dt`, or spawn schedules keyed to absolute timestamps. After alt-tab those all jump.
 
-**Fix:** All gameplay time derives from the `dt` passed to `update(dt)` — accumulate it (`elapsed += dt`) for timers and spawners. Verify by the plan's test: alt-tab 30s, return; no freeze, no teleport, no burst of queued spawns.
+**Fix:** All gameplay time derives from the `dt` passed to `update(dt)` — accumulate it (`elapsed += dt`) for timers and spawners. Verify: alt-tab 30s, return; no freeze, no teleport, no burst of queued spawns.
 
 ## 10. Performance sanity
 

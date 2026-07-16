@@ -21,7 +21,7 @@ You never build this object yourself — call the typed helpers on the `Runtime`
 - `runtime.scoreChanged(score)` — score changed to a new value.
 - `runtime.stateChanged(state)` — scene transition, e.g. `'TITLE' | 'PLAYING' | 'PAUSED' | 'WIN'`.
 
-Embed detection is `window.parent !== window` (exposed as `runtime.embedded`). When embedded, the runtime posts to the parent frame via `postMessage` (default `targetOrigin: '*'` for MVP); standalone, it logs `'[retrovibe]'` messages to the console — so you can verify sends in the dev console without a host.
+Embed detection is `window.parent !== window` (exposed as `runtime.embedded`). When embedded, the runtime posts to the parent frame via `postMessage` (default `targetOrigin: '*'` for MVP); standalone, it logs `'[retrovibe]'` messages to the console — so you can verify sends in the dev console without a host. For end-to-end proof of the embedded path, run the repo's parent-frame harness: with the game's dev server running on 5173 (see **playing-the-game**), run `node harness/verify.mjs` from the repo root — it embeds the game cross-origin, drives it, and exits nonzero unless all three message types arrive with the pinned envelope.
 
 ## When to send
 

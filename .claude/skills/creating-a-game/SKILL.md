@@ -41,7 +41,7 @@ Derive the folder name from the game's name (if the user didn't name it, invent 
 **`game-template` is reserved and never a valid game name.** If the derived name is `game-template`, pick a different name (ask the user). The collision/iterate/overwrite branches below must never be applied to `workspace/game-template` — it is the pristine template, not a game.
 
 Check whether `workspace/<game-name>` already exists:
-- **Exists** → hand off to **iterating-on-a-game**, or ask the user: pick a new name, iterate on the existing game, or explicitly overwrite (delete the old folder first).
+- **Exists** → hand off to **iterating-on-a-game**, or ask the user: pick a new name, iterate on the existing game, or explicitly overwrite. Overwrite means: stop any dev server first (`lsof -ti:5173 | xargs -r kill` — never delete a folder a live server is serving), then delete the old folder, then clone.
 - **Does not exist** → continue.
 
 **Never run `cp -r` onto an existing folder.** `cp -r workspace/game-template workspace/<game-name>` against an existing directory copies the template *inside* it (`workspace/<game-name>/game-template/`), nesting the template and corrupting the game.

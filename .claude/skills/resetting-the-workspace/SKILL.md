@@ -42,10 +42,11 @@ If there are no game folders, report that the workspace is already clean and sto
 
 ### 3. Allowlist delete
 
-Pre-delete guards — refuse to proceed unless **both** hold:
+Pre-delete guards — refuse to proceed unless **all three** hold:
 
 - CWD is the repo root (`workspace/game-template` resolves from here);
-- `workspace/game-template` exists.
+- `workspace/game-template` exists;
+- the template is clean **before** deleting anything: `git status --porcelain workspace/game-template` prints nothing (if dirty, restore first — same commands as step 4 — so a corrupted template is caught while everything is still recoverable, not after the wipe).
 
 Then delete each confirmed folder **by its exact path, one command per folder**:
 

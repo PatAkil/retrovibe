@@ -33,8 +33,16 @@ export interface GameLoop {
 }
 
 export function createLoop(cbs: LoopCallbacks, opts: LoopOptions = {}): GameLoop {
-  const step = opts.step ?? 1 / 60;
-  const maxFrame = opts.maxFrame ?? 0.25;
+  // Guard the options: step <= 0 would make the accumulator drain loop spin
+  // forever (hanging the tab); NaN would silently disable update() for good.
+  const valid = (v: number | undefined, fallback: number, name: string): number => {
+    if (v === undefined) return fallback;
+    if (Number.isFinite(v) && v > 0) return v;
+    console.warn(`[loop] invalid ${name} (${v}), falling back to ${fallback}`);
+    return fallback;
+  };
+  const step = valid(opts.step, 1 / 60, 'step');
+  const maxFrame = valid(opts.maxFrame, 0.25, 'maxFrame');
 
   let running = false;
   let paused = false; // window blurred/hidden — skip simulation, hold the clock

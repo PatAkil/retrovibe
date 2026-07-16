@@ -25,7 +25,16 @@ const server = createServer((_req, res) => {
   res.writeHead(200, { 'content-type': 'text/html' });
   res.end(html);
 });
-await new Promise((resolve) => server.listen(HARNESS_PORT, resolve));
+try {
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(HARNESS_PORT, resolve);
+  });
+} catch (e) {
+  console.error('HARNESS FAIL:');
+  console.error(`  - harness server could not listen on ${HARNESS_PORT}: ${e.message}`);
+  process.exit(1);
+}
 
 const failures = [];
 const browser = await chromium.launch();
@@ -57,11 +66,16 @@ try {
   await page.waitForTimeout(200);
 
   // Deterministic boustrophedon sweep: cover the arena in horizontal passes
-  // 6 logical px apart — the 4px-tall ship overlaps any 3px pickup whose row
-  // it crosses, so a full uninterrupted sweep MUST collect one (scoreChanged).
-  // Hazard contact just ends the round (gameOver, also required); restart with
-  // Z and sweep again. Break as soon as all three types have been seen.
+  // spaced <= 6 logical px — the 4px-tall ship then overlaps any 3px pickup
+  // whose band it crosses, so a full uninterrupted sweep MUST collect one
+  // (scoreChanged). Hazard contact just ends the round (gameOver, also
+  // required); restart with Z and sweep again. Break once all three types
+  // have been seen. The step-down duration is computed from the reference
+  // ship speed (90 px/s) and padded for keyboard/evaluate overhead so the
+  // real step stays under 6px — timers alone under-measure the held time.
   const deadline = Date.now() + 150_000;
+  const SHIP_SPEED = 90; // logical px/s, matches the reference game
+  const STEP_MS = Math.round((4 / SHIP_SPEED) * 1000); // aim ~4px; overhead adds ~1px
   const allSeen = async () => {
     const r = await received();
     return ['gameOver', 'scoreChanged', 'stateChanged'].every((t) => r.types.includes(t));
@@ -71,29 +85,33 @@ try {
     const last = [...r.msgs].reverse().find((m) => m.type === 'stateChanged');
     return last?.payload?.state === 'GAME_OVER';
   };
-  // hold keys for ms, aborting early on game over / completion
+  // Hold keys for ms; returns true when the sweep should restart (round over)
+  // or stop (all types seen). Long holds poll conditions every ~90ms; short
+  // holds (the step-down) skip mid-hold polling so evaluate round-trips don't
+  // stretch the held time past the coverage budget — they check on release.
   const hold = async (keys, ms) => {
     for (const k of keys) await page.keyboard.down(k);
     const until = Date.now() + ms;
-    let aborted = false;
     while (Date.now() < until) {
-      await page.waitForTimeout(90);
-      if ((await allSeen()) || (await gameOverNow())) { aborted = true; break; }
+      const slice = Math.min(90, until - Date.now());
+      await page.waitForTimeout(slice);
+      if (slice === 90 && ((await allSeen()) || (await gameOverNow()))) break;
     }
     for (const k of keys) await page.keyboard.up(k);
-    return aborted;
+    return (await allSeen()) || (await gameOverNow());
   };
   sweep: while (Date.now() < deadline && !(await allSeen())) {
     if (await gameOverNow()) {
       await page.keyboard.press('KeyZ');
       await page.waitForTimeout(150);
     }
-    // to the top-left corner, then serpentine down
+    // to the top-left corner, then serpentine down (26 rows x ~5px covers the
+    // ship's full clamped y-range, a superset of the pickup spawn band)
     if (await hold(['ArrowUp', 'ArrowLeft'], 2200)) continue;
-    for (let row = 0; row < 22; row++) {
+    for (let row = 0; row < 26; row++) {
       const dir = row % 2 === 0 ? 'ArrowRight' : 'ArrowLeft';
       if (await hold([dir], 2700)) continue sweep; // full-width pass
-      if (await hold(['ArrowDown'], 70)) continue sweep; // step down ~6px
+      if (await hold(['ArrowDown'], STEP_MS)) continue sweep;
     }
   }
 

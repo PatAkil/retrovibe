@@ -73,9 +73,11 @@ export function createInput(actions: ActionDecl[], opts: InputOptions = {}): Inp
       firstKeySeen = true;
       opts.onFirstKey?.();
     }
-    if (e.repeat) return;
+    // down.add must run even for e.repeat: after blur clears the set, the OS
+    // auto-repeat events that resume on refocus are the only way a still-held
+    // key re-registers. Only the pressed() edge stays gated on a real press.
     const button = CODE_TO_BUTTON[e.code];
-    if (button && !down.has(e.code)) justPressed.add(button);
+    if (!e.repeat && button && !down.has(e.code)) justPressed.add(button);
     down.add(e.code);
   };
 
