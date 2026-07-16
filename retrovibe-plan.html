@@ -44,52 +44,66 @@
   .decision { border-left: 3px solid var(--accent); padding: .2rem 0 .2rem .9rem; margin: .9rem 0; color: var(--muted); }
   .decision b { color: var(--ink); }
   .check li { margin: .3rem 0; }
+  .rev { border-left: 3px solid var(--accent2); padding: .2rem 0 .2rem .9rem; margin: .9rem 0; font-size: .92rem; color: var(--muted); }
+  .rev b { color: var(--ink); }
 </style>
 
 <main>
 <h1><span class="pix">▚</span> Retrovibe — MVP Plan</h1>
-<p class="sub">Describe a retro game in Claude → skills turn it into a playable, high-quality game. Laptop creation loop: <b>create → play → reset → repeat</b>. Deploy comes post-MVP.</p>
+<p class="sub">Describe a retro game in Claude → skills turn it into a playable, high-quality game. Laptop loop: <b>create → play → iterate → reset → repeat</b>. Deploy comes post-MVP. <em>Rev 4 — hardened across three adversarial review rounds (see §08).</em></p>
 
 <div class="card">
   <b>Settled decisions</b>
   <p>Stack: <b>TypeScript + Canvas 2D, no game framework</b>. A small transparent engine in this repo encodes the quality rules as primitives; skills carry all game-making knowledge <b>and all commands</b> — no helper scripts. Every game is a self-contained folder cloned from a template:</p>
-  <pre><code>cp -r workspace/game-template workspace/&lt;game-name&gt;</code></pre>
+  <pre><code>cp -r workspace/game-template workspace/&lt;game-name&gt;   # only after the collision guard in §04 passes</code></pre>
 </div>
 
 <h2><span class="n">01</span>Repo layout</h2>
 <pre class="tree"><code><span class="d">retrovibe/</span>
-├── package.json              <span class="c"># devDeps installed ONCE at root: typescript, vite</span>
+├── package.json              <span class="c"># devDeps installed ONCE at root: typescript, vite, playwright (headless smoke</span>
+│                             <span class="c">#   checks). NO "workspaces" field — workspace/ is a plain folder; npm workspaces</span>
+│                             <span class="c">#   would break walk-up bin resolution</span>
+├── .gitignore                <span class="c"># node_modules/, dist/, .vite/ — keeps the baseline commit small and the</span>
+│                             <span class="c">#   git-status integrity checks fast and meaningful</span>
 ├── node_modules/             <span class="c"># shared — game folders resolve bins by walking up</span>
 ├── <span class="d">workspace/</span>
-│   ├── <span class="d">game-template/</span>        <span class="c"># pristine + self-contained; never modified by game creation</span>
-│   │   ├── package.json      <span class="c"># scripts: dev, build</span>
+│   ├── <span class="d">game-template/</span>        <span class="c"># pristine + self-contained; never modified, never run in place</span>
+│   │   ├── package.json      <span class="c"># scripts: dev, check (tsc --noEmit), build (tsc --noEmit && vite build),</span>
+│   │   │                     <span class="c">#   smoke (node smoke.mjs)</span>
+│   │   ├── smoke.mjs         <span class="c"># headless smoke harness — template code (like engine/), not a repo helper</span>
+│   │   │                     <span class="c">#   script: drives Chromium at the dev URL; fails on any uncaught console/page</span>
+│   │   │                     <span class="c">#   error or missing live &lt;canvas&gt;</span>
 │   │   ├── tsconfig.json
+│   │   ├── vite.config.ts    <span class="c"># base:'./' (subpath-deployable), server.port 5173 + strictPort,</span>
+│   │   │                     <span class="c">#   cacheDir under repo root (no node_modules/.vite inside games)</span>
 │   │   ├── index.html        <span class="c"># arcade shell (cabinet chrome), mounts game/main.ts</span>
 │   │   ├── <span class="d">engine/</span>           <span class="c"># copied with the template → each game standalone</span>
 │   │   └── <span class="d">game/</span>             <span class="c"># minimal reference game</span>
 │   └── <span class="d">&lt;game-name&gt;/</span>          <span class="c"># user's games — clones of game-template (wiped on reset)</span>
 ├── <span class="d">.claude/skills/</span>           <span class="c"># SKILL.md each — commands baked in</span>
-├── CLAUDE.md                 <span class="c"># repo map, workspace pattern, engine API, skill routing</span>
+├── CLAUDE.md                 <span class="c"># repo map, path/command conventions (single definition), engine API,</span>
+│                             <span class="c">#   links to the orchestrator for skill routing (no duplicate routing list)</span>
 └── README.md</code></pre>
 
-<div class="decision"><b>Engine is copied into each game, not shared.</b> Every game folder is standalone and independently deployable later (<code>npm run build</code> → <code>dist/</code>); later engine changes can never break older games; creation stays a pure <code>cp -r</code>. Canonical source lives in <code>game-template/engine/</code>.</div>
-<div class="decision"><b>One install at the root.</b> Per-game <code>npm run dev</code> / <code>npm run build</code> work because npm resolves binaries from ancestor <code>node_modules</code> — no install step per game.</div>
-<div class="decision"><b>Git:</b> <code>git init</code> + one initial commit as the clean-slate baseline. No remote, no further commits unless asked.</div>
+<div class="decision"><b>Engine is copied into each game, not shared.</b> Every game folder is standalone and independently deployable later (<code>npm run build</code> → <code>dist/</code> with <code>base:'./'</code> so it works from any subpath, e.g. <code>/games/my-game/</code>); later engine changes can never break older games; creation stays a pure <code>cp -r</code>. Canonical source lives in <code>game-template/engine/</code>.</div>
+<div class="decision"><b>One install at the root.</b> Per-game <code>npm run dev</code> / <code>npm run build</code> work because npm prepends every ancestor <code>node_modules/.bin</code> to PATH — no install step per game. Vite's <code>cacheDir</code> is pointed at the repo root so running a game never creates a <code>node_modules/</code> inside it.</div>
+<div class="decision"><b>Git:</b> <code>git init</code> + one initial commit as the clean-slate baseline; the orchestrator commits each finished game as a checkpoint (so reset is recoverable). Template integrity is <em>enforced</em>, not assumed: before every clone and every reset, <code>git status --porcelain workspace/game-template</code> must be clean — if dirty, restore with <code>git checkout -- workspace/game-template &amp;&amp; git clean -fd workspace/game-template</code> before proceeding (checkout reverts tracked changes/deletions; clean removes untracked files, which checkout cannot — and it respects <code>.gitignore</code>, so build cruft is untouched). A root <code>.gitignore</code> (<code>node_modules/</code>, <code>dist/</code>, <code>.vite/</code>) keeps the baseline commit small and these checks fast; checkpoint commits are scoped to <code>workspace/&lt;game-name&gt;</code>, never <code>-A</code>. No remote.</div>
+<div class="decision"><b>Build is necessary, not sufficient.</b> A green <code>tsc</code>/<code>vite build</code> proves compilation only. Every handoff to the user also requires the runtime smoke check in §05, and the user — not Claude — is the real playtester. Claude never claims to have "played" the game.</div>
 
 <h2><span class="n">02</span>Engine modules <span style="font-weight:400;color:var(--muted)">— quality rules as defaults, not conventions</span></h2>
 <div class="wrap"><table>
   <tr><th>Module</th><th>Contents</th></tr>
-  <tr><td>loop.ts</td><td>Fixed-timestep loop (accumulator), <code>update(dt)</code>/<code>render</code> split, pause on blur</td></tr>
-  <tr><td>input.ts</td><td>Unified keyboard map (arrows+WASD → direction; Space/Z/X/Enter → actions), pressed/held/released edges, stuck-key handling on blur</td></tr>
-  <tr><td>scenes.ts</td><td>Enforced state machine <code>TITLE → PLAYING → GAME_OVER → restart</code> — always playable, lose state always reachable</td></tr>
+  <tr><td>loop.ts</td><td>Fixed-timestep loop (accumulator), <code>update(dt)</code>/<code>render</code> split, pause on blur. <b>Frame-time clamp is mandatory</b>: cap the per-frame delta (~250&nbsp;ms) and reset the clock on focus, independent of the pause flag — otherwise alt-tab/sleep produces a spiral-of-death catch-up or physics teleport on return</td></tr>
+  <tr><td>input.ts</td><td>Unified keyboard map (arrows+WASD → direction; Space/Z/X/Enter → actions), pressed/held/released edges, stuck-key handling on blur. First keydown also unlocks audio (see audio.ts)</td></tr>
+  <tr><td>scenes.ts</td><td>Enforced state machine <code>TITLE → PLAYING ⇄ PAUSED → (GAME_OVER | WIN) → restart</code>. Level advance = PLAYING re-entry. Invariant (checked by improving-game-quality, not encoded as the only terminal): the game is always playable and a lose state is always reachable</td></tr>
   <tr><td>draw.ts</td><td>Pixel-scaled rendering, ASCII-art sprite maps → colored pixel sprites, retro text</td></tr>
   <tr><td>palette.ts</td><td>Curated retro palettes (PICO-8-style) + palette-swap support (feeds easter eggs)</td></tr>
   <tr><td>particles.ts</td><td>Ambient background presets (stars, rain, snow, embers, bubbles) + burst emitter for impacts</td></tr>
   <tr><td>juice.ts</td><td>Screen shake, screen flash, hit-stop / freeze frames</td></tr>
-  <tr><td>audio.ts</td><td>WebAudio chiptune synth presets: jump, pickup, explosion, hit, UI blip — zero asset files</td></tr>
+  <tr><td>audio.ts</td><td>WebAudio chiptune synth presets: jump, pickup, explosion, hit, UI blip — zero asset files. <b>Autoplay policy handled by design</b>: the <code>AudioContext</code> is created/resumed lazily inside the first user-gesture handler (first keydown on the title screen), never at module load — the TITLE→PLAYING keypress is the documented unlock point</td></tr>
   <tr><td>ui.ts</td><td>HUD helpers (score/lives/text) with enforced <code>SAFE_MARGIN</code> from viewport edges</td></tr>
   <tr><td>crt.ts</td><td>Retro screen filter: scanlines + vignette + subtle flicker</td></tr>
-  <tr><td>runtime.ts</td><td>Host contract: <code>gameOver(score)</code>, <code>scoreChanged(n)</code>, <code>stateChanged(s)</code> — postMessage to parent when embedded, console locally</td></tr>
+  <tr><td>runtime.ts</td><td>Host contract with a <b>pinned wire format</b>: messages are <code>{ source: 'retrovibe', type: 'gameOver' | 'scoreChanged' | 'stateChanged', payload }</code>. Embed detection is <code>window.parent !== window</code>; when embedded, <code>postMessage</code> to parent with an explicit <code>targetOrigin</code> (default <code>'*'</code> for MVP, tighten at deploy); otherwise log to console. Verified against a tiny parent-frame harness (§06) so the postMessage path has real coverage in MVP</td></tr>
 </table></div>
 
 <p style="margin-top:.8rem">Your four rules, mapped:
@@ -100,38 +114,80 @@
 </p>
 
 <h2><span class="n">03</span>Template game</h2>
-<p>A minimal complete game (~150 lines) inside <code>game-template/game/</code> proving every rule — and serving as the reference implementation all skills point to: title screen → play (move a ship, collect pickups, dodge a hazard; contact = lose) → game over → restart. Starfield, shake+flash+burst on hit, chiptune sfx, safe-margin HUD, CRT filter, runtime messaging.</p>
+<p>A minimal complete game (target ~150 lines — a soft target, correctness wins over line count) inside <code>game-template/game/</code> proving every rule — and serving as the reference implementation all skills point to: title screen → play (move a ship, collect pickups, dodge a hazard; contact = lose) → game over → restart. Starfield, shake+flash+burst on hit, chiptune sfx (unlocked on first keypress), safe-margin HUD, CRT filter, runtime messaging. The template is <b>never run in place</b> — playtest clones, not the template.</p>
 
-<h2><span class="n">04</span>The skills</h2>
-<div class="skill"><b>creating-a-game</b> — the orchestrator, mirroring your flow:
+<h2><span class="n">04</span>The skills <span style="font-weight:400;color:var(--muted)">— eleven; the orchestrator's routing list is the single source of truth (CLAUDE.md links to it, never duplicates it)</span></h2>
+<div class="skill"><b>creating-a-game</b> — the orchestrator:
   <ol class="flow">
-    <li><b>Setup workspace</b>: folder-friendly name, <code>cp -r workspace/game-template workspace/&lt;game-name&gt;</code>; no dependency install needed.</li>
+    <li><b>Elicit (gate)</b>: if the request is vague, invoke <b>helping-the-user</b> first. Bar to proceed: core loop, lose condition, and controls are known.</li>
+    <li><b>Route</b>: derive the folder-friendly name and check whether <code>workspace/&lt;game-name&gt;</code> exists. Exists → hand off to <b>iterating-on-a-game</b> (or ask: new name / iterate / explicit overwrite). <b>Never run <code>cp -r</code> onto an existing folder</b> — it nests the template inside it and corrupts the game.</li>
+    <li><b>Setup workspace</b>: verify template integrity (<code>git status --porcelain workspace/game-template</code> clean, restore if not), then <code>cp -r workspace/game-template workspace/&lt;game-name&gt;</code>. No dependency install needed.</li>
     <li><b>Develop</b>: read the copied game files first; modify to fulfill the request. Use the companion skills: messaging-game-over, ensuring-arcade-visuals, handling-user-input, improving-game-quality, adding-easter-egg — and building-platformer-games if it's a platformer.</li>
-    <li><b>Validation loop</b>: after <em>every</em> edit, <code>cd workspace/&lt;game-name&gt; &amp;&amp; npm run build</code>. Don't proceed or notify the user until compilation succeeds.</li>
+    <li><b>Validation loop</b>: after <em>every</em> edit, fast typecheck: <code>cd workspace/&lt;game-name&gt; &amp;&amp; npm run check</code> (<code>tsc --noEmit</code>). Before notifying the user: full <code>npm run build</code> <em>plus</em> the runtime smoke check from <b>playing-the-game</b>. A green build alone never triggers "done".</li>
+    <li><b>Checkpoint</b>: commit the finished game (<code>git add workspace/&lt;game-name&gt; &amp;&amp; git commit</code>) so reset is recoverable.</li>
   </ol>
 </div>
-<div class="skill"><b>helping-the-user</b> — behavior-elicitation questions, combining described behaviors into a coherent core loop, scoping guidance.</div>
-<div class="skill"><b>ensuring-arcade-visuals</b> — palette discipline, pixel scale, CRT filter integration, readability rules.</div>
-<div class="skill"><b>handling-user-input</b> — the unified keyboard contract, edge-vs-held semantics, control hints on the title screen.</div>
-<div class="skill"><b>building-platformer-games</b> — tuned controller recipe: variable jump height, coyote time, jump buffering, AABB collision resolution order, known-good tuning constants.</div>
-<div class="skill"><b>improving-game-quality</b> — the quality checklist: margins, always-playable loop with reachable lose condition, ambient particles, shake on events, transitions, audio coverage, performance.</div>
-<div class="skill"><b>messaging-game-over</b> — when/how to post state and score transitions via <code>runtime.ts</code> (thin — the module enforces it).</div>
+<div class="skill"><b>iterating-on-a-game</b> — edits an <em>existing</em> game in place ("make the ship faster"): never clones, runs the same validation loop + smoke check + checkpoint commit as the orchestrator. The default path for any request naming a game that already exists. <b>Inverse guard</b> (closes the routing loop with the orchestrator): if <code>workspace/&lt;name&gt;</code> does <em>not</em> exist — after a reset, or a name mismatch — never edit a missing folder; hand off to creating-a-game (or ask the user which existing game they meant).</div>
+<div class="skill"><b>helping-the-user</b> — behavior-elicitation questions, combining described behaviors into a coherent core loop, scoping guidance. Invoked as the orchestrator's Step 1 gate.</div>
+<div class="skill"><b>ensuring-arcade-visuals</b> — <em>look</em> only: palette discipline, pixel scale, CRT filter integration. (Readability/margins live in improving-game-quality — scopes are disjoint by design.)</div>
+<div class="skill"><b>handling-user-input</b> — the unified keyboard contract, edge-vs-held semantics, control hints on the title screen, audio-unlock-on-first-keypress.</div>
+<div class="skill"><b>building-platformer-games</b> — tuned controller recipe: variable jump height, coyote time, jump buffering, AABB collision resolution order, known-good tuning constants; uses the WIN state for goal/flag levels.</div>
+<div class="skill"><b>improving-game-quality</b> — <em>feel &amp; correctness</em> checklist (the only quality checklist — the orchestrator defers here rather than carrying its own): margins/readability, always-playable loop with reachable lose condition, ambient particles, shake on events, scene transitions incl. PAUSED/WIN, audio coverage, alt-tab resume, performance.</div>
+<div class="skill"><b>messaging-game-over</b> — when/how to post state and score transitions via <code>runtime.ts</code> (thin — the module enforces the wire format).</div>
 <div class="skill"><b>adding-easter-egg</b> — palette-swap toggles and secret input sequences (↑↑↓↓…).</div>
-<div class="skill"><b>playing-the-game</b> — <code>cd workspace/&lt;game-name&gt; &amp;&amp; npm run dev</code>, playtest in browser against the checklist.</div>
-<div class="skill"><b>resetting-the-workspace</b> — reset baked in as a skill: list game folders, confirm with the user, delete everything in <code>workspace/</code> except <code>game-template</code>. Never touches the template, skills, or repo files.</div>
+<div class="skill"><b>playing-the-game</b> — the dev-server lifecycle + smoke check, honest about what Claude can verify:
+  <ol class="flow">
+    <li><b>Reclaim the port</b> (one server at a time): kill whatever is listening on 5173 — <code>lsof -ti:5173 | xargs kill</code>, harmless when nothing is. Port-based, not handle-based, because background-task handles don't survive across Claude sessions: an orphan server from an ended session would otherwise hold the pinned port forever and deadlock every future launch.</li>
+    <li><b>Launch in background</b> (never foreground — Vite never exits and would hang the session): <code>cd workspace/&lt;game-name&gt; &amp;&amp; npm run dev</code> as a background task; poll its output for the "Local: http://localhost:5173" readiness line. Port is pinned (5173, <code>strictPort: true</code>) so it fails loudly instead of silently drifting to 5174.</li>
+    <li><b>Runtime smoke check</b>: <code>npm run smoke</code> — the template's <code>smoke.mjs</code> drives headless Chromium (Playwright from root devDeps) against the dev URL, listening for console/page errors: asserts the page loads, a <code>&lt;canvas&gt;</code> exists in the <em>live DOM</em> after the module runs, and zero uncaught errors fired; exits nonzero on any failure. A real browser executes the JS — curl cannot make these assertions.</li>
+    <li><b>Hand off</b>: give the user the URL and the human playtest checklist (title renders, controls, pickups, hazard→shake→game over, restart, starfield, CRT, HUD margins). <b>The user is the playtester</b> — Claude cannot see the canvas and never claims otherwise.</li>
+    <li><b>Teardown</b>: stop the server when the user is done or before reset — same port-based kill as step 1, so it works even on a server this session didn't start.</li>
+  </ol>
+</div>
+<div class="skill"><b>resetting-the-workspace</b> — destructive, so maximally guarded:
+  <ol class="flow">
+    <li>Stop any running dev server — port-based (<code>lsof -ti:5173 | xargs kill</code>), so orphans from ended sessions are reclaimed too; never delete a folder out from under one.</li>
+    <li>Enumerate game folders and <b>confirm the exact list by name</b> with the user; offer to keep (skip) or checkpoint-commit any game before wiping. A blanket "yes" without the named list shown is not confirmation.</li>
+    <li><b>Allowlist delete</b>: remove each confirmed folder by its exact path (<code>rm -rf workspace/&lt;name&gt;</code> per folder) — never a wildcard or exclusion glob that could match <code>game-template</code>. Guard: refuse unless CWD is the repo root and <code>workspace/game-template</code> exists both before and after.</li>
+    <li>Verify: every folder on the confirmed delete-list is gone; only <code>game-template</code> <em>and any explicitly-kept games</em> remain; <code>git status --porcelain workspace/game-template</code> is clean. (The post-condition must honor the keep option — "only the template remains" is only correct when nothing was kept.)</li>
+  </ol>
+  Committed games remain recoverable from git history after a reset. Never touches the template, skills, or repo files — and now verifies that claim instead of assuming it.
+</div>
 
-<h2><span class="n">05</span>Build order</h2>
+<h2><span class="n">05</span>Validation gates <span style="font-weight:400;color:var(--muted)">— what "done" means</span></h2>
 <ol class="flow">
-  <li>Scaffold: root <code>package.json</code>, <code>npm install</code>, <code>git init</code></li>
-  <li><code>workspace/game-template/</code>: package.json, tsconfig, arcade shell, engine modules, reference game</li>
-  <li>Ten skills + <code>CLAUDE.md</code> + <code>README.md</code></li>
+  <li><b>Per edit</b>: <code>npm run check</code> (<code>tsc --noEmit</code>) — fast inner loop, no bundling.</li>
+  <li><b>Pre-handoff</b>: <code>npm run build</code> (<code>tsc --noEmit &amp;&amp; vite build</code>) passes.</li>
+  <li><b>Pre-handoff</b>: <code>npm run smoke</code> passes (headless-Chromium load: canvas in the live DOM, zero uncaught console/page errors).</li>
+  <li><b>Actual playability</b>: the user plays it. Claude reports "builds, boots clean, ready to play at &lt;URL&gt;" — never "playtested".</li>
+</ol>
+
+<h2><span class="n">06</span>Build order</h2>
+<ol class="flow">
+  <li>Scaffold: root <code>package.json</code> (devDeps: typescript, vite, playwright; no <code>workspaces</code> field), <code>.gitignore</code>, <code>npm install</code>, <code>npx playwright install chromium</code>, <code>git init</code>; ensure a git identity (set repo-local <code>user.name</code>/<code>user.email</code> if none is configured) — the whole recovery story depends on commits succeeding, so a failed baseline commit is a hard scaffold error, never skipped</li>
+  <li><code>workspace/game-template/</code>: package.json, tsconfig, <b>vite.config.ts</b>, <b>smoke.mjs</b>, arcade shell, engine modules, reference game</li>
+  <li>Eleven skills + <code>CLAUDE.md</code> (conventions defined once; routing links to orchestrator) + <code>README.md</code></li>
+  <li>Tiny parent-frame harness page for verifying the <code>runtime.ts</code> postMessage path (driven by the same headless-Chromium mechanism as <code>smoke.mjs</code> — asserting received messages also requires executing JS)</li>
   <li>Initial git commit</li>
 </ol>
 
-<h2><span class="n">06</span>Verification</h2>
+<h2><span class="n">07</span>Verification</h2>
 <ul class="check">
-  <li><code>cd workspace/game-template &amp;&amp; npm run build</code> passes (tsc + vite build).</li>
-  <li><code>npm run dev</code> → playtest: title renders, controls work, pickups score, hazard triggers shake + game over, restart works, starfield + CRT visible, HUD respects margins, console shows runtime messages.</li>
-  <li>Clone round-trip exactly as the skill prescribes: copy → build → play → reset → only <code>game-template</code> remains.</li>
+  <li><code>npm run build</code> in a <em>clone</em> of the template passes (<code>tsc --noEmit</code> + <code>vite build</code>); no stray <code>.js</code> emitted next to sources; no <code>node_modules/</code> created inside the game folder after <code>npm run dev</code>.</li>
+  <li><code>dist/</code> works when served from a subpath (proves <code>base:'./'</code> → independently deployable).</li>
+  <li>Human playtest of the reference game: title renders, controls work, <b>audio unlocks on first keypress</b>, pickups score, hazard triggers shake + game over, restart works, starfield + CRT visible, HUD respects margins.</li>
+  <li><b>Alt-tab 30s and return</b>: game resumes without a freeze (catch-up spiral) or physics teleport.</li>
+  <li><code>runtime.ts</code>: console messages locally <em>and</em> correct <code>{source:'retrovibe', type, payload}</code> messages received in the parent-frame harness.</li>
+  <li><b>End-to-end with Claude in the loop</b>, three sample prompts: (a) a non-platformer creation, (b) a platformer creation, (c) an <em>edit</em> to an existing game ("make the ship faster"). Each must route to the right skills, build, and pass the smoke check.</li>
+  <li><b>Smoke check catches real breakage</b>: <code>npm run smoke</code> passes on the healthy reference game <em>and</em> fails nonzero on a deliberately broken clone (e.g. a throw in <code>main.ts</code>) — proving the gate has teeth.</li>
+  <li>Orphan reclaim: with a dev server left running (simulating an ended session), the next launch reclaims port 5173 and succeeds instead of dying on <code>strictPort</code>.</li>
+  <li>Collision guard: attempting to create a game whose folder exists stops with a choice — never a nested-template corruption.</li>
+  <li>Reset round-trip: create → play → reset → only <code>game-template</code> (plus any explicitly-kept games) remains, template is git-clean, <b>no orphaned dev server survives</b>, and a checkpoint-committed game is recoverable from history. Also: reset keeping one game preserves exactly that game.</li>
 </ul>
+
+<h2><span class="n">08</span>Review log <span style="font-weight:400;color:var(--muted)">— 2026-07-16</span></h2>
+<div class="rev"><b>Round 4 — clean.</b> Both adversarial reviewers (architecture + workflow/lifecycle) returned <b>NO FINDINGS</b> on rev 4. The architecture reviewer additionally verified empirically that the smoke gate doesn't false-fail: headless Chromium never requests favicon.ico and Vite's HMR client logs below error level, so "fail on any uncaught console/page error" only trips on real breakage. <b>The plan is build-ready.</b></div>
+<div class="rev"><b>Rev 4 — round-3 adversarial reviews applied</b> (four findings; the architecture reviewer empirically verified the load-bearing tooling claims — npm walk-up bin resolution, Playwright resolution from a game folder, the empty-input safety of the port-kill pipeline, and .gitignore vs the integrity check — all confirmed on macOS). <b>(1)</b> Reset's success post-condition said "only game-template remains," contradicting its own keep-a-game option — now "delete-list gone, template + kept games remain." <b>(2)</b> iterating-on-a-game gained the inverse guard (missing target → route to creation, never edit a nonexistent folder), closing the routing loop with the orchestrator. <b>(3)</b> Scaffold now ensures a git identity and treats a failed baseline commit as a hard error — recoverability depended on commits that could silently fail on a fresh machine. <b>(4)</b> Template restore now includes <code>git clean -fd</code> — <code>git checkout --</code> can't remove untracked files, so an untracked stray in the template would have either looped the guard or propagated into every clone.</div>
+<div class="rev"><b>Rev 3 — round-2 adversarial reviews applied</b> (both reviewers independently confirmed the round-1 fixes hold; three material findings remained). <b>(1)</b> The runtime smoke check was unimplementable as written — "zero console errors" and "live canvas" require executing the page's JS, which curl cannot do and no provisioned tool could. Fixed by adding Playwright to root devDeps (+ <code>npx playwright install chromium</code> at scaffold) and a <code>smoke.mjs</code> harness inside the template (template code like <code>engine/</code>, so skills still only run <code>npm run smoke</code> — the no-helper-scripts decision stands); the postMessage parent-frame harness is verified by the same mechanism, and verification now proves the gate fails on a deliberately broken game. <b>(2)</b> Dev-server teardown was handle-based, but handles don't survive sessions — an orphan on pinned port 5173 would deadlock every future launch. All stop steps are now port-based (<code>lsof -ti:5173 | xargs kill</code>). <b>(3)</b> Added a root <code>.gitignore</code> and scoped checkpoint commits, since a git-recovery-dependent design must not ingest <code>node_modules/</code> into its baseline or slow its integrity checks.</div>
+<div class="rev"><b>Rev 2 — round-1 adversarial reviews applied</b> (architecture + workflow/lifecycle, 20 findings). Headline fixes: <b>(1)</b> playing-the-game rewritten — background dev-server lifecycle with pinned port + teardown, headless smoke check, and the honest split "Claude verifies it boots; the user playtests" (previously it claimed Claude playtests in a browser, which it cannot). <b>(2)</b> Added <b>iterating-on-a-game</b> + an orchestrator routing branch and collision guard — the create-once design had no path for "make the ship faster" and <code>cp -r</code> onto an existing folder silently nests the template. <b>(3)</b> Reset hardened: allowlist delete by exact path, named-list confirmation, keep/commit option, template-integrity verification; games are checkpoint-committed so reset is recoverable. <b>(4)</b> Runtime correctness baked into engine specs: WebAudio unlock on first gesture, frame-time clamp on the fixed-timestep loop, PAUSED/WIN scene states, pinned postMessage wire format with a parent-frame verification harness. <b>(5)</b> Added <code>vite.config.ts</code> (<code>base:'./'</code>, <code>strictPort</code>, external <code>cacheDir</code>) and <code>tsc --noEmit</code> — without these, "independently deployable" was false and builds littered sources with <code>.js</code>. <b>(6)</b> De-duplicated knowledge: conventions live once in CLAUDE.md, skill routing lives once in the orchestrator, the quality checklist lives once in improving-game-quality; visuals vs quality scopes made disjoint. Verification now exercises the skill-driven flow end-to-end, not just the template.</div>
 </main>
