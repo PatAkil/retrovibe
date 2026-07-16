@@ -167,13 +167,47 @@ many pickups.
 **Acceptance:** in the reference game, a pickup is noticeable and a death is
 unmissable from arm's length; CRT filter does not wash out the feedback.
 
+## ☐ 9. Contrast floor + red-green color-blind safety
+
+**Feedback:** the background color sometimes blends in with the character
+color — that can't happen. Also make it red-green color-blind friendly.
+
+**Change — contrast floor (hard rule):** gameplay-critical entities (player,
+hazards, pickups, projectiles) must always be clearly separable from the
+background:
+- Partition each palette into **background roles** (dark indices — e.g.
+  PICO8 0/1/2/5) and **actor roles** (bright indices — e.g. 7/8/9/10/11/12/14),
+  documented in `engine/palette.ts`; actors never drawn in a background-role
+  color and vice versa.
+- Add a small `contrast(a, b)` helper to `palette.ts` (relative-luminance
+  ratio) so game code and reviews can check pairs; floor: **≥ 3:1** between
+  any critical entity color and the clear/ambient background it moves over.
+- Ambient particles must stay *below* actor brightness (they're atmosphere,
+  not actors).
+
+**Change — red-green safety:** a red-vs-green hue difference may never be the
+*only* thing distinguishing good from bad:
+- Critical distinctions (pickup vs hazard, friend vs foe) must differ in at
+  least two of: hue-family (prefer blue/orange/yellow pairs over red/green),
+  brightness, and silhouette/shape.
+- ensuring-arcade-visuals gains a "deuteranopia check": desaturate the palette
+  mentally (or via the documented luminance values) — if two critical
+  entities become ambiguous, change shape or brightness, not just hue.
+- improving-game-quality's readability item gains both checks (contrast floor
+  + no red/green-only distinctions).
+
+**Acceptance:** in the reference game every critical entity passes the 3:1
+floor against the starfield background; pickup and hazard remain
+unambiguous when rendered in grayscale; no skill example recommends a
+red-vs-green-only distinction.
+
 ---
 
 ### Sequencing note
 
 Items 2+3 land together (recoverability moves from create-time to
 reset-time). Item 5 is a small playing-the-game + creating-a-game edit and
-can land first. Items 4 and 6–8 all touch the template (engine + reference
+can land first. Items 4 and 6–9 all touch the template (engine + reference
 game) and skills — land them as one "controls & feel" template-fix pass with
 a single re-verification (mechanical skill check, clone build/smoke, hint
-rendering).
+rendering, contrast/grayscale checks).
