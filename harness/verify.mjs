@@ -120,6 +120,11 @@ try {
   for (const t of ['stateChanged', 'scoreChanged', 'gameOver']) {
     if (!r.types.includes(t)) failures.push(`never received a '${t}' message (got: ${r.types.join(', ') || 'none'})`);
   }
+  // The pause binding (P) must actually work: a PAUSED stateChanged must have
+  // arrived — generic stateChanged traffic from TITLE/PLAYING/GAME_OVER must
+  // not let a broken pause path pass green.
+  if (!r.msgs.some((m) => m.type === 'stateChanged' && m.payload?.state === 'PAUSED'))
+    failures.push(`never observed a PAUSED stateChanged — the P pause binding did not register`);
   if (r.violations.length > 0) {
     failures.push(`envelope violations: ${JSON.stringify(r.violations.slice(0, 3))}`);
   }
