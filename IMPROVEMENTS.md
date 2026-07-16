@@ -6,6 +6,9 @@ deliberately **revise decisions from the original plan** (retrovibe-plan.html)
 more flow than they protect. Where a revision removes a safety mechanism, this
 spec names the replacement mechanism.
 
+Hardened by two adversarial spec reviews (technical-soundness + product-
+fidelity lenses); their findings are folded in below.
+
 Status: ☐ open · ☑ done
 
 ---
@@ -31,25 +34,52 @@ would trip it). Added to the root `.gitignore`.
 it should remove the games and reach a neutral starting state.
 
 **Change:** drop the named-list confirmation and the per-game keep/commit
-interview from `resetting-the-workspace`. When the user asks for a reset, do
-it: stop the dev server, wipe every game folder, verify only `game-template`
-remains and is git-clean.
+interview from `resetting-the-workspace`. When the user asks for a workspace
+reset, do it — zero questions.
 
-**Replacement safety** (confirmation was the guard against losing work):
-- Before deleting, make ONE automatic scoped safety commit of all game folders
-  (`git add workspace/<name> … && git commit -m "checkpoint before reset"`),
-  so every wiped game stays recoverable from history without asking anything.
-- All non-interactive guards stay: port-based server stop first; allowlist
-  delete by exact path (never a glob); CWD + template-exists pre/post checks;
-  pre- and post-delete `git status --porcelain workspace/game-template` gates;
-  `game-template` untouchable.
-- The keep-a-game option is removed from the default flow; a user who wants to
-  keep one says so in the request ("reset everything except cave-hopper"), and
-  the skill honors it — it just never *asks*.
+**Ambiguity resolves by routing, never by asking:** the zero-question wipe
+applies to requests that target the workspace as a whole ("reset", "wipe
+everything", "start over from scratch"). A request that plausibly targets one
+game ("this one's boring, let's start over", or any phrasing naming a
+specific game) routes to iterating-on-a-game / creating-a-game instead — the
+skill's trigger description and the orchestrator routing row are narrowed to
+say exactly this.
 
-**Acceptance:** "reset the workspace" completes with zero questions; workspace
-contains only `game-template`; template git-clean; every deleted game
-retrievable via `git show <safety-commit>:workspace/<name>/game/main.ts`.
+**Exact git flow** (non-interactive-safe; the naive
+commit-then-`rm` leaves permanent ` D` porcelain noise and can fail outright):
+
+1. Stop the dev server (port-based, as today).
+2. **Safety commit — only if needed, pathspec-limited:** if
+   `git status --porcelain workspace/` (template excluded by its own
+   cleanliness gate) prints anything, run
+   `git add workspace/<name> …` for each game folder, then
+   `git commit -m "checkpoint before reset" -- workspace/` — the pathspec
+   ensures unrelated staged changes never ride along; skip the commit
+   entirely when there is nothing to commit (already-committed games must not
+   crash a zero-question flow with "nothing to commit").
+3. Allowlist delete, exactly as today (`rm -rf workspace/<name>` per literal
+   path; never a glob; CWD + template-exists + template-porcelain guards
+   before and after).
+4. **Commit the deletions:** `git add workspace/<name> …` (stages the
+   removals), `git commit -m "reset workspace" -- workspace/` — the tree ends
+   clean; without this every reset leaves permanent uncommitted deletions.
+
+**End state ("neutral"):** only `game-template` in `workspace/`, no dev
+server on 5173, template porcelain clean, **repo-root `git status` clean**.
+
+**Report:** the completion message names the safety commit hash and the exact
+restore command (`git show <hash>:workspace/<name>/game/main.ts`) — the
+product's audience is git-naive; recovery they aren't told about doesn't
+exist.
+
+**Kept-game escape hatch:** "reset everything except cave-hopper" is honored
+(skip that folder in steps 3–4) — the skill just never *asks*.
+
+**Acceptance:** an unambiguous "reset the workspace" completes with zero
+questions and reaches the end state above (including root porcelain clean,
+twice in a row — no noise compounding); "start over" while discussing a
+specific game routes to an edit/recreate of that game, not a wipe; a wiped
+game is retrievable via the reported restore command.
 
 ## ☐ 3. No commits during the create/iterate interaction
 
@@ -60,40 +90,72 @@ game as part of the interaction.
 (step 6) and iterating-on-a-game (step 5). The create→play→iterate loop
 touches git zero times; the working tree simply holds the current game.
 
-**Replacement recoverability** (checkpoints were the reset-recovery story):
-- The reset skill's automatic safety commit (item 2) captures games at the
-  moment of deletion — the only moment recovery is actually needed.
+**Replacement recoverability — covers ALL deletion moments, not just reset:**
+- resetting-the-workspace: the safety commit in item 2.
+- **creating-a-game's explicit-overwrite branch** (step 2: "delete the old
+  folder, then clone") — the same safety-commit-then-delete mechanic applies
+  there: pathspec-limited checkpoint of `workspace/<name>` before the
+  delete, deletion staged and committed with the clone. Without this, item 3
+  makes "overwrite space-miner" the only unrecoverable data loss in the
+  product.
 - Explicit "commit/save my game" requests still commit, scoped as before.
 
-**Acceptance:** a full create run makes no commits (git log unchanged);
-reset still leaves every wiped game recoverable from its safety commit.
+**Surface sweep:** `grep -rn "checkpoint" .claude/ CLAUDE.md` and update
+every hit — known: creating-a-game step 6 and its routing table row,
+iterating-on-a-game step 5 and its frontmatter description,
+resetting-the-workspace step 2 (keep/commit interview text),
+lifecycle-runner agent ("scoped commits"), CLAUDE.md conventions
+("Checkpoint commits are scoped").
+
+**Acceptance:** a full create run makes no commits (git log unchanged); the
+overwrite branch and reset both leave the destroyed game recoverable from a
+safety commit; the grep returns no stale checkpoint-commit instructions.
 
 ## ☐ 4. Sensible keyboard controls
 
 **Feedback:** controls should make sense — WASD + arrows for movement, two
 primary action keys, a pause button, space potentially for action.
 
-**Change:** rework the engine's button map (`engine/input.ts`, `BUTTON_KEY`)
-from the current A/B/X/Y = Z/X/Space/Enter to:
+**Change:** rework the engine's button model (`engine/input.ts`) to:
 
 | Button | Keys (aliases) | Conventional role |
 |---|---|---|
 | `A` (primary) | **Space** and **Z** | jump / fire / confirm / start |
-| `B` (secondary) | **X** and **Shift** | alt-fire / dash / cancel |
+| `B` (secondary) | **X** and **C** | alt-fire / dash / cancel |
 | `PAUSE` | **P** and **Escape** | pause toggle — dedicated, never remappable to gameplay |
 | Movement | arrows + WASD | unchanged |
 
-- Labels-in-code stays the single source of truth: `ActionDecl` gains
-  `'PAUSE'` as a declarable button; `controlHints` renders the alias pair
-  ("SPACE/Z JUMP · P PAUSE").
-- Engine change ⇒ template fix commit; reference game, handling-user-input,
-  adding-easter-egg, improving-game-quality, and CLAUDE.md's API table update
-  together (mechanical verification re-run); WASD's `KeyW` etc. must not
-  conflict with the new aliases (Shift needs stuck-key care on blur).
+**Shift is explicitly rejected** as an action key: five consecutive presses
+opens the OS Sticky Keys dialog on Windows (unpreventable from the browser),
+which steals focus → blur → auto-pause, on exactly the rapid-tap pattern a
+dash key invites. `C` is a single `KeyboardEvent.code`, adjacent to X, with
+no OS behavior. (Escape as the PAUSE alias is acceptable — pausing is when
+you'd tolerate its exits-fullscreen side effect; P is primary.)
 
-**Acceptance:** reference game plays with Space as the primary action and P
-pausing; title hints show the real keys; `npm run check`/`build`/`smoke`
-green; all skills' examples compile against the new API.
+**Multi-key data model + edge semantics (normative):** `BUTTON_KEY` becomes
+`Record<ButtonName, { codes: string[]; hint: string }>`. A logical button is
+**down while ≥1 of its alias keys is down**; `pressed()` fires on the 0→≥1
+transition; `released()` fires only on the ≥1→0 transition (last alias key
+up). This is load-bearing: building-platformer-games wires variable jump
+height to `released('A')` — with naive per-key edges, tapping Z while
+holding Space would spuriously cut a jump. `held()` must check all alias
+codes (today it reads a single `code`).
+
+**Surfaces (update together, one template-fix pass):** engine/input.ts +
+reference game + `harness/verify.mjs` (drives the game with hardcoded
+`Z`-starts / `Space`-pauses — after the remap its pause path silently tests
+nothing), handling-user-input (owns the model; quotes the old `BUTTON_KEY`
+type verbatim), adding-easter-egg, improving-game-quality,
+building-platformer-games examples, creating-a-game routing row
+("A/B/X/Y…"), helping-the-user ("four action buttons"), CLAUDE.md's API
+table. **Sweep rule:** `grep -rn "A/B/X/Y\|BUTTON_KEY\|KeyZ\|'Space'\|'Enter'" .claude/ CLAUDE.md harness/ workspace/game-template/` and
+update every stale hit.
+
+**Acceptance:** reference game plays with Space (or Z) as the primary action
+and P (or Esc) pausing; holding Space and tapping Z neither cuts a jump nor
+re-triggers `pressed`; title hints show the real keys; harness run exercises
+the new pause binding and still observes the PAUSED `stateChanged`;
+`check`/`build`/`smoke` green; mechanical skill verification green.
 
 ## ☐ 5. Game must actually be running at handoff
 
@@ -117,35 +179,57 @@ reset, creating/switching to a different game (port handover), or an explicit
 
 **Feedback:** character sizes are sometimes quite small.
 
-**Change:** set a minimum readable size for gameplay-critical entities. At the
-reference resolution (240×160, scale 3) the player character must be at least
-**~10–14 logical px** in its larger dimension (the reference ship is 5×4 —
-too small); hazards/pickups at least ~6–8 px. Two levers, both legitimate:
-bigger ASCII sprite maps, or `drawSprite`'s `px` cell-size parameter (a 6-row
-sprite at `px: 2` reads as 12 px). Update:
-- the reference game's ship/pickup/hazard sprites,
-- ensuring-arcade-visuals (replace the "3–8 rows" guidance with the size
-  floor and the `px` technique),
-- improving-game-quality (readability item gains the size floor as a check).
+**Change:** set a minimum readable size for gameplay-critical entities,
+**expressed relative to logical resolution** so it transfers across the
+160–320-wide range the visuals skill allows:
+- player character ≥ **1/16 of logical height** in its larger rendered
+  dimension (≈10 px at 160-high; the reference ship is 5×4 — too small);
+- other gameplay-critical entities (hazards, pickups, projectiles) ≥
+  **1/26 of logical height** (≈6 px at 160).
 
-**Acceptance:** in the reference game the ship reads clearly at a glance from
-normal viewing distance; no gameplay-critical entity under ~6 logical px.
+Two levers, both legitimate: bigger ASCII sprite maps, or `drawSprite`'s
+`px` cell-size parameter (a 6-row sprite at `px: 2` renders 12 px).
+
+**Hitboxes must follow the visuals** — the reference game's collision,
+clamps, bounce margins, spawn offsets, and burst anchors all read hardcoded
+`Entity {w, h}` values, not sprite dimensions. Scaling only the sprite gives
+a 12-px-looking ship with a 5×4 hitbox: visibly-touching hazards don't kill,
+visibly-touched pickups don't collect. Rule: every entity's `w/h` within
+~1 logical px of its rendered size.
+
+**Surfaces:** reference game sprites AND its `Entity` structs + derived
+constants (overlaps, clamps, `placePickup` offsets, burst anchor points);
+ensuring-arcade-visuals (replace "3–8 rows" guidance with the relative floor
++ the `px` technique + the hitbox rule); improving-game-quality (readability
+check gains the floor).
+
+**Acceptance (objective + human):** measured rendered bounding boxes meet
+the fractions above in the reference game and in generated games' quality
+pass; hitbox-vs-rendered mismatch ≤1 px; the human check ("reads clearly at
+a glance") remains as confirmation, not as the only bar.
 
 ## ☐ 7. Difficulty scaling is too slow
 
 **Feedback:** the ramp is barely felt.
 
-**Change:** difficulty must be *felt within the first 30 seconds* and put a
-competent player under real pressure by ~2 minutes. The reference game's
-hazard speed-up (×1.06 per pickup) roughly doubles only after ~12 pickups —
-retune (e.g. ×1.10–1.15 per pickup plus a slow time-based ramp so idling
-doesn't stall difficulty). improving-game-quality's ramp item gets the
-concrete bar: "noticeable change ≤30s of active play; lose-pressure real by
-~2min; idling must not freeze the ramp."
+**Scope: endless/score games** — finite-goal games (a climb, a flag) keep
+their existing exemption in improving-game-quality (their difficulty is
+spatial by design; bolting timers onto them is an overcorrection nobody
+asked for). This item sharpens the *endless-game* bar only; the two
+instructions must not conflict — the skill text states the scope in the same
+sentence as the bar.
+
+**Change:** in endless/score games, difficulty must be *felt within the
+first 30 seconds* of active play and put a competent player under real
+pressure by ~2 minutes. The reference game's ×1.06-per-pickup speed-up
+doubles only after ~12 pickups — retune (e.g. ×1.10–1.15 per pickup plus a
+slow time-based component so idling doesn't stall the ramp).
+improving-game-quality's ramp item gets the concrete bar.
 
 **Acceptance:** playing the reference game, the hazard is visibly faster
 within 30s and genuinely threatening by 2min without collecting unusually
-many pickups.
+many pickups; a goal-platformer generated after this change gets no ramp
+demanded of it by the quality pass.
 
 ## ☐ 8. Animations are too subtle
 
@@ -154,52 +238,71 @@ many pickups.
 **Change:** raise the juice floor so feedback is unmissable:
 - **Shake:** major events (death/explosion) ≥ 4–6 logical px amplitude,
   ≥ 0.4s (reference uses 3px/0.35s — below the floor).
-- **Flash:** full-screen flash on death holds ≥ 0.3s; add a brief hit-stop
-  (~0.15s) so the moment registers.
-- **Bursts:** impact particles sized 2–3 logical px (engine default is
-  1–2 px — barely visible under CRT darkening), counts per the existing
-  significance guidance, speeds high enough to clear the sprite silhouette.
-- Engine-side: bump `createParticles`/`burst` default particle size and the
-  juice docstring's recommended magnitudes; retune the reference game's
-  calls; improving-game-quality gains an "arm's-length test" — every
-  significant event must be visible without looking for it.
+- **Flash:** full-screen flash on death holds ≥ 0.3s.
+- **Hit-stop must be visible — defer the death transition.** The reference
+  already calls `hitStop(0.12)` but transitions to GAME_OVER in the same
+  tick, and `frozen` only gates the PLAYING branch — the frozen tableau is
+  never drawn, at any duration. The death flow becomes: freeze in PLAYING
+  (~0.15s, burst/shake/flash visible over the frozen world), and transition
+  to GAME_OVER only when the hit-stop expires. This is a reference-game
+  restructure, not a parameter retune, and it is the pattern the skills
+  teach.
+- **Bursts:** *transient* impact particles sized 2–3 logical px (engine
+  default `rand(1,2)` is barely visible under CRT darkening), counts per the
+  existing significance guidance, speeds high enough to clear the sprite
+  silhouette. **Ambient particle sizes are explicitly unchanged** — bumping
+  them would make stars/snow read as pickups and collide with item 9's
+  ambient-below-actor rule.
+
+**Surfaces:** engine `particles.ts` (transient default size), `juice.ts`
+docstring magnitudes, reference game (death-flow restructure + retuned
+calls), improving-game-quality — including its **canonical "biggest events"
+example** (`flash(…, 0.25)` / `hitStop(0.12)`), which is below the new
+floors and sits in the repo's only quality checklist; it must be updated to
+meet them. New quality check: the "arm's-length test" — every significant
+event visible without looking for it.
 
 **Acceptance:** in the reference game, a pickup is noticeable and a death is
-unmissable from arm's length; CRT filter does not wash out the feedback.
+unmissable from arm's length; the death freeze-frame is actually rendered
+(≥1 frame of frozen PLAYING world visible before the GAME_OVER screen); no
+skill example specifies juice below the floors.
 
 ## ☐ 9. Contrast floor + red-green color-blind safety
 
 **Feedback:** the background color sometimes blends in with the character
 color — that can't happen. Also make it red-green color-blind friendly.
 
-**Change — contrast floor (hard rule):** gameplay-critical entities (player,
-hazards, pickups, projectiles) must always be clearly separable from the
-background:
-- Partition each palette into **background roles** (dark indices — e.g.
-  PICO8 0/1/2/5) and **actor roles** (bright indices — e.g. 7/8/9/10/11/12/14),
-  documented in `engine/palette.ts`; actors never drawn in a background-role
-  color and vice versa.
-- Add a small `contrast(a, b)` helper to `palette.ts` (relative-luminance
-  ratio) so game code and reviews can check pairs; floor: **≥ 3:1** between
-  any critical entity color and the clear/ambient background it moves over.
-- Ambient particles must stay *below* actor brightness (they're atmosphere,
-  not actors).
+**Change — the floor is the gate; the role partition is only guidance.**
+Computed check: `contrast(a, b)` relative-luminance helper added to
+`engine/palette.ts`; floor **≥ 3:1** between every gameplay-critical entity
+color and **every surface it can overlap** — the clear color, drawn
+scenery/terrain, and ambient particles. (A partition alone provably fails:
+PICO8 red-vs-dark-grey is 1.81:1, red-vs-dark-purple 2.35:1 — both
+"partition-legal" and both invisible.)
+- **All 16 indices get roles** in `palette.ts` docs: background (0/1/2/5),
+  scenery (3/4/6/13/15 — usable for terrain, still subject to the floor
+  vs actors), actor (7/8/9/10/11/12/14). Roles guide selection; the floor
+  decides legality.
+- **Ambient presets are an engine surface:** `particles.ts` hardcodes
+  `#FFF1E8` (white — the brightest actor color) for stars/snow and the
+  reference ship's exact blue for rain, and exposes no color option — game
+  code cannot comply today. Dim the preset colors (or add a color option
+  with dim defaults) so ambient sits below actor brightness; without this
+  the reference game itself fails the floor (blue ship vs white star pixel:
+  2.23:1).
+- **Red-green safety:** a red-vs-green hue difference may never be the only
+  distinction between critical entity classes; require two of hue-family
+  (prefer blue/orange/yellow pairs), brightness, silhouette. Grayscale
+  ambiguity check added to ensuring-arcade-visuals + improving-game-quality.
 
-**Change — red-green safety:** a red-vs-green hue difference may never be the
-*only* thing distinguishing good from bad:
-- Critical distinctions (pickup vs hazard, friend vs foe) must differ in at
-  least two of: hue-family (prefer blue/orange/yellow pairs over red/green),
-  brightness, and silhouette/shape.
-- ensuring-arcade-visuals gains a "deuteranopia check": desaturate the palette
-  mentally (or via the documented luminance values) — if two critical
-  entities become ambiguous, change shape or brightness, not just hue.
-- improving-game-quality's readability item gains both checks (contrast floor
-  + no red/green-only distinctions).
+**Surfaces:** engine `palette.ts` (roles + `contrast()`), `particles.ts`
+(preset colors), reference game (verify post-dim), ensuring-arcade-visuals,
+improving-game-quality.
 
-**Acceptance:** in the reference game every critical entity passes the 3:1
-floor against the starfield background; pickup and hazard remain
-unambiguous when rendered in grayscale; no skill example recommends a
-red-vs-green-only distinction.
+**Acceptance:** in the reference game, every critical entity passes the
+3:1 floor against the clear color AND the (post-dim) ambient particle
+color, verified with `contrast()`; pickup and hazard remain unambiguous in
+grayscale; no skill example recommends a red-vs-green-only distinction.
 
 ## ☐ 10. Visual variety across generated games
 
@@ -220,35 +323,44 @@ different generated games.
 - **Style card before code** (creating-a-game step 4): before the first
   milestone save, the writer derives 2–3 distinct visual directions from the
   game's fiction — each a one-liner: palette + background/actor color
-  indices, ambient preset, sprite silhouette language (round/angular/tall/
-  chunky), juice personality (snappy/heavy/floaty) — picks the best fit,
-  and records it as a comment block atop `main.ts`. Proposing options before
-  building is the reliable way to break a model's default aesthetic.
-- **Reference-divergence rule** (ensuring-arcade-visuals): the reference
-  game's exact combination is reserved; new games must not reuse its sprite
-  maps or effect recipe verbatim — sprites are designed from the fiction's
-  silhouettes, bursts use the game's own palette colors (never the engine
-  default yellow), ambient preset chosen from the fiction table.
-- **Widen the engine's raw material** (template fix): add 2–3 more curated
-  palettes to `palette.ts` (e.g. a neon/synthwave ramp, a warm
-  sunset/desert ramp, a cold ocean/ice ramp) so palette choice is a real
-  decision; make `burst()`'s color a required-in-practice parameter in skill
-  guidance.
+  indices, ambient preset, sprite silhouette language, juice personality —
+  picks one, and records it as a comment block atop `main.ts`.
+- **Divergence rule with a concrete comparison set** (ensuring-arcade-
+  visuals): the style card must differ from (a) the reference game's
+  combination — always reserved — and (b) the style cards of **every game
+  currently in `workspace/`** (read the comment blocks atop their
+  `main.ts` files before choosing). Bursts use the game's own palette
+  colors — never the engine default yellow.
+- **Widen the raw material AND make it reachable** (template fix): add 2–3
+  curated palettes to `palette.ts` (neon/synthwave, warm sunset, cold
+  ocean) — and update every surface writers actually read, or the new
+  palettes don't exist for them: **CLAUDE.md's API-table palette row**,
+  **ensuring-arcade-visuals' palette table** (list all palettes; drop
+  "PICO8 … the default choice"), **adding-easter-egg's palette
+  enumeration**.
 - **Quality check** (improving-game-quality): "would a screenshot of this
-  game be mistaken for the reference game or the previous game? If yes, the
-  visual pass failed."
+  game be mistaken for the reference game or another game currently in the
+  workspace? If yes, the visual pass failed."
 
-**Acceptance:** two games generated from different fictions share neither
+**Honest scope:** cross-*session* variety after a reset (no coexisting games
+to diverge from, no persistent style history) is NOT solved by this item —
+a durable style-history store belongs to the deploy epic. Within one
+workspace lifetime, the mechanisms above are enforceable.
+
+**Acceptance:** any two games coexisting in `workspace/` share neither
 palette-index scheme, ambient preset, sprite silhouettes, nor burst colors;
-the style card comment exists atop each game's `main.ts`.
+every generated game carries a style-card comment atop `main.ts`; every new
+game differs from the reference on at least palette-or-ambient AND
+silhouette.
 
 ---
 
 ### Sequencing note
 
 Items 2+3 land together (recoverability moves from create-time to
-reset-time). Item 5 is a small playing-the-game + creating-a-game edit and
-can land first. Items 4 and 6–10 all touch the template (engine + reference
-game) and skills — land them as one "controls & feel" template-fix pass with
-a single re-verification (mechanical skill check, clone build/smoke, hint
-rendering, contrast/grayscale checks).
+reset/overwrite-time). Item 5 is a small playing-the-game + creating-a-game
+edit and can land first. Items 4 and 6–10 all touch the template (engine +
+reference game), the harness, and skills — land them as one "controls &
+feel" template-fix pass with a single re-verification (mechanical skill
+check, clone build/smoke, harness run incl. the new pause binding, hint
+rendering, contrast/grayscale checks, size-floor measurements).
