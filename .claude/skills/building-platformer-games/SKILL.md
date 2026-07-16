@@ -212,3 +212,7 @@ if (overlaps(player, goal)) {
 ```
 
 Render a distinct `WIN` screen with a restart hint, and make `WIN` exitable (`A` → restart, as `GAME_OVER` does in the reference). Multi-level games advance with a `PLAYING → PLAYING` re-entry and save `WIN` for the final goal. Host notification on win (`gameOver({ score, won: true })`) is owned by **messaging-game-over**. A reachable *lose* condition (pits, hazards) is still mandatory — that check, plus landing/feedback tuning and the rest of the quality pass, is owned by **improving-game-quality**.
+
+## Scrolling levels — world vs. screen coordinates
+
+This recipe is single-screen. If the level scrolls (a climb, a long run), keep entities in **world** coordinates and subtract the camera when rendering (`drawSprite(ctx, sprite, e.x, e.y - cameraY)`). Two traps: the engine's particles and HUD are **screen-space** — convert burst positions (`particles.burst(x, y - cameraY, ...)`) or the effect fires off-screen; and the lose check for falling must use world coordinates relative to the camera (`player.y > cameraY + H`), or scrolling makes it unreachable.

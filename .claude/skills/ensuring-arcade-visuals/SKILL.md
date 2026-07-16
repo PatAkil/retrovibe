@@ -139,8 +139,8 @@ Every game world gets an ambient background layer. Choose the `AmbientPreset` th
 | `'stars'` | Space, night sky, void arenas |
 | `'rain'` | Cyberpunk city, storms, noir |
 | `'snow'` | Ice/winter levels, mountains |
-| `'embers'` | Lava, hell, forge, campfire |
-| `'bubbles'` | Underwater, potions, swamp |
+| `'embers'` | Lava, hell, forge, campfire, torch-lit caves |
+| `'bubbles'` | Underwater, potions, swamp, damp caves |
 
 ```ts
 import { createParticles } from '../engine';

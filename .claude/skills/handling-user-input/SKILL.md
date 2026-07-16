@@ -36,7 +36,7 @@ Games never rebind keys. They choose *which buttons mean what* via action declar
 This declaration is the **only** place a button's meaning is written down:
 
 - Title-screen hints render **from** it via `controlHints(input)` — which returns lines like `['Z JUMP', 'X FIRE']` (key hint + uppercased label). Movement is implicit (arrows/WASD) and not included; render a movement line separately if desired, as the reference game does.
-- **Never hand-write control hints anywhere else.** A hand-written hint is a second source of truth that drifts.
+- **Never hand-write the title-screen control hints anywhere else.** A hand-written hint is a second source of truth that drifts. (Other screens may show contextual button text — e.g. the reference game-over screen's `Z RESTART` — but the key name must come from the same physical binding `BUTTON_KEY` documents, and the title screen always renders from the declarations.)
 - When an edit changes what a button does, change the `label` in the **same declaration** in the same edit. There is no separate file to keep in sync — a wrong or missing label is visible the moment the game is played.
 
 Complete setup, from `workspace/game-template/game/main.ts`:

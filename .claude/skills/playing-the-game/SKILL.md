@@ -33,7 +33,7 @@ Run this **as a background task, never foreground** — Vite never exits, so a f
 Local:   http://localhost:5173/
 ```
 
-If the launch errors instead (e.g. port still in use), `strictPort` guarantees it fails loudly rather than moving to another port — fix the cause (re-run step 1) and relaunch; never proceed on a server that did not print the readiness line.
+Give the poll a budget of ~15 seconds. If the readiness line hasn't appeared by then, stop and read the task's output: `strictPort` guarantees a port conflict fails loudly (`Port 5173 is already in use`) rather than moving to another port — fix the cause (re-run step 1) and relaunch. Never proceed on a server that did not print the readiness line, and never poll indefinitely.
 
 ### 3. Runtime smoke check
 
@@ -56,9 +56,9 @@ Give the user the URL **http://localhost:5173/** and this human playtest checkli
 - Title screen renders, with control hints that match the actual controls
 - Controls work (move, action buttons)
 - Audio unlocks on the first keypress
-- Pickups increase the score
-- Hazard contact triggers screen shake and game over
-- Restart works after game over
+- Scoring works (pickups, if present, increase the score)
+- The lose condition triggers screen shake and game over (hazard contact, falling, etc. — whatever this game's lose is)
+- Restart works after game over (and after WIN, if the game has one)
 - Ambient background particles and the CRT filter are visible
 - HUD respects the safe margins from the viewport edges
 
@@ -72,4 +72,6 @@ When the user is done, or before resetting-the-workspace runs:
 lsof -ti:5173 | xargs -r kill
 ```
 
-Same port-based kill as step 1, so it works even on a server this session didn't start.
+Same port-based kill as step 1, so it works even on a server this session didn't start. Note: killing the server makes its background task report a nonzero exit (SIGTERM, typically 143) — that is the expected result of teardown, not a gate failure.
+
+When the smoke check runs purely as a pre-handoff gate (no live playtester right now), tear down immediately after it passes and tell the user the game is ready — they get the URL and this skill relaunches the server (steps 1–2) when they want to play.

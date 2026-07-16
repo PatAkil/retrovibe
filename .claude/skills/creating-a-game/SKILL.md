@@ -36,7 +36,7 @@ Do not clone or write code until the bar is met.
 
 ## Step 2 — Route (collision guard)
 
-Derive the folder name from the game's name: lowercase, words joined with hyphens, folder-friendly (letters, digits, hyphens only — e.g. "Space Miner!" → `space-miner`).
+Derive the folder name from the game's name (if the user didn't name it, invent a short fitting one and tell them): lowercase, words joined with hyphens, folder-friendly (letters, digits, hyphens only — e.g. "Space Miner!" → `space-miner`).
 
 Check whether `workspace/<game-name>` already exists:
 - **Exists** → hand off to **iterating-on-a-game**, or ask the user: pick a new name, iterate on the existing game, or explicitly overwrite (delete the old folder first).

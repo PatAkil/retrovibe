@@ -30,7 +30,7 @@ hudText(pc, 'PAUSED', 'center', 'middle', { scale: 2 });
 
 **Check:** Trace the scene machine (`createScenes`): `TITLE → PLAYING ⇄ PAUSED → (GAME_OVER | WIN) → restart`. From every scene, a keypress path leads back to `PLAYING`. Then verify the lose condition can *actually occur*: a hazard that never intersects the player's reachable area, moves too slowly to ever catch them, or spawns behind a wall means the game cannot be lost — that fails this check even though it compiles and runs.
 
-**Fix:** Wire missing transitions with `scenes.to(...)` on input edges (the reference: `A` restarts from `GAME_OVER`/`WIN`). Make the hazard's path cover the player's space. Add a difficulty ramp so a competent player still eventually loses — the reference speeds the hazard up on every pickup:
+**Fix:** Wire missing transitions with `scenes.to(...)` on input edges (the reference: `A` restarts from `GAME_OVER`/`WIN`). Make the hazard's path cover the player's space. For endless/score games, add a difficulty ramp so a competent player still eventually loses — the reference speeds the hazard up on every pickup (finite goal games — a climb, a flag — don't need a ramp, but losing must still be genuinely possible on the way):
 
 ```ts
 hazard.vx *= 1.06;
@@ -97,7 +97,7 @@ function render(): void {
 
 ## 6. Scene transitions complete — PAUSED and WIN included
 
-**Check:** `PAUSED` is reachable from `PLAYING` and exitable back (and to `TITLE`). If the game has a goal, `WIN` is reachable via `scenes.to('WIN')` and exitable to restart. Every state renders something (a paused game showing a frozen frame with no `PAUSED` text fails). Games with no win condition may omit `WIN`, but never `PAUSED`.
+**Check:** `PAUSED` is reachable from `PLAYING` and exitable back to `PLAYING` (the machine also allows `PAUSED → TITLE` — optional, the reference doesn't use it). If the game has a goal, `WIN` is reachable via `scenes.to('WIN')` and exitable to restart. Every state renders something (a paused game showing a frozen frame with no `PAUSED` text fails). Games with no win condition may omit `WIN`, but never `PAUSED`.
 
 **Fix:** Pause toggle on an input edge (reference: button `X`), `hudText(pc, 'PAUSED', 'center', 'middle', ...)` overlay, and `scenes.onEnter(...)` for entry side effects (world reset, host messages via **messaging-game-over**).
 
