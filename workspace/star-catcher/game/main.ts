@@ -70,7 +70,7 @@ interface Star {
   active: boolean;
 }
 
-const BASKET_SPEED = 110;
+const BASKET_SPEED = 154;
 const MAX_MISSES = 3;
 const MAX_STARS = 8;
 const STAR_W = 5;
