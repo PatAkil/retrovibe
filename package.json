@@ -1,0 +1,12 @@
+{
+  "name": "retrovibe",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Describe a retro game in Claude, and skills turn it into a playable, high-quality game.",
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "playwright": "1.56.1",
+    "typescript": "5.9.3",
+    "vite": "7.1.12"
+  }
+}
