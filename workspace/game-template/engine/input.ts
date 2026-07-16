@@ -1,7 +1,11 @@
-// input.ts — unified keyboard input + the A/B/X/Y action model.
+// input.ts — unified keyboard input + the A/B/PAUSE action model.
 //
 // Movement: arrows OR WASD → a direction vector.
-// Actions: four buttons A/B/X/Y, bound to Z / X / Space / Enter.
+// Actions: two action buttons plus a dedicated pause button, each with key
+// aliases:  A (primary) = Space or Z · B (secondary) = X or C ·
+// PAUSE = P or Escape. PAUSE is dedicated — never remap it to gameplay.
+// (Shift is deliberately NOT a key: five rapid presses opens the OS Sticky
+// Keys dialog on Windows, stealing focus mid-game.)
 // Each game DECLARES its actions in code with a short human label (1-2 words);
 // title-screen control hints render from these declarations (see controlHints),
 // so a label can never drift from behaviour — change the binding, change the
@@ -11,7 +15,7 @@
 // endFrame() once per update tick, AFTER reading input, to clear the edges.
 // The first keydown fires onFirstKey — the documented audio-unlock point.
 
-export type ButtonName = 'A' | 'B' | 'X' | 'Y';
+export type ButtonName = 'A' | 'B' | 'PAUSE';
 
 export interface ActionDecl {
   button: ButtonName;
@@ -19,12 +23,17 @@ export interface ActionDecl {
   label: string;
 }
 
-/** Physical key bound to each button (also shown in control hints). */
-export const BUTTON_KEY: Readonly<Record<ButtonName, { code: string; hint: string }>> = {
-  A: { code: 'KeyZ', hint: 'Z' },
-  B: { code: 'KeyX', hint: 'X' },
-  X: { code: 'Space', hint: 'SPACE' },
-  Y: { code: 'Enter', hint: 'ENTER' },
+/**
+ * Physical keys bound to each button (first alias's name is the hint shown in
+ * control hints). A logical button is DOWN while at least one of its alias
+ * keys is down: pressed() fires on the 0→≥1 transition, released() only on
+ * the ≥1→0 transition (last alias key up) — so holding Space and tapping Z
+ * neither re-triggers pressed('A') nor fires released('A').
+ */
+export const BUTTON_KEY: Readonly<Record<ButtonName, { codes: string[]; hint: string }>> = {
+  A: { codes: ['Space', 'KeyZ'], hint: 'SPACE' },
+  B: { codes: ['KeyX', 'KeyC'], hint: 'X' },
+  PAUSE: { codes: ['KeyP', 'Escape'], hint: 'P' },
 };
 
 const DIR_KEYS: Record<string, { x: number; y: number }> = {
@@ -34,9 +43,10 @@ const DIR_KEYS: Record<string, { x: number; y: number }> = {
   ArrowDown: { x: 0, y: 1 }, KeyS: { x: 0, y: 1 },
 };
 
-const CODE_TO_BUTTON: Record<string, ButtonName> = {
-  KeyZ: 'A', KeyX: 'B', Space: 'X', Enter: 'Y',
-};
+const CODE_TO_BUTTON: Record<string, ButtonName> = {};
+for (const name of Object.keys(BUTTON_KEY) as ButtonName[]) {
+  for (const code of BUTTON_KEY[name].codes) CODE_TO_BUTTON[code] = name;
+}
 
 // Keys we own — preventDefault so Space/arrows don't scroll the page.
 const OWNED = new Set<string>([...Object.keys(DIR_KEYS), ...Object.keys(CODE_TO_BUTTON)]);
@@ -67,6 +77,9 @@ export function createInput(actions: ActionDecl[], opts: InputOptions = {}): Inp
   const justReleased = new Set<ButtonName>();
   let firstKeySeen = false;
 
+  const buttonDown = (button: ButtonName): boolean =>
+    BUTTON_KEY[button].codes.some((code) => down.has(code));
+
   const onKeyDown = (e: KeyboardEvent): void => {
     if (OWNED.has(e.code)) e.preventDefault();
     if (!firstKeySeen) {
@@ -75,17 +88,20 @@ export function createInput(actions: ActionDecl[], opts: InputOptions = {}): Inp
     }
     // down.add must run even for e.repeat: after blur clears the set, the OS
     // auto-repeat events that resume on refocus are the only way a still-held
-    // key re-registers. Only the pressed() edge stays gated on a real press.
+    // key re-registers. Only the pressed() edge stays gated on a real press —
+    // and on the whole button being up (no alias held) before this keydown.
     const button = CODE_TO_BUTTON[e.code];
-    if (!e.repeat && button && !down.has(e.code)) justPressed.add(button);
+    if (!e.repeat && button && !buttonDown(button)) justPressed.add(button);
     down.add(e.code);
   };
 
   const onKeyUp = (e: KeyboardEvent): void => {
     if (OWNED.has(e.code)) e.preventDefault();
     down.delete(e.code);
+    // released() only when the LAST alias goes up — a jump held on Space must
+    // not be cut by tapping and releasing Z.
     const button = CODE_TO_BUTTON[e.code];
-    if (button) justReleased.add(button);
+    if (button && !buttonDown(button)) justReleased.add(button);
   };
 
   // Losing focus mid-hold would otherwise leave a key "stuck" down forever.
@@ -114,7 +130,7 @@ export function createInput(actions: ActionDecl[], opts: InputOptions = {}): Inp
       return justPressed.has(button);
     },
     held(button) {
-      return down.has(BUTTON_KEY[button].code);
+      return buttonDown(button);
     },
     released(button) {
       return justReleased.has(button);
@@ -134,7 +150,7 @@ export function createInput(actions: ActionDecl[], opts: InputOptions = {}): Inp
 
 /**
  * Human-readable control hint lines derived from an Input's action declarations
- * — the single source of truth for the title screen. e.g. ['Z JUMP', 'X FIRE'].
+ * — the single source of truth for the title screen. e.g. ['SPACE JUMP', 'X FIRE'].
  * Movement is implicit (arrows/WASD) and not included.
  */
 export function controlHints(input: Input): string[] {

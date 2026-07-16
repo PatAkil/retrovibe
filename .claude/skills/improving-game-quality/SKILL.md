@@ -11,7 +11,7 @@ Work through every item below. Each has a *check* (how to detect the problem by 
 
 ## 1. Margins & readability
 
-**Check:** No HUD element, hint, or score sits closer to a screen edge than `SAFE_MARGIN` (8 logical px). Text is legible: scale 1 minimum for body, dim colors only for secondary info, no text overlapping moving gameplay.
+**Check:** No HUD element, hint, or score sits closer to a screen edge than `SAFE_MARGIN` (8 logical px). Text is legible: scale 1 minimum for body, dim colors only for secondary info, no text overlapping moving gameplay. **Entity size floors** (owned by **ensuring-arcade-visuals** §3, re-verified here): player ≥ 1/16 of logical height in its larger rendered dimension, other gameplay-critical entities ≥ 1/26 — measure the *rendered* bounding box (`px` × cells) — and every hitbox `{w, h}` within ~1 px of that rendered size. **Contrast floor** (ensuring-arcade-visuals §1b): every critical entity ≥ 3:1 via `contrast()` against the clear color and any scenery it overlaps; ambient in the 1.8–2.5:1 band; pickup vs hazard unambiguous in grayscale (never red-vs-green as the only distinction).
 
 **Fix:** Use the enforcing helpers instead of hand-placed `drawText` for HUD:
 
@@ -30,12 +30,18 @@ hudText(pc, 'PAUSED', 'center', 'middle', { scale: 2 });
 
 **Check:** Trace the scene machine (`createScenes`): `TITLE → PLAYING ⇄ PAUSED → (GAME_OVER | WIN) → restart`. From every scene, a keypress path leads back to `PLAYING`. Then verify the lose condition can *actually occur*: a hazard that never intersects the player's reachable area, moves too slowly to ever catch them, or spawns behind a wall means the game cannot be lost — that fails this check even though it compiles and runs.
 
-**Fix:** Wire missing transitions with `scenes.to(...)` on input edges (the reference: `A` restarts from `GAME_OVER`/`WIN`). Make the hazard's path cover the player's space. For endless/score games, add a difficulty ramp so a competent player still eventually loses — the reference speeds the hazard up on every pickup (finite goal games — a climb, a flag — don't need a ramp, but losing must still be genuinely possible on the way):
+**Fix:** Wire missing transitions with `scenes.to(...)` on input edges (the reference: `A` restarts from `GAME_OVER`/`WIN`). Make the hazard's path cover the player's space. **In endless/score games — and only there; finite-goal games (a climb, a flag) are exempt, their difficulty is spatial by design — difficulty must be *felt within the first 30 seconds* of active play and put a competent player under real pressure by ~2 minutes.** The reference combines a per-pickup multiplier with a slow time-based component so idling doesn't stall the ramp:
 
 ```ts
-hazard.vx *= 1.06;
-hazard.vy *= 1.06;
+hazard.vx *= 1.12;               // per pickup (1.10–1.15 is the working range)
+hazard.vy *= 1.12;
+// plus, every update tick while PLAYING:
+const timeRamp = 1 + 0.01 * dt;  // +1%/s compounding
+hazard.vx *= timeRamp;
+hazard.vy *= timeRamp;
 ```
+
+A barely-felt ramp (e.g. ×1.06 per pickup alone — doubling only after ~12 pickups) fails this check in an endless game. Never demand a ramp of a finite-goal game — losing must still be genuinely possible on the way, nothing more.
 
 Level advance is a `PLAYING → PLAYING` re-entry (allowed by the machine). Note `scenes.to` *warns and ignores* illegal transitions — a `console.warn` in playtesting means a mis-wired transition even though nothing crashed.
 
@@ -47,32 +53,46 @@ Level advance is a `PLAYING → PLAYING` re-entry (allowed by the machine). Note
 
 ## 4. Impact particles TUNED TO SIGNIFICANCE
 
-**Check:** Significant events emit a burst, and burst size scales with how much the event matters. Uniform bursts everywhere (or none) fail.
+**Check:** Significant events emit a burst, and burst size scales with how much the event matters. Uniform bursts everywhere (or none) fail. **The arm's-length test:** every significant event must be visible without looking for it, from arm's length, with the CRT filter on.
 
-**Fix:** `particles.burst(x, y, opts)` with count by significance:
+**Fix:** `particles.burst(x, y, opts)` with count by significance (transient particles render at 2–3 logical px; speeds should clear the sprite silhouette):
 
 - **Destruction / death / explosion:** ~5–10 particles, faster and hotter:
   ```ts
-  particles.burst(ship.x + 2, ship.y + 2, { count: 10, color: PICO8[8], speed: 120 });
+  particles.burst(ship.x + ship.w / 2, ship.y + ship.h / 2, { count: 10, color: PICO8[8], speed: 140 });
   ```
 - **Minor events** (landing, bullet-vs-wall, small pickup): 3–5, gentler:
   ```ts
-  particles.burst(pickup.x + 1, pickup.y + 1, { count: 5, color: PICO8[10] });
+  particles.burst(pickup.x + pickup.w / 2, pickup.y + pickup.h / 2, { count: 5, color: PICO8[10] });
   ```
 
-`BurstOptions`: `count` (default 8), `color`, `speed` (px/s, default 90), `life` (s, default 0.5). Burst at the event's location, colored like the thing that was hit.
+`BurstOptions`: `count` (default 8), `color`, `speed` (px/s, default 90), `life` (s, default 0.5). Burst at the event's center, colored from the **game's own palette** (never the engine default yellow — see ensuring-arcade-visuals). Ambient particle sizes are deliberately small (1–2 px) — never bump them to make atmosphere "pop"; they'd read as pickups.
 
 ## 5. Shake on impactful events — and the render ORDER rule
 
-**Check:** Player damage/death shakes the screen; the biggest moments also flash and hit-stop. Then check the frame order in `render()` — the single most common juice bug is clearing inside the shake transform, which smears stale pixels along the canvas edges.
+**Check:** Player damage/death shakes the screen; the biggest moments also flash and hit-stop — all above the floors: **shake ≥ 4–6 px amplitude for ≥ 0.4 s on major events (death/explosion); full-screen death flash holds ≥ 0.3 s; the hit-stop's frozen tableau is actually rendered** (≥1 frame of frozen world visible before the terminal screen — see the death-flow pattern below). Apply the arm's-length test: a death must be unmissable without looking for it. Then check the frame order in `render()` — the single most common juice bug is clearing inside the shake transform, which smears stale pixels along the canvas edges.
 
 **Fix:** Escalate with significance:
 
 ```ts
 juice.shake(2, 0.2);            // solid hit
 // biggest events — death, boss kill — add:
-juice.flash(PICO8[8], 0.25);    // full-screen color flash
-juice.hitStop(0.12);            // freeze-frame emphasis
+juice.shake(5, 0.45);           // >= 4-6 px, >= 0.4 s
+juice.flash(PICO8[8], 0.35);    // full-screen color flash, holds >= 0.3 s
+juice.hitStop(0.15);            // freeze-frame emphasis
+```
+
+**Hit-stop must be visible — defer the death transition.** Transitioning to `GAME_OVER` in the same tick as `hitStop()` means the frozen tableau never draws (the terminal screen replaces it immediately). The pattern, from the reference game: stay in `PLAYING` while frozen — burst/shake/flash play out over the frozen world — and transition only when the hit-stop expires:
+
+```ts
+// on hazard contact: effects + a flag, NOT scenes.to
+juice.shake(5, 0.45); juice.flash(PICO8[8], 0.35); juice.hitStop(0.15);
+dying = true;
+// at the top of the PLAYING branch, before the pause/freeze checks:
+if (dying) {
+  if (!juice.frozen) scenes.to('GAME_OVER');
+  break;
+}
 ```
 
 The mandatory frame order:
@@ -99,7 +119,7 @@ function render(): void {
 
 **Check:** `PAUSED` is reachable from `PLAYING` and exitable back to `PLAYING` (the machine also allows `PAUSED → TITLE` — optional, the reference doesn't use it). If the game has a goal, `WIN` is reachable via `scenes.to('WIN')` and exitable to restart. Every state renders something (a paused game showing a frozen frame with no `PAUSED` text fails). Games with no win condition may omit `WIN`, but never `PAUSED`.
 
-**Fix:** Pause toggle on an input edge (reference: button `X`), `hudText(pc, 'PAUSED', 'center', 'middle', ...)` overlay, and `scenes.onEnter(...)` for entry side effects (world reset, host messages via **messaging-game-over**).
+**Fix:** Pause toggle on the dedicated `PAUSE` button's edge (`input.pressed('PAUSE')` — P or Escape; never a gameplay button), `hudText(pc, 'PAUSED', 'center', 'middle', ...)` overlay, and `scenes.onEnter(...)` for entry side effects (world reset, host messages via **messaging-game-over**).
 
 ## 7. Audio coverage
 
@@ -133,6 +153,10 @@ Movement (arrows/WASD) is implicit and not in `controlHints` — add a static li
 
 **Fix:** Build sprites once at module scope (as the reference does). Reuse entity objects; mutate rather than reallocate. Keep `render` pure drawing. The engine's particle system already pools ambient particles and prunes transients — use it instead of a hand-rolled per-frame particle array.
 
+## 11. Visual distinctness across the workspace
+
+**Check:** Would a screenshot of this game be mistaken for the reference game or another game currently in the workspace? If yes, the visual pass failed — apply **ensuring-arcade-visuals**' style-card divergence rule (§0 there): differ on sprite silhouettes AND at least one other axis (palette scheme, ambient preset, or burst colors).
+
 ## Sign-off
 
-The pass is done when all ten items hold, `npm run check` and `npm run build` pass in the game folder, and the smoke check via **playing-the-game** is green. The user remains the real playtester — report what was verified, never "playtested".
+The pass is done when all eleven items hold, `npm run check` and `npm run build` pass in the game folder, and the smoke check via **playing-the-game** is green. The user remains the real playtester — report what was verified, never "playtested".

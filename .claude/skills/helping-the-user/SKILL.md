@@ -9,7 +9,7 @@ A conversation skill — no commands. Goal: get the request over the bar that **
 
 1. **Core loop** — what the player does, over and over (move + collect, aim + shoot, jump + climb, dodge + survive).
 2. **Lose condition** — how a run ends. Every game must have a reachable way to lose.
-3. **Controls** — which inputs do what. The engine gives you arrows/WASD for direction plus four action buttons (A/B/X/Y); details and labeling rules are owned by **handling-user-input**.
+3. **Controls** — which inputs do what. The engine gives you arrows/WASD for direction, two action buttons (A = Space/Z, B = X/C), and a dedicated pause button (P/Escape); details and labeling rules are owned by **handling-user-input**.
 
 Stop asking as soon as all three are known. Two or three well-chosen questions usually suffice — don't interrogate. Fill obvious gaps with sensible retro defaults and say what you assumed.
 

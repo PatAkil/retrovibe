@@ -26,7 +26,7 @@ export type {
   TextOptions,
 } from './draw';
 
-export { PICO8, GAMEBOY, DUSK, PALETTES, swapPalette } from './palette';
+export { PICO8, GAMEBOY, DUSK, NEON, SUNSET, OCEAN, PALETTES, swapPalette, contrast } from './palette';
 export type { Palette } from './palette';
 
 export { createParticles } from './particles';
