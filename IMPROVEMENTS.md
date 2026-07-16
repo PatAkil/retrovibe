@@ -113,11 +113,67 @@ reset, creating/switching to a different game (port handover), or an explicit
 `lsof -ti:5173` returns a PID and the URL serves the game; the
 "builds, boots clean" wording stays (the user is still the playtester).
 
+## ☐ 6. Characters are too small
+
+**Feedback:** character sizes are sometimes quite small.
+
+**Change:** set a minimum readable size for gameplay-critical entities. At the
+reference resolution (240×160, scale 3) the player character must be at least
+**~10–14 logical px** in its larger dimension (the reference ship is 5×4 —
+too small); hazards/pickups at least ~6–8 px. Two levers, both legitimate:
+bigger ASCII sprite maps, or `drawSprite`'s `px` cell-size parameter (a 6-row
+sprite at `px: 2` reads as 12 px). Update:
+- the reference game's ship/pickup/hazard sprites,
+- ensuring-arcade-visuals (replace the "3–8 rows" guidance with the size
+  floor and the `px` technique),
+- improving-game-quality (readability item gains the size floor as a check).
+
+**Acceptance:** in the reference game the ship reads clearly at a glance from
+normal viewing distance; no gameplay-critical entity under ~6 logical px.
+
+## ☐ 7. Difficulty scaling is too slow
+
+**Feedback:** the ramp is barely felt.
+
+**Change:** difficulty must be *felt within the first 30 seconds* and put a
+competent player under real pressure by ~2 minutes. The reference game's
+hazard speed-up (×1.06 per pickup) roughly doubles only after ~12 pickups —
+retune (e.g. ×1.10–1.15 per pickup plus a slow time-based ramp so idling
+doesn't stall difficulty). improving-game-quality's ramp item gets the
+concrete bar: "noticeable change ≤30s of active play; lose-pressure real by
+~2min; idling must not freeze the ramp."
+
+**Acceptance:** playing the reference game, the hazard is visibly faster
+within 30s and genuinely threatening by 2min without collecting unusually
+many pickups.
+
+## ☐ 8. Animations are too subtle
+
+**Feedback:** shake/flash/burst effects are hard to see.
+
+**Change:** raise the juice floor so feedback is unmissable:
+- **Shake:** major events (death/explosion) ≥ 4–6 logical px amplitude,
+  ≥ 0.4s (reference uses 3px/0.35s — below the floor).
+- **Flash:** full-screen flash on death holds ≥ 0.3s; add a brief hit-stop
+  (~0.15s) so the moment registers.
+- **Bursts:** impact particles sized 2–3 logical px (engine default is
+  1–2 px — barely visible under CRT darkening), counts per the existing
+  significance guidance, speeds high enough to clear the sprite silhouette.
+- Engine-side: bump `createParticles`/`burst` default particle size and the
+  juice docstring's recommended magnitudes; retune the reference game's
+  calls; improving-game-quality gains an "arm's-length test" — every
+  significant event must be visible without looking for it.
+
+**Acceptance:** in the reference game, a pickup is noticeable and a death is
+unmissable from arm's length; CRT filter does not wash out the feedback.
+
 ---
 
 ### Sequencing note
 
 Items 2+3 land together (recoverability moves from create-time to
-reset-time). Item 4 is the largest (frozen-API revision → template fix commit
-+ skill sweep + re-verification). Item 5 is a small playing-the-game +
-creating-a-game edit and can land first.
+reset-time). Item 5 is a small playing-the-game + creating-a-game edit and
+can land first. Items 4 and 6–8 all touch the template (engine + reference
+game) and skills — land them as one "controls & feel" template-fix pass with
+a single re-verification (mechanical skill check, clone build/smoke, hint
+rendering).
