@@ -28,7 +28,7 @@ Before touching anything, check that `workspace/<name>` exists (e.g. `ls workspa
    ```
    cd workspace/<game-name> && npm run build
    ```
-   **and** the runtime smoke check via **playing-the-game** (it owns the dev-server lifecycle and runs `npm run smoke`). A green build alone never means done. Claude never claims to have played the game — report "builds, boots clean, ready to play at <URL>"; the user is the playtester.
+   **and** the runtime smoke check via **playing-the-game** (it owns the dev-server lifecycle and runs `npm run smoke`). A green build alone never means done. Claude never claims to have played the game — report "builds, boots clean, ready to play at <URL>"; the user is the playtester. Escalation rule: if the typecheck or smoke gate fails twice on the same approach, escalate the writer one model tier for a fresh attempt (CLAUDE.md → Models & orchestration).
 5. **Checkpoint commit** — scoped to the game folder, never `git add -A`:
    ```
    git add workspace/<game-name> && git commit -m "<game-name>: <what changed>"

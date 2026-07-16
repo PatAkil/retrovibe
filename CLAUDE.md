@@ -71,6 +71,28 @@ Games import from `'../engine'`:
 | crt.ts | `createCrt()` → `.render(ctx, w, h, dt)` | Scanlines + vignette + flicker; draw LAST |
 | runtime.ts | `createRuntime()` → `.gameOver/.scoreChanged/.stateChanged/.embedded/.send` | Host contract, pinned wire format `{source:'retrovibe', type, payload}` |
 
+## Models & orchestration (revisit as models change — roles, not benchmarks)
+
+Two repo agents in `.claude/agents/` make the tiering mechanical:
+
+| Agent | Model tier | Owns |
+|---|---|---|
+| `lifecycle-runner` | fast/cheap (Haiku-class) | Clone, integrity checks, ports, dev server, smoke, scoped commits, resets — command-following only |
+| `game-writer` | strong/fast (Sonnet-class) | Writing/editing game code — milestone saves, per-save `npm run check` |
+
+- **Escalation rule**: if `npm run check` or the smoke gate fails **twice on
+  the same approach**, escalate the writer one model tier (Sonnet → Opus;
+  fast mode when available) for a fresh attempt instead of a third patch —
+  a retry cascade costs more wall-clock than one stronger pass.
+- **Warm-server ordering**: launch the dev server (per playing-the-game's
+  port discipline) at the *start* of development, in the background — each
+  milestone save hot-reloads, and the final smoke gate pays no startup. The
+  handoff contract is unchanged: the user gets the URL only after build and
+  smoke are green.
+- **Read budget for writers**: CLAUDE.md's engine API table + the cloned
+  `game/main.ts` suffice to start; open a companion skill only when its
+  domain is actually touched.
+
 ## Skill routing
 
 The routing list lives **once**, in the orchestrator:

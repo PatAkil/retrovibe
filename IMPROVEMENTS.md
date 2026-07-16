@@ -1,0 +1,123 @@
+# Retrovibe — Improvement Spec (post-playtest)
+
+Owner decisions from the first real playtest round, 2026-07-16. Items 2–5
+deliberately **revise decisions from the original plan** (retrovibe-plan.html)
+— the plan optimized for guarded autonomy; playtesting showed the guards cost
+more flow than they protect. Where a revision removes a safety mechanism, this
+spec names the replacement mechanism.
+
+Status: ☐ open · ☑ done
+
+---
+
+## ☑ 0. Orchestration codified (speed work, this branch)
+
+Model tiering (`.claude/agents/game-writer` = Sonnet-class,
+`lifecycle-runner` = Haiku-class), the two-failures escalation rule,
+warm-server ordering (dev server up at the start of development, hot-reload
+per milestone save), milestone-save discipline with per-save `npm run check`,
+and the writer read-budget. Landed in CLAUDE.md → *Models & orchestration*,
+`.claude/agents/`, creating-a-game, iterating-on-a-game.
+
+## ☑ 1. `.idea/` gitignored
+
+JetBrains project folders must never dirty `git status` (the template-integrity
+check reads porcelain output; IDE cruft inside `workspace/game-template/.idea`
+would trip it). Added to the root `.gitignore`.
+
+## ☐ 2. Reset without questions
+
+**Feedback:** resetting-the-workspace should not ask the user any questions —
+it should remove the games and reach a neutral starting state.
+
+**Change:** drop the named-list confirmation and the per-game keep/commit
+interview from `resetting-the-workspace`. When the user asks for a reset, do
+it: stop the dev server, wipe every game folder, verify only `game-template`
+remains and is git-clean.
+
+**Replacement safety** (confirmation was the guard against losing work):
+- Before deleting, make ONE automatic scoped safety commit of all game folders
+  (`git add workspace/<name> … && git commit -m "checkpoint before reset"`),
+  so every wiped game stays recoverable from history without asking anything.
+- All non-interactive guards stay: port-based server stop first; allowlist
+  delete by exact path (never a glob); CWD + template-exists pre/post checks;
+  pre- and post-delete `git status --porcelain workspace/game-template` gates;
+  `game-template` untouchable.
+- The keep-a-game option is removed from the default flow; a user who wants to
+  keep one says so in the request ("reset everything except cave-hopper"), and
+  the skill honors it — it just never *asks*.
+
+**Acceptance:** "reset the workspace" completes with zero questions; workspace
+contains only `game-template`; template git-clean; every deleted game
+retrievable via `git show <safety-commit>:workspace/<name>/game/main.ts`.
+
+## ☐ 3. No commits during the create/iterate interaction
+
+**Feedback:** there should be no commits in between while creating the user's
+game as part of the interaction.
+
+**Change:** remove the automatic checkpoint commit from creating-a-game
+(step 6) and iterating-on-a-game (step 5). The create→play→iterate loop
+touches git zero times; the working tree simply holds the current game.
+
+**Replacement recoverability** (checkpoints were the reset-recovery story):
+- The reset skill's automatic safety commit (item 2) captures games at the
+  moment of deletion — the only moment recovery is actually needed.
+- Explicit "commit/save my game" requests still commit, scoped as before.
+
+**Acceptance:** a full create run makes no commits (git log unchanged);
+reset still leaves every wiped game recoverable from its safety commit.
+
+## ☐ 4. Sensible keyboard controls
+
+**Feedback:** controls should make sense — WASD + arrows for movement, two
+primary action keys, a pause button, space potentially for action.
+
+**Change:** rework the engine's button map (`engine/input.ts`, `BUTTON_KEY`)
+from the current A/B/X/Y = Z/X/Space/Enter to:
+
+| Button | Keys (aliases) | Conventional role |
+|---|---|---|
+| `A` (primary) | **Space** and **Z** | jump / fire / confirm / start |
+| `B` (secondary) | **X** and **Shift** | alt-fire / dash / cancel |
+| `PAUSE` | **P** and **Escape** | pause toggle — dedicated, never remappable to gameplay |
+| Movement | arrows + WASD | unchanged |
+
+- Labels-in-code stays the single source of truth: `ActionDecl` gains
+  `'PAUSE'` as a declarable button; `controlHints` renders the alias pair
+  ("SPACE/Z JUMP · P PAUSE").
+- Engine change ⇒ template fix commit; reference game, handling-user-input,
+  adding-easter-egg, improving-game-quality, and CLAUDE.md's API table update
+  together (mechanical verification re-run); WASD's `KeyW` etc. must not
+  conflict with the new aliases (Shift needs stuck-key care on blur).
+
+**Acceptance:** reference game plays with Space as the primary action and P
+pausing; title hints show the real keys; `npm run check`/`build`/`smoke`
+green; all skills' examples compile against the new API.
+
+## ☐ 5. Game must actually be running at handoff
+
+**Feedback:** "make sure the game is running when you tell the user" — there
+were handoffs where the server was already down (the gate-only flow tears
+down after smoke).
+
+**Change:** invert playing-the-game's default. The handoff state is **server
+up**: after the smoke gate passes, LEAVE the dev server running, and
+immediately before telling the user, re-verify liveness (the readiness
+process still holds port 5173 — `lsof -ti:5173` non-empty — and an HTTP
+probe of `http://localhost:5173/` returns 200). Teardown happens only on:
+reset, creating/switching to a different game (port handover), or an explicit
+"stop the server".
+
+**Acceptance:** at the moment the "ready to play at <URL>" message is sent,
+`lsof -ti:5173` returns a PID and the URL serves the game; the
+"builds, boots clean" wording stays (the user is still the playtester).
+
+---
+
+### Sequencing note
+
+Items 2+3 land together (recoverability moves from create-time to
+reset-time). Item 4 is the largest (frozen-API revision → template fix commit
++ skill sweep + re-verification). Item 5 is a small playing-the-game +
+creating-a-game edit and can land first.

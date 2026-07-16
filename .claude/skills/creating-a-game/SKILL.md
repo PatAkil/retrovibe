@@ -65,9 +65,11 @@ No dependency install is needed — devDeps live once at the repo root and games
 
 ## Step 4 — Develop
 
-Read the copied game files first (`workspace/<game-name>/game/main.ts` is the reference game; the engine API is the barrel `workspace/<game-name>/engine/index.ts` — frozen, import only from there). Then modify `game/` to fulfill the request.
+Start by launching the dev server in the background for this game (steps 1–2 of **playing-the-game** — port discipline as written). It hot-reloads every save, so runtime feedback is continuous and the final gate pays no startup cost.
 
-Use the companion skills as you go: **messaging-game-over**, **ensuring-arcade-visuals**, **handling-user-input**, **improving-game-quality**, **adding-easter-egg** — and **building-platformer-games** if it's a platformer.
+Read budget: the engine API table in CLAUDE.md plus the cloned `workspace/<game-name>/game/main.ts` (the reference game) suffice to start; the API barrel is `workspace/<game-name>/engine/index.ts` — frozen, import only from there. Open a companion skill only when its domain is touched: **building-platformer-games** (platformers), **handling-user-input** (changing what buttons do), **ensuring-arcade-visuals**, **messaging-game-over**, **adding-easter-egg**. Run **improving-game-quality**'s checklist once before Step 5's full gate.
+
+Write `game/main.ts` in 2–3 coherent milestone saves, not one monolithic write: (1) title + input declarations + movement, (2) core loop + lose condition, (3) juice/audio/difficulty/polish. Each milestone must pass `npm run check` before the next begins.
 
 ## Step 5 — Validation loop
 
@@ -82,6 +84,8 @@ Use the companion skills as you go: **messaging-game-over**, **ensuring-arcade-v
   **and** the runtime smoke check via **playing-the-game** (which owns the dev-server lifecycle and runs `npm run smoke`).
 
 A green build alone never triggers "done" — it proves compilation, not that the game boots. And Claude never claims to have played the game: report "builds, boots clean, ready to play at <URL>". **The user is the playtester.**
+
+**Escalation rule**: if `npm run check` or the smoke gate fails twice on the same approach, escalate the writer one model tier for a fresh attempt instead of a third patch (see CLAUDE.md → Models & orchestration).
 
 ## Step 6 — Checkpoint commit
 
