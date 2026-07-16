@@ -1,0 +1,137 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Retrovibe — MVP Plan</title>
+<style>
+  :root {
+    --bg: #fafafa; --panel: #ffffff; --ink: #1a1a1a; --muted: #666;
+    --accent: #7c3aed; --accent2: #059669; --border: #e2e2e2; --code-bg: #f0f0f2;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #101014; --panel: #17171d; --ink: #e8e8ec; --muted: #9a9aa5;
+      --accent: #a78bfa; --accent2: #34d399; --border: #2a2a33; --code-bg: #20202a; }
+  }
+  :root[data-theme="dark"] { --bg: #101014; --panel: #17171d; --ink: #e8e8ec; --muted: #9a9aa5;
+    --accent: #a78bfa; --accent2: #34d399; --border: #2a2a33; --code-bg: #20202a; }
+  :root[data-theme="light"] { --bg: #fafafa; --panel: #ffffff; --ink: #1a1a1a; --muted: #666;
+    --accent: #7c3aed; --accent2: #059669; --border: #e2e2e2; --code-bg: #f0f0f2; }
+
+  body { background: var(--bg); color: var(--ink); font: 16px/1.6 -apple-system, "Segoe UI", Roboto, sans-serif;
+    margin: 0; padding: 2rem 1rem 4rem; }
+  main { max-width: 860px; margin: 0 auto; }
+  h1 { font-size: 1.7rem; margin: 0 0 .2rem; letter-spacing: -.02em; }
+  h1 .pix { color: var(--accent); }
+  .sub { color: var(--muted); margin: 0 0 2rem; }
+  h2 { font-size: 1.15rem; margin: 2.2rem 0 .7rem; padding-bottom: .3rem; border-bottom: 2px solid var(--border); }
+  h2 .n { color: var(--accent); font-family: ui-monospace, monospace; margin-right: .4rem; }
+  p { margin: .5rem 0; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.2rem; margin: .8rem 0; }
+  code, pre { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: .88em; }
+  code { background: var(--code-bg); padding: .1em .35em; border-radius: 4px; }
+  pre { background: var(--code-bg); padding: .9rem 1rem; border-radius: 8px; overflow-x: auto; line-height: 1.5; }
+  pre code { background: none; padding: 0; }
+  .tree .d { color: var(--accent); font-weight: 600; }
+  .tree .c { color: var(--muted); }
+  .wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: .92rem; }
+  th, td { text-align: left; padding: .45rem .6rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; }
+  td:first-child { white-space: nowrap; font-family: ui-monospace, monospace; font-size: .85rem; color: var(--accent2); }
+  .rule { display: inline-block; background: var(--code-bg); border: 1px solid var(--border); border-radius: 999px;
+    padding: .15rem .7rem; margin: .15rem .2rem .15rem 0; font-size: .85rem; }
+  ol.flow { padding-left: 1.3rem; } ol.flow li { margin: .45rem 0; }
+  .skill { margin: .55rem 0; }
+  .skill b { color: var(--accent2); font-family: ui-monospace, monospace; font-size: .9em; }
+  .decision { border-left: 3px solid var(--accent); padding: .2rem 0 .2rem .9rem; margin: .9rem 0; color: var(--muted); }
+  .decision b { color: var(--ink); }
+  .check li { margin: .3rem 0; }
+</style>
+
+<main>
+<h1><span class="pix">▚</span> Retrovibe — MVP Plan</h1>
+<p class="sub">Describe a retro game in Claude → skills turn it into a playable, high-quality game. Laptop creation loop: <b>create → play → reset → repeat</b>. Deploy comes post-MVP.</p>
+
+<div class="card">
+  <b>Settled decisions</b>
+  <p>Stack: <b>TypeScript + Canvas 2D, no game framework</b>. A small transparent engine in this repo encodes the quality rules as primitives; skills carry all game-making knowledge <b>and all commands</b> — no helper scripts. Every game is a self-contained folder cloned from a template:</p>
+  <pre><code>cp -r workspace/game-template workspace/&lt;game-name&gt;</code></pre>
+</div>
+
+<h2><span class="n">01</span>Repo layout</h2>
+<pre class="tree"><code><span class="d">retrovibe/</span>
+├── package.json              <span class="c"># devDeps installed ONCE at root: typescript, vite</span>
+├── node_modules/             <span class="c"># shared — game folders resolve bins by walking up</span>
+├── <span class="d">workspace/</span>
+│   ├── <span class="d">game-template/</span>        <span class="c"># pristine + self-contained; never modified by game creation</span>
+│   │   ├── package.json      <span class="c"># scripts: dev, build</span>
+│   │   ├── tsconfig.json
+│   │   ├── index.html        <span class="c"># arcade shell (cabinet chrome), mounts game/main.ts</span>
+│   │   ├── <span class="d">engine/</span>           <span class="c"># copied with the template → each game standalone</span>
+│   │   └── <span class="d">game/</span>             <span class="c"># minimal reference game</span>
+│   └── <span class="d">&lt;game-name&gt;/</span>          <span class="c"># user's games — clones of game-template (wiped on reset)</span>
+├── <span class="d">.claude/skills/</span>           <span class="c"># SKILL.md each — commands baked in</span>
+├── CLAUDE.md                 <span class="c"># repo map, workspace pattern, engine API, skill routing</span>
+└── README.md</code></pre>
+
+<div class="decision"><b>Engine is copied into each game, not shared.</b> Every game folder is standalone and independently deployable later (<code>npm run build</code> → <code>dist/</code>); later engine changes can never break older games; creation stays a pure <code>cp -r</code>. Canonical source lives in <code>game-template/engine/</code>.</div>
+<div class="decision"><b>One install at the root.</b> Per-game <code>npm run dev</code> / <code>npm run build</code> work because npm resolves binaries from ancestor <code>node_modules</code> — no install step per game.</div>
+<div class="decision"><b>Git:</b> <code>git init</code> + one initial commit as the clean-slate baseline. No remote, no further commits unless asked.</div>
+
+<h2><span class="n">02</span>Engine modules <span style="font-weight:400;color:var(--muted)">— quality rules as defaults, not conventions</span></h2>
+<div class="wrap"><table>
+  <tr><th>Module</th><th>Contents</th></tr>
+  <tr><td>loop.ts</td><td>Fixed-timestep loop (accumulator), <code>update(dt)</code>/<code>render</code> split, pause on blur</td></tr>
+  <tr><td>input.ts</td><td>Unified keyboard map (arrows+WASD → direction; Space/Z/X/Enter → actions), pressed/held/released edges, stuck-key handling on blur</td></tr>
+  <tr><td>scenes.ts</td><td>Enforced state machine <code>TITLE → PLAYING → GAME_OVER → restart</code> — always playable, lose state always reachable</td></tr>
+  <tr><td>draw.ts</td><td>Pixel-scaled rendering, ASCII-art sprite maps → colored pixel sprites, retro text</td></tr>
+  <tr><td>palette.ts</td><td>Curated retro palettes (PICO-8-style) + palette-swap support (feeds easter eggs)</td></tr>
+  <tr><td>particles.ts</td><td>Ambient background presets (stars, rain, snow, embers, bubbles) + burst emitter for impacts</td></tr>
+  <tr><td>juice.ts</td><td>Screen shake, screen flash, hit-stop / freeze frames</td></tr>
+  <tr><td>audio.ts</td><td>WebAudio chiptune synth presets: jump, pickup, explosion, hit, UI blip — zero asset files</td></tr>
+  <tr><td>ui.ts</td><td>HUD helpers (score/lives/text) with enforced <code>SAFE_MARGIN</code> from viewport edges</td></tr>
+  <tr><td>crt.ts</td><td>Retro screen filter: scanlines + vignette + subtle flicker</td></tr>
+  <tr><td>runtime.ts</td><td>Host contract: <code>gameOver(score)</code>, <code>scoreChanged(n)</code>, <code>stateChanged(s)</code> — postMessage to parent when embedded, console locally</td></tr>
+</table></div>
+
+<p style="margin-top:.8rem">Your four rules, mapped:
+<span class="rule">UI margins → <code>ui.ts</code></span>
+<span class="rule">always-playable loop + lose condition → <code>scenes.ts</code></span>
+<span class="rule">background particles → <code>particles.ts</code></span>
+<span class="rule">screen shake → <code>juice.ts</code></span>
+</p>
+
+<h2><span class="n">03</span>Template game</h2>
+<p>A minimal complete game (~150 lines) inside <code>game-template/game/</code> proving every rule — and serving as the reference implementation all skills point to: title screen → play (move a ship, collect pickups, dodge a hazard; contact = lose) → game over → restart. Starfield, shake+flash+burst on hit, chiptune sfx, safe-margin HUD, CRT filter, runtime messaging.</p>
+
+<h2><span class="n">04</span>The skills</h2>
+<div class="skill"><b>creating-a-game</b> — the orchestrator, mirroring your flow:
+  <ol class="flow">
+    <li><b>Setup workspace</b>: folder-friendly name, <code>cp -r workspace/game-template workspace/&lt;game-name&gt;</code>; no dependency install needed.</li>
+    <li><b>Develop</b>: read the copied game files first; modify to fulfill the request. Use the companion skills: messaging-game-over, ensuring-arcade-visuals, handling-user-input, improving-game-quality, adding-easter-egg — and building-platformer-games if it's a platformer.</li>
+    <li><b>Validation loop</b>: after <em>every</em> edit, <code>cd workspace/&lt;game-name&gt; &amp;&amp; npm run build</code>. Don't proceed or notify the user until compilation succeeds.</li>
+  </ol>
+</div>
+<div class="skill"><b>helping-the-user</b> — behavior-elicitation questions, combining described behaviors into a coherent core loop, scoping guidance.</div>
+<div class="skill"><b>ensuring-arcade-visuals</b> — palette discipline, pixel scale, CRT filter integration, readability rules.</div>
+<div class="skill"><b>handling-user-input</b> — the unified keyboard contract, edge-vs-held semantics, control hints on the title screen.</div>
+<div class="skill"><b>building-platformer-games</b> — tuned controller recipe: variable jump height, coyote time, jump buffering, AABB collision resolution order, known-good tuning constants.</div>
+<div class="skill"><b>improving-game-quality</b> — the quality checklist: margins, always-playable loop with reachable lose condition, ambient particles, shake on events, transitions, audio coverage, performance.</div>
+<div class="skill"><b>messaging-game-over</b> — when/how to post state and score transitions via <code>runtime.ts</code> (thin — the module enforces it).</div>
+<div class="skill"><b>adding-easter-egg</b> — palette-swap toggles and secret input sequences (↑↑↓↓…).</div>
+<div class="skill"><b>playing-the-game</b> — <code>cd workspace/&lt;game-name&gt; &amp;&amp; npm run dev</code>, playtest in browser against the checklist.</div>
+<div class="skill"><b>resetting-the-workspace</b> — reset baked in as a skill: list game folders, confirm with the user, delete everything in <code>workspace/</code> except <code>game-template</code>. Never touches the template, skills, or repo files.</div>
+
+<h2><span class="n">05</span>Build order</h2>
+<ol class="flow">
+  <li>Scaffold: root <code>package.json</code>, <code>npm install</code>, <code>git init</code></li>
+  <li><code>workspace/game-template/</code>: package.json, tsconfig, arcade shell, engine modules, reference game</li>
+  <li>Ten skills + <code>CLAUDE.md</code> + <code>README.md</code></li>
+  <li>Initial git commit</li>
+</ol>
+
+<h2><span class="n">06</span>Verification</h2>
+<ul class="check">
+  <li><code>cd workspace/game-template &amp;&amp; npm run build</code> passes (tsc + vite build).</li>
+  <li><code>npm run dev</code> → playtest: title renders, controls work, pickups score, hazard triggers shake + game over, restart works, starfield + CRT visible, HUD respects margins, console shows runtime messages.</li>
+  <li>Clone round-trip exactly as the skill prescribes: copy → build → play → reset → only <code>game-template</code> remains.</li>
+</ul>
+</main>
