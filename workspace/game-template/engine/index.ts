@@ -46,3 +46,9 @@ export type { Crt, CrtOptions } from './crt';
 
 export { createRuntime } from './runtime';
 export type { Runtime, RuntimeOptions, RuntimeMessage, RuntimeMessageType } from './runtime';
+
+// WS2: background-layers
+export { createGrid } from './background';
+export type { Grid, GridOptions } from './background';
+// (particles.ts gains `ambientColors` on ParticleOptions and `setPaused` on
+// ParticleSystem — both already exported above; no new export names needed.)
