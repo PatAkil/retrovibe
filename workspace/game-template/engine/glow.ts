@@ -283,7 +283,6 @@ export function createGlow(opts: GlowOptions): Glow {
   let halfCtx: CanvasRenderingContext2D | null = null;
   let quarter: HTMLCanvasElement | null = null;
   let quarterCtx: CanvasRenderingContext2D | null = null;
-  let bufferUsed = false;
 
   function ensureBuffer(): CanvasRenderingContext2D {
     if (!bufferCtx) {
@@ -308,7 +307,6 @@ export function createGlow(opts: GlowOptions): Glow {
       halfCtx.imageSmoothingEnabled = true; // bilinear — the halvings ARE the blur
       quarterCtx.imageSmoothingEnabled = true;
     }
-    bufferUsed = true;
     return bufferCtx;
   }
 
@@ -367,7 +365,13 @@ export function createGlow(opts: GlowOptions): Glow {
         color,
         intensity: o.intensity ?? MAX_SOURCE_INTENSITY,
         telegraph: o.telegraph ?? false,
-        t: 0,
+        // Frozen-hold contract: a bloom co-fired with hit-stop (the canonical
+        // juice branch fires juice.hitStop + glow.bloom + glow.setFrozen in
+        // one handler) must be VISIBLE through the freeze. With t=0 the
+        // envelope would be 0/ATTACK = 0 for the whole hold — so when frozen,
+        // start with the attack already complete (t = ATTACK, peak intensity
+        // held); decay begins only after release.
+        t: frozen ? ATTACK : 0,
         duration,
       });
     },
@@ -410,6 +414,13 @@ export function createGlow(opts: GlowOptions): Glow {
 
     setFrozen(f) {
       frozen = f;
+      if (frozen) {
+        // Snap in-flight attacks to complete: the hold pins each envelope at
+        // its PEAK (t >= ATTACK), so the emphasized frozen tableau keeps the
+        // bloom regardless of whether bloom() ran before or after setFrozen
+        // in the event handler. Decay resumes from ATTACK after release.
+        for (const b of blooms) if (b.t < ATTACK) b.t = ATTACK;
+      }
     },
 
     setDamped(d) {
@@ -423,8 +434,15 @@ export function createGlow(opts: GlowOptions): Glow {
       try {
         target.globalCompositeOperation = 'lighter';
 
-        // Tier (b): resample blur of the authoring buffer, if it was used.
-        if (bufferUsed && buffer && bufferCtx && half && halfCtx && quarter && quarterCtx) {
+        // Tier (b): resample blur of the authoring buffer. Runs whenever the
+        // buffer has EVER been allocated (glow.ctx accessed) — never gated on
+        // a per-frame "was the accessor called" flag, because ordinary TS
+        // usage caches the readonly ctx once at setup (const gctx = glow.ctx)
+        // and draws into it every frame without re-touching the accessor.
+        // The buffer is cleared every composite() per the documented
+        // contract, so an unused-but-allocated buffer costs two small
+        // resample draws of transparent pixels and composites nothing.
+        if (buffer && bufferCtx && half && halfCtx && quarter && quarterCtx) {
           // Successive bilinear halvings (never a single 4x jump).
           halfCtx.clearRect(0, 0, half.width, half.height);
           halfCtx.drawImage(buffer, 0, 0, half.width, half.height);
@@ -439,7 +457,6 @@ export function createGlow(opts: GlowOptions): Glow {
           bufferCtx.setTransform(1, 0, 0, 1, 0, 0);
           bufferCtx.clearRect(0, 0, buffer.width, buffer.height);
           bufferCtx.restore();
-          bufferUsed = false;
         }
 
         // Tier (a): radial-sprite halos + bloom transients.
