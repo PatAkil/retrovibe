@@ -61,3 +61,7 @@ export type { Grid, GridOptions } from './background';
 // WS3: glow
 export { createGlow } from './glow';
 export type { Glow, GlowOptions, HaloOptions, BloomOptions } from './glow';
+
+// WS4: aberration — chromatic-aberration options type (createCrt/Crt/CrtOptions
+// are already exported above; Crt gains pulse/setFrozen, render gains drawOverlay).
+export type { CrtAberrationOptions } from './crt';
