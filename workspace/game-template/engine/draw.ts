@@ -62,7 +62,38 @@ export function createPixelCanvas(opts: CreatePixelCanvasOptions): PixelCanvas {
 
 // --- Sprites ----------------------------------------------------------------
 
+import { shadeLadder } from './palette';
+
 export type SpriteMap = Record<string, string>;
+
+/**
+ * WS1 — optional baked shading for makeSprite. Shading happens ONCE at
+ * makeSprite time (solid bands, no dither); drawSprite's hot loop is
+ * untouched and an unset ramp is byte-identical to an unshaded sprite.
+ *
+ * `ramp` — one entry per vertical band, top to bottom; each entry is how many
+ * steps DOWN each color's own audited shade ladder (see palette.ts
+ * SHADE_LADDERS) that band's cells take. 0 = the original color. Steps deeper
+ * than a color's ladder clamp to its darkest rung; colors with no ladder
+ * (listed in SHADE_FLAT) render flat — explicitly, never silently. This is
+ * "N steps down each color's own ladder", NEVER an RGB lerp, so multi-color
+ * rows stay on-palette.
+ *
+ * `band` — band height in sprite cells (default: rows spread evenly across
+ * ramp entries). MOIRE RULE: band * px (the logical-px band height at draw
+ * time) must be a multiple of 2, because the CRT scanline period is 2 logical
+ * px. At px>=2 any band aligns; at px=1 use an even `band` — the PX=1 +
+ * strong scanlineAlpha combination is the flagged risk and is mutually
+ * exclusive with banding.
+ *
+ * FIXED-ORIENTATION CAVEAT: the fade is baked top-lit. A rotated, mirrored,
+ * or multi-facing actor is wrong-lit — keep rotating actors flat, or re-bake
+ * one sprite per orientation.
+ */
+export interface SpriteShade {
+  ramp?: number[];
+  band?: number;
+}
 
 export interface Sprite {
   readonly w: number;
@@ -76,15 +107,28 @@ export interface Sprite {
  * is transparent.
  *   makeSprite(['.#.', '###', '#.#'], { '#': '#fff' })
  */
-export function makeSprite(rows: string[], map: SpriteMap): Sprite {
+export function makeSprite(rows: string[], map: SpriteMap, shade?: SpriteShade): Sprite {
   const h = rows.length;
   const w = rows.reduce((m, r) => Math.max(m, r.length), 0);
+  const ramp = shade?.ramp;
+  const shading = ramp !== undefined && ramp.length > 0;
+  const band = shading ? Math.max(1, shade?.band ?? Math.ceil(h / ramp.length)) : 1;
   const pixels: (string | null)[] = [];
   for (let y = 0; y < h; y++) {
     const row = rows[y];
     for (let x = 0; x < w; x++) {
       const ch = row[x];
-      pixels.push(ch !== undefined && ch !== '.' && ch !== ' ' && map[ch] ? map[ch] : null);
+      let color =
+        ch !== undefined && ch !== '.' && ch !== ' ' && map[ch] ? map[ch] : null;
+      if (color !== null && shading) {
+        const depth = ramp[Math.min(Math.floor(y / band), ramp.length - 1)];
+        if (depth > 0) {
+          const ladder = shadeLadder(color);
+          // No ladder => degrade-to-flat (explicit contract; see SHADE_FLAT).
+          if (ladder.length > 0) color = ladder[Math.min(depth, ladder.length) - 1];
+        }
+      }
+      pixels.push(color);
     }
   }
   return { w, h, pixels };
