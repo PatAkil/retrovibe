@@ -46,3 +46,7 @@ export type { Crt, CrtOptions } from './crt';
 
 export { createRuntime } from './runtime';
 export type { Runtime, RuntimeOptions, RuntimeMessage, RuntimeMessageType } from './runtime';
+
+// WS3: glow
+export { createGlow } from './glow';
+export type { Glow, GlowOptions, HaloOptions, BloomOptions } from './glow';
