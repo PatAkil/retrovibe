@@ -7,8 +7,10 @@
 //     hard-capped at 1 device px so a 1px projectile's ghosts still overlap
 //     its collision cell. Apparent position == hitbox.
 //   - Steady and pulse are mutually exclusive per game: a whole-px offset
-//     under a <~1px cap admits only 0 or 1, so a nonzero steady split
-//     consumes the whole budget and leaves pulse adding 0 visible px.
+//     under a <~1px cap admits only 0 or 1, so a steady that quantizes to a
+//     visible px (>= 0.5 before rounding) consumes the whole budget and
+//     leaves pulse adding 0 visible px; a steady that rounds to 0 is no
+//     steady at all and leaves pulses enabled.
 //     Steady defaults to 0; crt.pulse(mag, durationSeconds) owns the single
 //     0→1px transient with real wall-clock decay (performance.now). The
 //     flicker clock stays on `clock += dt` — pulse is the only
@@ -45,9 +47,9 @@ export interface Crt {
    * Fire an aberration transient: a decaying 0→1 device-px split over
    * `durationSeconds` of real wall-clock time. No-op unless
    * CrtOptions.aberration is set. Reserve for major events (the same branch
-   * that calls juice.shake >= 4-6px / juice.flash >= 0.3s). Ignored while a
-   * nonzero steady split is configured (the budget is already spent) and
-   * rate-limited to one accepted pulse per 250 ms.
+   * that calls juice.shake >= 4-6px / juice.flash >= 0.3s). Ignored while
+   * the configured steady quantizes to a visible px (>= 0.5 — the budget is
+   * already spent) and rate-limited to one accepted pulse per 250 ms.
    */
   pulse(mag: number, durationSeconds: number): void;
   /** Pause (true) / resume (false) the pulse's wall-clock decay during hit-stop. */
@@ -56,8 +58,9 @@ export interface Crt {
 
 export interface CrtAberrationOptions {
   /**
-   * Steady device-px split (default 0). Clamped to whole px and capped at 1.
-   * Nonzero steady consumes the whole <1px budget — pulse then adds nothing.
+   * Steady device-px split (default 0). Rounded to whole px and capped at 1.
+   * A steady that rounds to 1 consumes the whole <1px budget — pulse then
+   * adds nothing; one that rounds to 0 renders no split and leaves pulses on.
    * Dampened to 0 under prefers-reduced-motion (ambient category).
    */
   steady?: number;
