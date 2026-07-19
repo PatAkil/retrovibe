@@ -314,23 +314,24 @@ export function createGlow(opts: GlowOptions): Glow {
   const blooms: Bloom[] = [];
   let sinceLastBloom = Infinity;
 
-  function effectiveIntensity(intensity: number, telegraph: boolean): number {
-    const clamped = Math.min(MAX_SOURCE_INTENSITY, Math.max(0, intensity));
-    // Damper: decorative + impact categories dampened; telegraphs exempt —
-    // the urgency channel is never zeroed.
-    return damped && !telegraph ? clamped * DAMP_FACTOR : clamped;
-  }
-
   function blitHalo(target: CanvasRenderingContext2D, h: HaloCmd, envelope: number): void {
     const sprite = radialSprite(h.color);
     if (!sprite) return; // unparseable color — skipped, no throw, no leak
-    let a = effectiveIntensity(h.intensity, h.telegraph) * envelope * maxAlpha;
+    const clamped = Math.min(MAX_SOURCE_INTENSITY, Math.max(0, h.intensity));
+    let a = clamped * envelope * maxAlpha;
     // Luminance budget (see module doc): the alpha budget alone lets bright
     // halos wash out mid-luminance actors, so ALSO clamp per-source
     // alpha x peakChannel to PER_SOURCE_CHANNEL. Applies to telegraphs too —
     // the contrast floor protects the read of every actor.
     const p = parseColor(h.color)!; // cached; non-null since sprite exists
     if (p.peak > 0) a = Math.min(a, PER_SOURCE_CHANNEL / p.peak);
+    // Reduced-motion damper — applied AFTER the luminance-budget clamp, so it
+    // is never absorbed by it: for a saturated color the clamp pins both the
+    // damped and undamped alpha to the same ceiling if the damp runs first,
+    // making reduced-motion a visual no-op for the common glow case.
+    // Decorative + impact categories dampened; telegraphs exempt — the
+    // damper never zeroes a telegraph's urgency channel.
+    if (damped && !h.telegraph) a *= DAMP_FACTOR;
     if (a <= 0) return;
     target.globalAlpha = a;
     // Smoothing on for the scaled radial sprite (it is soft by construction).
