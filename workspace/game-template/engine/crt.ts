@@ -95,7 +95,11 @@ export function createCrt(opts: CrtOptions = {}): Crt {
       : false;
   // Steady is ambient/decorative: dampened (to 0) under reduced motion.
   const steadyRaw = aberration?.steady ?? 0;
-  const steadyPx = reducedMotion ? 0 : Math.min(1, Math.max(0, Math.round(steadyRaw)));
+  // Whole-px quantized configured steady — the pulse gate keys off this
+  // (mutual exclusivity is a configuration fact), while the rendered
+  // steadyPx additionally drops to 0 under reduced motion.
+  const steadyConfiguredPx = Math.min(1, Math.max(0, Math.round(steadyRaw)));
+  const steadyPx = reducedMotion ? 0 : steadyConfiguredPx;
 
   let pulseMag = 0;
   let pulseDurMs = 0;
@@ -209,10 +213,11 @@ export function createCrt(opts: CrtOptions = {}): Crt {
   return {
     pulse(mag, durationSeconds) {
       if (!aberration) return; // aberration is strictly opt-in
-      // Gate on the CONFIGURED steady, not the reduced-motion-dampened one:
-      // a game that configured steady must never gain pulse transients just
-      // because reduced motion zeroed its steady split.
-      if (steadyRaw > 0) return; // steady and pulse are mutually exclusive
+      // Gate on the configured (quantized) steady, never the reduced-motion-
+      // dampened steadyPx: a game that configured steady must not gain pulse
+      // transients under reduced motion, and a sub-0.5 steady (no split after
+      // rounding) must not silently disable pulses either.
+      if (steadyConfiguredPx > 0) return; // steady and pulse are mutually exclusive
       if (!(mag > 0) || !(durationSeconds > 0)) return;
       const now = performance.now();
       // Combined-transient photosensitivity ceiling: rate-limit pulses so
