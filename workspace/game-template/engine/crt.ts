@@ -109,6 +109,12 @@ export function createCrt(opts: CrtOptions = {}): Crt {
   // ctx.canvas, and re-key if the backing store is ever resized).
   let bufW = 0;
   let bufH = 0;
+  // Baked vignette gradient (lazy, keyed on logical w/h). The gradient
+  // depends only on the dimensions + constant stops, so caching produces an
+  // identical frame — this just removes a per-frame allocation.
+  let vignetteGrad: CanvasGradient | null = null;
+  let vignetteW = 0;
+  let vignetteH = 0;
   let scratch: HTMLCanvasElement | null = null;
   let scratchCtx: CanvasRenderingContext2D | null = null;
   let chanBuf: HTMLCanvasElement | null = null;
@@ -248,12 +254,17 @@ export function createCrt(opts: CrtOptions = {}): Crt {
       }
 
       // Vignette: darken toward the edges.
-      const cx = width / 2;
-      const cy = height / 2;
-      const grad = ctx.createRadialGradient(cx, cy, Math.min(width, height) * 0.35, cx, cy, Math.max(width, height) * 0.72);
-      grad.addColorStop(0, 'rgba(0,0,0,0)');
-      grad.addColorStop(1, `rgba(0,0,0,${vignetteAlpha})`);
-      ctx.fillStyle = grad;
+      if (!vignetteGrad || vignetteW !== width || vignetteH !== height) {
+        const cx = width / 2;
+        const cy = height / 2;
+        const grad = ctx.createRadialGradient(cx, cy, Math.min(width, height) * 0.35, cx, cy, Math.max(width, height) * 0.72);
+        grad.addColorStop(0, 'rgba(0,0,0,0)');
+        grad.addColorStop(1, `rgba(0,0,0,${vignetteAlpha})`);
+        vignetteGrad = grad;
+        vignetteW = width;
+        vignetteH = height;
+      }
+      ctx.fillStyle = vignetteGrad;
       ctx.fillRect(0, 0, width, height);
 
       // Flicker: a faint time-varying wash.
