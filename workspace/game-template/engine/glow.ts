@@ -34,13 +34,23 @@
 // CONTRAST IS BY DESIGN, NOT READBACK (per-frame getImageData is disallowed):
 //   - per-source intensity is clamped to MAX_SOURCE_INTENSITY (0.5)
 //   - the whole composite is drawn at <= maxAlpha (default 0.6)
-//   - documented worst-case overlap budget: 'lighter' clamps at 255, but the
-//     design budget assumes at most 3 overlapping halos at a point; at the
-//     defaults (3 x 0.5 x 0.6 = 0.9 summed alpha over a dark background) the
-//     brightest possible halo core stays below full white, and a crisp actor
-//     (palette actor color, >=3:1 vs static surfaces) drawn ON TOP of the
-//     glow keeps its >=3.0 post-CRT read — validated offline (two-sample
-//     ratio on the composited post-CRT frame), never per-frame.
+//   - LUMINANCE budget, not just alpha: an alpha-only budget lets 3 near-white
+//     halos build a ~0.9-alpha white wash that no mid-luminance actor can
+//     clear 3.0 against. So each halo's effective alpha is ALSO clamped so
+//     that alpha x peakChannel <= CHANNEL_BUDGET/3 (peakChannel = the halo
+//     color's brightest normalized RGB channel). Under the documented
+//     worst-case of at most 3 overlapping halos over a dark background, the
+//     summed 'lighter' contribution to any channel stays <= CHANNEL_BUDGET
+//     (0.24), i.e. the glow-bathed background peaks near channel 61/255 —
+//     relative luminance <= ~0.047. Guarantee (documented per-color budget):
+//     a crisp actor drawn ON TOP keeps its >=3.0 post-CRT two-sample read
+//     provided the actor's relative luminance is >= ~0.24 (the reference
+//     ship's blue and brighter) OR the actor is near-black; dimmer mid-dark
+//     actors over the densest 3-halo core are the caller's responsibility —
+//     keep them out of stacked-glow regions or lower maxAlpha. Bright halo
+//     colors render dimmer per unit intensity than dark ones — that is the
+//     budget working, not a bug. Validated offline (two-sample ratio on the
+//     composited post-CRT frame), never per-frame.
 //   Do not stack more than ~3 gameplay halos over one region; decorate, don't
 //   floodlight.
 //
@@ -150,6 +160,58 @@ export interface Glow {
 const MAX_SOURCE_INTENSITY = 0.5;
 const DAMP_FACTOR = 0.4;
 const ATTACK = 0.03; // s — bloom attack, matching juice.flash snappiness
+// Luminance budget (see module doc): summed 'lighter' channel contribution of
+// the 3-halo worst case stays <= CHANNEL_BUDGET, so per source
+// alpha x peakChannel <= CHANNEL_BUDGET / 3.
+const CHANNEL_BUDGET = 0.24;
+const PER_SOURCE_CHANNEL = CHANNEL_BUDGET / 3;
+
+// --- Color normalization. Any legal CSS color ('#fff', 'rgb(...)', named)
+// is accepted; string-concat hex-alpha suffixes are NOT (they throw inside
+// createRadialGradient for non-6-digit-hex inputs — the restore()-skipping
+// landmine). Round-trip through a 1x1 canvas fillStyle to r,g,b, then emit
+// rgba() stops. Returns null for unparseable colors (the halo is skipped).
+interface ParsedColor {
+  r: number;
+  g: number;
+  b: number;
+  /** brightest normalized channel, for the luminance budget */
+  peak: number;
+}
+
+let parseCtx: CanvasRenderingContext2D | null = null;
+const colorCache = new Map<string, ParsedColor | null>();
+
+function parseColor(color: string): ParsedColor | null {
+  let cached = colorCache.get(color);
+  if (cached !== undefined) return cached;
+  let parsed: ParsedColor | null = null;
+  if (!parseCtx) {
+    const c1 = document.createElement('canvas');
+    c1.width = 1;
+    c1.height = 1;
+    parseCtx = c1.getContext('2d', { willReadFrequently: true });
+  }
+  if (parseCtx) {
+    // Invalid assignments leave fillStyle unchanged — prime with two sentinels
+    // so an unchanged value is detectable regardless of the input.
+    parseCtx.fillStyle = '#000000';
+    parseCtx.fillStyle = color;
+    const a = parseCtx.fillStyle;
+    parseCtx.fillStyle = '#ffffff';
+    parseCtx.fillStyle = color;
+    const b = parseCtx.fillStyle;
+    if (a === b) {
+      // Accepted by the parser: rasterize one pixel and read it back.
+      parseCtx.clearRect(0, 0, 1, 1);
+      parseCtx.fillRect(0, 0, 1, 1);
+      const d = parseCtx.getImageData(0, 0, 1, 1).data;
+      parsed = { r: d[0], g: d[1], b: d[2], peak: Math.max(d[0], d[1], d[2]) / 255 };
+    }
+  }
+  colorCache.set(color, parsed);
+  return parsed;
+}
 
 interface HaloCmd {
   x: number;
@@ -181,24 +243,32 @@ export function createGlow(opts: GlowOptions): Glow {
   // --- Radial sprite cache (tier a) — one soft radial-gradient alpha sprite
   // per color, precomputed once. No ctx.filter anywhere.
   const SPRITE_SIZE = 64; // device px; scaled to radius at blit time
-  const spriteCache = new Map<string, HTMLCanvasElement>();
-  function radialSprite(color: string): HTMLCanvasElement {
+  const spriteCache = new Map<string, HTMLCanvasElement | null>();
+  function radialSprite(color: string): HTMLCanvasElement | null {
     let s = spriteCache.get(color);
-    if (!s) {
-      s = document.createElement('canvas');
-      s.width = SPRITE_SIZE;
-      s.height = SPRITE_SIZE;
-      const c = s.getContext('2d');
-      if (!c) throw new Error('2D context unavailable for glow sprite');
-      const half = SPRITE_SIZE / 2;
-      const g = c.createRadialGradient(half, half, 0, half, half, half);
-      // Soft falloff: bright core, long tail, hard-zero edge.
-      g.addColorStop(0, color);
-      g.addColorStop(0.35, color + 'B0');
-      g.addColorStop(0.7, color + '40');
-      g.addColorStop(1, color + '00');
-      c.fillStyle = g;
-      c.fillRect(0, 0, SPRITE_SIZE, SPRITE_SIZE);
+    if (s === undefined) {
+      const p = parseColor(color);
+      if (!p) {
+        s = null; // unparseable color: skip the halo, never throw mid-pass
+      } else {
+        s = document.createElement('canvas');
+        s.width = SPRITE_SIZE;
+        s.height = SPRITE_SIZE;
+        const c = s.getContext('2d');
+        if (!c) throw new Error('2D context unavailable for glow sprite');
+        const half = SPRITE_SIZE / 2;
+        const g = c.createRadialGradient(half, half, 0, half, half, half);
+        // Soft falloff: bright core, long tail, hard-zero edge. Stops are
+        // built from the PARSED r,g,b (never string concat) so every legal
+        // CSS color works.
+        const rgb = `${p.r}, ${p.g}, ${p.b}`;
+        g.addColorStop(0, `rgba(${rgb}, 1)`);
+        g.addColorStop(0.35, `rgba(${rgb}, 0.69)`);
+        g.addColorStop(0.7, `rgba(${rgb}, 0.25)`);
+        g.addColorStop(1, `rgba(${rgb}, 0)`);
+        c.fillStyle = g;
+        c.fillRect(0, 0, SPRITE_SIZE, SPRITE_SIZE);
+      }
       spriteCache.set(color, s);
     }
     return s;
@@ -254,14 +324,19 @@ export function createGlow(opts: GlowOptions): Glow {
   }
 
   function blitHalo(target: CanvasRenderingContext2D, h: HaloCmd, envelope: number): void {
-    // The composite cap SCALES every source (a x maxAlpha), it is not a
-    // ceiling — so the worst-case peak (intensity 0.5 x maxAlpha 0.6 = 0.30
-    // alpha) keeps every legal actor color >= 3.0:1 post-CRT by design.
-    const a = effectiveIntensity(h.intensity, h.telegraph) * envelope * maxAlpha;
+    const sprite = radialSprite(h.color);
+    if (!sprite) return; // unparseable color — skipped, no throw, no leak
+    let a = effectiveIntensity(h.intensity, h.telegraph) * envelope * maxAlpha;
+    // Luminance budget (see module doc): the alpha budget alone lets bright
+    // halos wash out mid-luminance actors, so ALSO clamp per-source
+    // alpha x peakChannel to PER_SOURCE_CHANNEL. Applies to telegraphs too —
+    // the contrast floor protects the read of every actor.
+    const p = parseColor(h.color)!; // cached; non-null since sprite exists
+    if (p.peak > 0) a = Math.min(a, PER_SOURCE_CHANNEL / p.peak);
     if (a <= 0) return;
     target.globalAlpha = a;
     // Smoothing on for the scaled radial sprite (it is soft by construction).
-    target.drawImage(radialSprite(h.color), h.x - h.radius, h.y - h.radius, h.radius * 2, h.radius * 2);
+    target.drawImage(sprite, h.x - h.radius, h.y - h.radius, h.radius * 2, h.radius * 2);
   }
 
   return {
@@ -345,41 +420,47 @@ export function createGlow(opts: GlowOptions): Glow {
       // ONE save/restore around the whole pass. Never touch the transform:
       // everything composites under the ambient CTM (baked scale + shake).
       target.save();
-      target.globalCompositeOperation = 'lighter';
+      try {
+        target.globalCompositeOperation = 'lighter';
 
-      // Tier (b): resample blur of the authoring buffer, if it was used.
-      if (bufferUsed && buffer && bufferCtx && half && halfCtx && quarter && quarterCtx) {
-        // Successive bilinear halvings (never a single 4x jump).
-        halfCtx.clearRect(0, 0, half.width, half.height);
-        halfCtx.drawImage(buffer, 0, 0, half.width, half.height);
-        quarterCtx.clearRect(0, 0, quarter.width, quarter.height);
-        quarterCtx.drawImage(half, 0, 0, quarter.width, quarter.height);
-        // One smoothed upscale, additive, under the current CTM (logical size).
+        // Tier (b): resample blur of the authoring buffer, if it was used.
+        if (bufferUsed && buffer && bufferCtx && half && halfCtx && quarter && quarterCtx) {
+          // Successive bilinear halvings (never a single 4x jump).
+          halfCtx.clearRect(0, 0, half.width, half.height);
+          halfCtx.drawImage(buffer, 0, 0, half.width, half.height);
+          quarterCtx.clearRect(0, 0, quarter.width, quarter.height);
+          quarterCtx.drawImage(half, 0, 0, quarter.width, quarter.height);
+          // One smoothed upscale, additive, under the current CTM (logical size).
+          target.imageSmoothingEnabled = true;
+          target.globalAlpha = maxAlpha;
+          target.drawImage(quarter, 0, 0, width, height);
+          // Clear the authoring buffer for next frame (transform-proof clear).
+          bufferCtx.save();
+          bufferCtx.setTransform(1, 0, 0, 1, 0, 0);
+          bufferCtx.clearRect(0, 0, buffer.width, buffer.height);
+          bufferCtx.restore();
+          bufferUsed = false;
+        }
+
+        // Tier (a): radial-sprite halos + bloom transients.
         target.imageSmoothingEnabled = true;
-        target.globalAlpha = maxAlpha;
-        target.drawImage(quarter, 0, 0, width, height);
-        // Clear the authoring buffer for next frame (transform-proof clear).
-        bufferCtx.save();
-        bufferCtx.setTransform(1, 0, 0, 1, 0, 0);
-        bufferCtx.clearRect(0, 0, buffer.width, buffer.height);
-        bufferCtx.restore();
-        bufferUsed = false;
+        for (const h of halos) blitHalo(target, h, 1);
+        for (const b of blooms) {
+          const env =
+            b.t < ATTACK ? b.t / ATTACK : Math.max(0, (b.duration - b.t) / (b.duration - ATTACK));
+          blitHalo(target, b, env);
+        }
+      } finally {
+        // The per-frame queue is cleared and the context restored EVEN IF a
+        // draw throws — a poisoned halo must not re-throw every later frame,
+        // and restore() must always run so no 'lighter'/alpha/smoothing state
+        // leaks (a leaked 'lighter' would neutralize CRT scanlines — the
+        // named landmine).
+        halos.length = 0;
+        target.restore();
       }
-
-      // Tier (a): radial-sprite halos + bloom transients.
-      target.imageSmoothingEnabled = true;
-      for (const h of halos) blitHalo(target, h, 1);
-      halos.length = 0;
-      for (const b of blooms) {
-        const env =
-          b.t < ATTACK ? b.t / ATTACK : Math.max(0, (b.duration - b.t) / (b.duration - ATTACK));
-        blitHalo(target, b, env);
-      }
-
-      target.restore();
       // Exit invariant (restored by the paired save): filter='none',
-      // op='source-over', alpha=1, imageSmoothingEnabled=false. A leaked
-      // 'lighter' would neutralize CRT scanlines — asserted in validation.
+      // op='source-over', alpha=1, imageSmoothingEnabled=false.
     },
   };
 }
