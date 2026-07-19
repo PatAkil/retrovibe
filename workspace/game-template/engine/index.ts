@@ -51,3 +51,9 @@ export type { Runtime, RuntimeOptions, RuntimeMessage, RuntimeMessageType } from
 export { SHADE_LADDERS, SHADE_FLAT, shadeLadder } from './palette';
 export type { ShadeLadders } from './palette';
 export type { SpriteShade } from './draw';
+
+// WS2: background-layers
+export { createGrid } from './background';
+export type { Grid, GridOptions } from './background';
+// (particles.ts gains `ambientColors` on ParticleOptions and `setPaused` on
+// ParticleSystem — both already exported above; no new export names needed.)

@@ -36,6 +36,12 @@ export interface ParticleSystem {
   render(ctx: CanvasRenderingContext2D): void;
   burst(x: number, y: number, opts?: BurstOptions): void;
   setAmbient(preset: AmbientPreset | null, color?: string): void;
+  /**
+   * Freeze (true) / resume (false) ambient parallax drift — call on entering
+   * PAUSED so the background reads as paused. Impact bursts still play out
+   * (they are transients, not ambient motion). Default: not paused.
+   */
+  setPaused(paused: boolean): void;
 }
 
 export interface ParticleOptions {
@@ -50,6 +56,17 @@ export interface ParticleOptions {
    * background should pass a color in the same band vs their own clear color.
    */
   ambientColor?: string;
+  /**
+   * Optional multi-tint ambient set ("colored stars"): each ambient particle
+   * picks ONE color from this list at spawn and keeps it for life (never
+   * re-picked per frame — that would flicker). Takes precedence over
+   * `ambientColor` when set. Tints must be LOW-SATURATION near-greys with a
+   * small hue delta, a red-green-safe subset, and every entry must stay inside
+   * the 1.8-2.5:1 ambient luminance band vs the clear color (the band governs
+   * luminance; this option only varies hue). Unset = the single-color path,
+   * byte-identical to today.
+   */
+  ambientColors?: string[];
 }
 
 const rand = (a: number, b: number): number => a + Math.random() * (b - a);
@@ -59,6 +76,9 @@ export function createParticles(opts: ParticleOptions): ParticleSystem {
   const ambientCount = opts.ambientCount ?? 48;
   let ambientPreset: AmbientPreset | null = opts.ambient ?? null;
   let ambientColor: string | undefined = opts.ambientColor;
+  const ambientColors: string[] | undefined =
+    opts.ambientColors && opts.ambientColors.length > 0 ? opts.ambientColors : undefined;
+  let paused = false;
   let ambient: Particle[] = [];
   const transient: Particle[] = [];
 
@@ -75,7 +95,12 @@ export function createParticles(opts: ParticleOptions): ParticleSystem {
   function spawnAmbient(preset: AmbientPreset): Particle {
     const x = rand(0, width);
     const y = rand(0, height);
-    const color = ambientColor ?? AMBIENT_COLOR[preset];
+    // Hue fixed ONCE here and stored on the particle — never re-picked per
+    // frame. When ambientColors is unset this line consumes no extra
+    // Math.random() calls (single-color path stays byte-identical).
+    const color = ambientColors
+      ? ambientColors[Math.floor(rand(0, ambientColors.length))]
+      : ambientColor ?? AMBIENT_COLOR[preset];
     switch (preset) {
       case 'stars':
         return { x, y, vx: 0, vy: rand(2, 10), size: rand(1, 2), color, life: Infinity, maxLife: Infinity };
@@ -106,10 +131,12 @@ export function createParticles(opts: ParticleOptions): ParticleSystem {
 
   return {
     update(dt) {
-      for (const p of ambient) {
-        p.x += p.vx * dt;
-        p.y += p.vy * dt;
-        wrap(p);
+      if (!paused) {
+        for (const p of ambient) {
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+          wrap(p);
+        }
       }
       for (let i = transient.length - 1; i >= 0; i--) {
         const p = transient[i];
@@ -158,6 +185,9 @@ export function createParticles(opts: ParticleOptions): ParticleSystem {
       ambientPreset = preset;
       if (color !== undefined) ambientColor = color;
       rebuildAmbient();
+    },
+    setPaused(p) {
+      paused = p;
     },
   };
 }
