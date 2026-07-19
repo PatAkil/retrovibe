@@ -46,3 +46,8 @@ export type { Crt, CrtOptions } from './crt';
 
 export { createRuntime } from './runtime';
 export type { Runtime, RuntimeOptions, RuntimeMessage, RuntimeMessageType } from './runtime';
+
+// WS1: shaded-sprites
+export { SHADE_LADDERS, SHADE_FLAT, shadeLadder } from './palette';
+export type { ShadeLadders } from './palette';
+export type { SpriteShade } from './draw';

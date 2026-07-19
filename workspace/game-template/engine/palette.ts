@@ -89,6 +89,95 @@ export function swapPalette(p: Palette, mapping: Record<number, number>): Palett
   });
 }
 
+// --- Shade ladders (WS1: shaded sprites — metadata only, NO palette
+// constants change) --------------------------------------------------------
+//
+// Each entry maps a palette color (exact hex spelling as it appears in the
+// palette constant above — lookup is case-sensitive) to its ordered chain of
+// darker on-palette steps: index 0 = one step down, index 1 = two steps down,
+// etc. Ladders were AUDITED, not assumed: every step was computed against
+// contrast() so the DARKEST step still clears the 3.0:1 actor floor vs every
+// documented background color of its palette, and each step stays within a
+// ~35 degree hue-drift band of its parent (near-grey colors are exempt from
+// the hue check but chains were still hand-curated for hue coherence).
+//
+// DEGRADE-TO-FLAT IS EXPLICIT, never silent: any palette color absent from
+// its SHADE_LADDERS record renders flat when a ramp is requested, and every
+// such color is listed by name in SHADE_FLAT below. Notable audit outcomes:
+// - Ramp palettes (SUNSET/OCEAN/DUSK/GAMEBOY/NEON) get ladders on their top
+//   actor colors nearly for free; depth is capped by the darkest-step 3.0
+//   floor (a mid-ramp actor is 0-1 bands before it fails the floor).
+// - PICO8 is 16 distinct hues, not a ramp. The floor (vs backgrounds
+//   0/1/2/5, including dark-grey #5F574F) eliminates most predicted
+//   siblings: green's dark-green sibling is only 1.55:1 vs dark-grey, blue
+//   has no darker sibling above the floor. Only white, yellow, and peach
+//   carry ladders. Appending dark siblings to PICO8 is a fast-follow, not v1.
+
+/** Per-color darker-step chains for one palette: hex -> ordered darker hexes. */
+export type ShadeLadders = Readonly<Record<string, readonly string[]>>;
+
+/** Audited shade-ladder metadata, keyed like PALETTES. Metadata only. */
+export const SHADE_LADDERS: Readonly<Record<string, ShadeLadders>> = {
+  pico8: {
+    '#FFF1E8': ['#FFCCAA', '#C2C3C7'], // white -> peach -> light-grey (min 4.02:1 vs bg)
+    '#FFEC27': ['#FFA300'],            // yellow -> orange (17deg drift, 3.54:1 floor)
+    '#FFCCAA': ['#FFA300'],            // peach -> orange (14deg drift, 3.54:1 floor)
+  },
+  gameboy: {
+    '#9bbc0f': ['#8bac0f'], // lightest -> light (5.03:1 vs darkest bg)
+  },
+  dusk: {
+    '#d59bf6': ['#a678de'], // lavender -> mid-violet (4.11:1 vs bg 0-2)
+    // '#f6c6ea' (pink-white) is FLAT: its only darker sibling drifts 37deg.
+  },
+  neon: {
+    '#f8f8ff': ['#00f0ff'], // ghost-white -> cyan (10.79:1; near-grey parent)
+    '#ff6ec7': ['#ff2975'], // hot-pink -> magenta (4.22:1 vs bg 0-2)
+  },
+  sunset: {
+    '#fff1d0': ['#ffd166', '#ff9b54', '#e2703a'], // cream -> gold -> amber -> ember (3.17:1 floor)
+    '#ffd166': ['#ff9b54', '#e2703a'],            // gold -> amber -> ember
+    '#ff9b54': ['#e2703a'],                       // amber -> ember
+  },
+  ocean: {
+    '#f0fff1': ['#a9f0d1', '#5ce1e6', '#2ab7ca'], // foam -> mint -> aqua -> teal (3.93:1 floor)
+    '#a9f0d1': ['#5ce1e6', '#2ab7ca'],            // mint -> aqua -> teal
+    '#5ce1e6': ['#2ab7ca'],                       // aqua -> teal
+  },
+};
+
+/**
+ * Colors that EXPLICITLY degrade to flat under a shading ramp (no ladder step
+ * clears both the 3.0:1 darkest-step floor vs their palette's backgrounds and
+ * the hue-drift band). Listed so the degradation is never silent.
+ */
+export const SHADE_FLAT: Readonly<Record<string, readonly string[]>> = {
+  pico8: [
+    '#000000', '#1D2B53', '#7E2553', '#008751', '#AB5236', '#5F574F',
+    '#C2C3C7', '#FF004D', '#FFA300', '#00E436', '#29ADFF', '#83769C', '#FF77A8',
+  ],
+  gameboy: ['#0f380f', '#306230', '#8bac0f'],
+  dusk: ['#0d0221', '#241734', '#3b2352', '#5a3a7e', '#7b5aa6', '#a678de', '#f6c6ea'],
+  neon: ['#0b0221', '#1d0f3c', '#33125c', '#6e2594', '#ff2975', '#00f0ff'],
+  sunset: ['#1f0a24', '#45152e', '#7a2130', '#b0413e', '#e2703a'],
+  ocean: ['#04101e', '#0a2239', '#134a6b', '#1f7a8c', '#2ab7ca'],
+};
+
+// Merged hex -> ladder index across all palettes (hex spellings are unique
+// across the six palettes, so a flat lookup is unambiguous).
+const SHADE_INDEX: Record<string, readonly string[]> = {};
+for (const ladders of Object.values(SHADE_LADDERS)) {
+  for (const [hex, chain] of Object.entries(ladders)) SHADE_INDEX[hex] = chain;
+}
+
+/**
+ * The audited darker-step chain for a palette color (exact hex spelling), or
+ * an empty array when the color degrades to flat. Used by makeSprite's bake.
+ */
+export function shadeLadder(color: string): readonly string[] {
+  return SHADE_INDEX[color] ?? [];
+}
+
 const linear = (channel: number): number => {
   const c = channel / 255;
   return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
