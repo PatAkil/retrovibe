@@ -209,7 +209,10 @@ export function createCrt(opts: CrtOptions = {}): Crt {
   return {
     pulse(mag, durationSeconds) {
       if (!aberration) return; // aberration is strictly opt-in
-      if (steadyPx > 0) return; // steady and pulse are mutually exclusive
+      // Gate on the CONFIGURED steady, not the reduced-motion-dampened one:
+      // a game that configured steady must never gain pulse transients just
+      // because reduced motion zeroed its steady split.
+      if (steadyRaw > 0) return; // steady and pulse are mutually exclusive
       if (!(mag > 0) || !(durationSeconds > 0)) return;
       const now = performance.now();
       // Combined-transient photosensitivity ceiling: rate-limit pulses so
