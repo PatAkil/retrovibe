@@ -46,3 +46,7 @@ export type { Crt, CrtOptions } from './crt';
 
 export { createRuntime } from './runtime';
 export type { Runtime, RuntimeOptions, RuntimeMessage, RuntimeMessageType } from './runtime';
+
+// WS4: aberration — chromatic-aberration options type (createCrt/Crt/CrtOptions
+// are already exported above; Crt gains pulse/setFrozen, render gains drawOverlay).
+export type { CrtAberrationOptions } from './crt';
