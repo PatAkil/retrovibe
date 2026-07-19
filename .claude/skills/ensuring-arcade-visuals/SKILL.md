@@ -219,7 +219,9 @@ import { createGrid, createParticles, NEON } from '../engine';
 const grid = createGrid({ width: W, height: H, color: NEON[3], horizon: 90, spacing: 12, scroll: 40 });
 const particles = createParticles({
   width: W, height: H, ambient: 'stars',
-  ambientColors: [NEON[1], NEON[2]],  // low-saturation near-greys, small hue delta
+  // near-grey cool tints, measured 2.31:1 / 2.01:1 vs the NEON[0] clear color —
+  // inside the 1.8–2.5:1 band; palette background entries (NEON[1]/[2]) are NOT in band
+  ambientColors: ['#4A4A5A', '#414150'],
 });
 // update tick: grid.update(dt);  render: juice.preRender -> grid.render(pc.ctx) -> world
 // on PAUSED: grid.setPaused(true); particles.setPaused(true);  resume with false
