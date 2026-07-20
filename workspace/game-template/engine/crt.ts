@@ -71,12 +71,20 @@ export interface CrtOptions {
   scanlineAlpha?: number;
   /** Strength of the edge vignette (default 0.35). */
   vignetteAlpha?: number;
-  /** Peak extra flicker alpha (default 0.03). 0 disables. */
+  /**
+   * Peak extra flicker alpha (default 0.03). 0 disables. Hard-capped at 0.05:
+   * the flicker is a ~6.4 Hz full-field oscillation, and higher amplitudes
+   * would cross the WCAG 2.3.1 general-flash threshold as a sustained
+   * >3-flashes-per-second violation.
+   */
   flicker?: number;
   /**
    * Chromatic aberration — strictly opt-in, default off (unset = byte-
    * identical frame). Pass `{}` for pulse-only, or `{ steady: 1 }` for a
    * constant 1-device-px split (mutually exclusive with visible pulses).
+   * COST: steady pays ~11 full-device-res canvas ops EVERY frame (~3-5 ms on
+   * software-rendered clients — a third of the 60 Hz budget); pulse mode pays
+   * only during transients for the same look. Prefer pulse-only.
    */
   aberration?: CrtAberrationOptions;
 }
@@ -87,7 +95,7 @@ const PULSE_MIN_INTERVAL_MS = 250;
 export function createCrt(opts: CrtOptions = {}): Crt {
   const scanlineAlpha = opts.scanlineAlpha ?? 0.18;
   const vignetteAlpha = opts.vignetteAlpha ?? 0.35;
-  const flickerPeak = opts.flicker ?? 0.03;
+  const flickerPeak = Math.min(opts.flicker ?? 0.03, 0.05);
   let clock = 0;
 
   // --- Aberration state (inert unless opts.aberration is set) ---------------
@@ -248,6 +256,12 @@ export function createCrt(opts: CrtOptions = {}): Crt {
 
     render(ctx, width, height, dt, drawOverlay) {
       clock += dt;
+
+      // Warm the aberration scratch canvases on the first rendered frame, not
+      // on the first visible pulse — lazy allocation would otherwise pay the
+      // canvas backing-store hitch on the busiest possible frame (a major
+      // impact, where pulses fire).
+      if (aberration && !scratch) ensureBuffers(ctx.canvas.width, ctx.canvas.height);
 
       // Chromatic aberration on the world/flash frame FIRST (opt-in; a zero
       // split performs no ops — the default path is byte-identical).

@@ -213,18 +213,24 @@ const towerSprite = makeSprite(
 
 `createGrid({ width, height, color, horizon, spacing, scroll })` (barrel export) draws a Tron-style receding floor **behind the world**, between `juice.preRender` and the world pass. `createParticles` gains `ambientColors?: string[]` for colored parallax stars. Both are opt-in — unused, the frame is byte-identical.
 
+Pick **one** depth metaphor per game — these two are alternatives, never combined (see the first bullet below):
+
 ```ts
 import { createGrid, createParticles, NEON } from '../engine';
 
+// EITHER a receding ground-grid (ground-based scrolling genres)...
 const grid = createGrid({ width: W, height: H, color: NEON[3], horizon: 90, spacing: 12, scroll: 40 });
+// update tick: grid.update(dt);  render: juice.preRender -> grid.render(pc.ctx) -> world
+// on PAUSED: grid.setPaused(true) — the grid has no scene awareness of its own
+
+// ...OR a deep-space starfield (space genres) — NOT both:
 const particles = createParticles({
   width: W, height: H, ambient: 'stars',
   // near-grey cool tints, measured 2.31:1 / 2.01:1 vs the NEON[0] clear color —
   // inside the 1.8–2.5:1 band; palette background entries (NEON[1]/[2]) are NOT in band
   ambientColors: ['#4A4A5A', '#414150'],
 });
-// update tick: grid.update(dt);  render: juice.preRender -> grid.render(pc.ctx) -> world
-// on PAUSED: grid.setPaused(true); particles.setPaused(true);  resume with false
+// on PAUSED: particles.setPaused(true);  resume with false
 ```
 
 - **Genre gating + single depth metaphor:** a scrolling grid/starfield belongs to scrolling/endless genres; a fixed-arena game uses `scroll: 0` (static) or drift-only — scrolling asserts false vection. **Never combine a receding ground-grid with a deep-space starfield** — contradictory depth cues; pick one.
@@ -239,10 +245,12 @@ const particles = createParticles({
 `createGlow({ width, height })` (barrel export; match `createPixelCanvas` dims + `scale`). Two tiers, **no `ctx.filter` anywhere**: (a) default cheap radial sprite via `glow.halo(x, y, radius, color)` / `glow.bloom(...)` — one precomputed radial-gradient sprite per color, blitted additively; (b) resample blur for arbitrary bright shapes — draw into `glow.ctx` with the same logical coordinates and `drawSprite` `px` you use on the main canvas; `glow.composite(pc.ctx)` blurs by successive bilinear halvings and composites additively.
 
 ```ts
-const glow = createGlow({ width: W, height: H });
+const glow = createGlow({ width: W, height: H, scale: pc.scale }); // scale MUST match createPixelCanvas — omitting it silently defaults to 3 and misregisters tier b at any other scale
 // update tick: glow.update(dt);
 // render, inside the shake window, UNDER the crisp world:
 //   pc.clear(bg) -> juice.preRender -> glow.composite(pc.ctx) -> crisp world -> juice.postRender -> crt.render
+// halo and ring are PER-FRAME calls — issue them every render frame
+// (composite clears the halo queue); bloom alone is a fire-once transient.
 glow.halo(orb.x, orb.y, 14, NEON[6], { intensity: 0.35 });
 glow.ring(pc.ctx, orb.x, orb.y, 14, NEON[6]);   // crisp 1px ring ON the main ctx, over the halo
 glow.bloom(hit.x, hit.y, 20, NEON[4]);          // impact transient, co-fired with juice.shake/flash
@@ -254,13 +262,14 @@ glow.bloom(hit.x, hit.y, 20, NEON[4]);          // impact transient, co-fired wi
 - **Contrast by design, not readback:** budget per-source `intensity` (clamped to 0.5), cap `maxAlpha` (default 0.6), and design-limit overlap to ~3 halos per region — decorate, don't floodlight. Per-frame `getImageData` clamping is disallowed; verification is the offline two-sample post-CRT ratio of §1b.
 - **Off-palette exemption:** glow colors are exempt from palette indexing — like the vignette and the death flash, a halo is a lighting effect, not a surface. But gameplay-meaning glow should reuse a palette color so the paired crisp ring stays palette-indexed.
 - Mark gameplay-telegraph halos with `{ telegraph: true }` — see §11.
+- **Tier b is pay-once-touched:** after the first `glow.ctx` access, `composite` resamples the buffer every frame forever (~0.5 ms on software-rendered clients) — never touch `glow.ctx` unless the game actually draws into it every frame; tier-a halos/blooms alone never allocate it.
 
 ## 10. Chromatic aberration — strictly opt-in, capped, HUD un-split
 
 Off by default: `createCrt()` with no `aberration` key renders a byte-identical frame. Opt in with `createCrt({ aberration: {} })` (pulse-only) or `{ aberration: { steady: 1 } }`.
 
 - **Uniform, < 1 device px:** the split is a uniform whole-device-px channel offset, hard-capped at 1 device px, so a 1px projectile's ghosts still overlap its collision cell — apparent position == hitbox. Never radial, never raised "for gameplay layers".
-- **Steady and pulse are mutually exclusive per game:** under a <1 px whole-px cap the budget admits only 0 or 1 — a `steady` that rounds to a visible px (≥ 0.5) consumes it and `crt.pulse` then adds 0 visible px (the engine ignores pulses whenever the configured steady quantizes to 1; a steady that rounds to 0 is no steady and leaves pulses enabled). Pick one: `steady: 1` for a constant film-grain identity, or `{}` + `crt.pulse(mag, durationSeconds)` reserved for major events (the same branch as `juice.shake` ≥ 4–6 px / `juice.flash` ≥ 0.3 s). During hit-stop, mirror the freeze with `crt.setFrozen(true)` so the emphasized instant doesn't de-aberrate.
+- **Steady and pulse are mutually exclusive per game:** under a <1 px whole-px cap the budget admits only 0 or 1 — a `steady` that rounds to a visible px (≥ 0.5) consumes it and `crt.pulse` then adds 0 visible px (the engine ignores pulses whenever the configured steady quantizes to 1; a steady that rounds to 0 is no steady and leaves pulses enabled). Pick one: `steady: 1` for a constant film-grain identity, or `{}` + `crt.pulse(mag, durationSeconds)` reserved for major events (the same branch as `juice.shake` ≥ 4–6 px / `juice.flash` ≥ 0.3 s). During hit-stop, mirror the freeze with `crt.setFrozen(true)` so the emphasized instant doesn't de-aberrate. **Cost:** `steady: 1` pays ~11 full-device-res canvas passes *every frame* (~3–5 ms on software-rendered clients — a third of the 60 Hz budget, title screen included); pulse-only pays that only during transients. Default to pulse-only.
 - **`drawOverlay` routing — HUD and ALL bitmap text:** `crt.render(ctx, W, H, dt, drawOverlay)` takes an optional callback invoked *after* the aberration pass and *before* scanlines, with the baked logical transform live. When aberration is on, move `drawScore` / `drawLives` / `hudText` **and every `drawText` / `drawTextCentered` call** (title text, PAUSED/GET READY popups, score combos) into it — 3×5 glyph strokes are 1 logical / 3 device px, so a 1 px split is ~33% fringing on every letter. If routing all text through the overlay is impractical, **forbid aberration for that game** — text-primary scenes (title-heavy, tutorial, word games) never opt in.
 
 ## 11. Reduced motion + photosensitivity — one damper, three categories
@@ -271,7 +280,7 @@ All new effects share one damper that defaults to `prefers-reduced-motion` at st
 - **Gameplay telegraphs — exempt:** the damper never zeroes a telegraph's urgency channel (pulse/blink) — a reduced-motion + colorblind player would lose both differentiators at once. Mark them `{ telegraph: true }` on `halo`/`bloom`; also encode urgency on a non-hue channel (pulse/size/blink), or provide a static reduced-motion-safe alternate cue. **Urgency is never zeroed.**
 - **Impact-feedback transients — dampened, not zeroed:** impact blooms render dampened; aberration pulse durations are halved. The crisp flash/shake still convey the hit.
 
-**Combined-transient ceiling:** major events can co-fire death-flash + `crt.pulse` + `glow.bloom`. The engine enforces minimum intervals — one accepted `crt.pulse` per 250 ms, `glow.bloom` gated by `minBloomInterval` (default 0.1 s) — so rapid events can't form a flash train. Do not work around these (no per-frame re-triggering, no stacking extra full-screen flashes of your own on the same event), and keep the aggregate brightness step of a co-fired moment bounded by using the engine transients rather than hand-rolled overlays.
+**Combined-transient ceiling:** major events can co-fire death-flash + `crt.pulse` + `glow.bloom`. The engine enforces minimum intervals — one accepted `juice.flash` start per 0.35 s (the full-screen flash is the only transient bright enough to count as a WCAG 2.3.1 flash; extra calls inside the window are dropped), one `crt.pulse` per 250 ms, `glow.bloom` gated by `minBloomInterval` (default 0.1 s) — so rapid events can't form a flash train. `CrtOptions.flicker` is hard-capped at 0.05 for the same reason — the flicker is a ~6.4 Hz full-field oscillation and higher amplitudes would sustain >3 flashes/s. Do not work around these (no per-frame re-triggering, no stacking extra full-screen flashes of your own on the same event), and keep the aggregate brightness step of a co-fired moment bounded by using the engine transients rather than hand-rolled overlays.
 
 The damper never touches the pre-existing flicker baseline: a fresh clone with all new options unset renders today's frame byte-identically, reduced-motion machine or not.
 

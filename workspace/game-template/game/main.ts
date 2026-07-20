@@ -86,6 +86,19 @@ const crt = createCrt(); // aberration stays unset (opt-in) — text-primary tit
 const glow = createGlow({ width: W, height: H, scale: pc.scale });
 const runtime = createRuntime();
 
+// Reduced motion — the engine modules read the media query once at creation,
+// but ambient star drift has no engine damper (SKILL §8: dampen at the call
+// site) and creation-time sampling misses mid-session OS toggles, so the game
+// owns both: still stars under reduced motion, and a change listener keeps the
+// runtime setters in sync.
+const motionQuery = matchMedia('(prefers-reduced-motion: reduce)');
+const applyMotionPreference = (reduce: boolean) => {
+  glow.setDamped(reduce);
+  particles.setAmbient(reduce ? null : 'stars'); // ambientColors mix is retained
+};
+applyMotionPreference(motionQuery.matches);
+motionQuery.addEventListener('change', (e) => applyMotionPreference(e.matches));
+
 // --- Sprites -----------------------------------------------------------------
 // Rendered at PX=2 logical px per cell so gameplay entities meet the size
 // floors (player >= H/16 = 10 px, other critical entities >= H/26 ≈ 6 px in
