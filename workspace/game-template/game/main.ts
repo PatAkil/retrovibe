@@ -89,8 +89,10 @@ const runtime = createRuntime();
 // Reduced motion — the engine modules read the media query once at creation,
 // but ambient star drift has no engine damper (SKILL §8: dampen at the call
 // site) and creation-time sampling misses mid-session OS toggles, so the game
-// owns both: still stars under reduced motion, and a change listener keeps the
-// runtime setters in sync.
+// owns both: the ambient starfield is disabled entirely under reduced motion
+// (dampened to zero, like steady aberration — NOT setPaused, which the
+// PLAYING scene wiring would silently reverse on every restart), and a change
+// listener keeps the runtime setters in sync.
 const motionQuery = matchMedia('(prefers-reduced-motion: reduce)');
 const applyMotionPreference = (reduce: boolean) => {
   glow.setDamped(reduce);
