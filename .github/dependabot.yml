@@ -1,0 +1,11 @@
+version: 2
+updates:
+  # Root devDeps only — games under workspace/ share these, they have no
+  # lockfiles of their own.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    # Versions here are pinned exactly (see package.json), so every bump is a
+    # deliberate PR rather than a silent range resolve.
+    open-pull-requests-limit: 5
