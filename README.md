@@ -44,3 +44,8 @@ from git history).
 What "done" means for any game: typecheck + production build green, **and**
 a headless browser boots it with a live canvas and zero uncaught errors. The
 human playtest is yours — Claude never claims to have played it.
+
+## License
+
+MIT — see [LICENSE](LICENSE). The games you generate are yours; nothing in the
+engine or skills claims them.
