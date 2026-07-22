@@ -23,7 +23,12 @@
 export interface Juice {
   /** Shake for `duration` s at pixel amplitude `intensity`. Strongest wins. */
   shake(intensity: number, duration: number): void;
-  /** Full-screen colour flash fading over `duration` s. */
+  /**
+   * Full-screen colour flash fading over `duration` s. Rate-limited: starts
+   * within 0.35 s of the previous accepted start are dropped, keeping
+   * full-screen flashes under the WCAG 2.3.1 three-per-second ceiling even
+   * when gameplay fires flash() every hit.
+   */
   flash(color: string, duration: number): void;
   /** Freeze the simulation for `duration` s (impact emphasis). */
   hitStop(duration: number): void;
@@ -42,6 +47,10 @@ export function createJuice(): Juice {
   let flashColor = '#FFFFFF';
   let flashTime = 0;
   let flashDur = 0;
+  // WCAG 2.3.1: at most ~3 full-screen flashes per second. Game-time clock —
+  // advances in update() even during hit-stop, so the window can't be frozen open.
+  const MIN_FLASH_INTERVAL = 0.35;
+  let sinceFlash = MIN_FLASH_INTERVAL;
 
   let freezeTime = 0;
 
@@ -55,6 +64,8 @@ export function createJuice(): Juice {
       }
     },
     flash(color, duration) {
+      if (sinceFlash < MIN_FLASH_INTERVAL) return;
+      sinceFlash = 0;
       flashColor = color;
       flashTime = duration;
       flashDur = duration;
@@ -66,6 +77,7 @@ export function createJuice(): Juice {
       return freezeTime > 0;
     },
     update(dt) {
+      sinceFlash += dt;
       if (freezeTime > 0) freezeTime = Math.max(0, freezeTime - dt);
       if (shakeTime > 0) shakeTime = Math.max(0, shakeTime - dt);
       if (flashTime > 0) flashTime = Math.max(0, flashTime - dt);

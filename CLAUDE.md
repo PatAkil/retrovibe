@@ -13,7 +13,7 @@ retrovibe/
 │                             #   walk-up bin resolution).
 ├── workspace/
 │   ├── game-template/        # pristine + self-contained; NEVER modified, NEVER run in place
-│   │   ├── engine/           # 11 modules — copied with the template, each game standalone
+│   │   ├── engine/           # 13 modules — copied with the template, each game standalone
 │   │   ├── game/main.ts      # the reference game every skill points to
 │   │   ├── smoke.mjs         # headless smoke gate (template code, not a repo helper script)
 │   │   ├── vite.config.ts    # base:'./', port 5173 strictPort, external cacheDir
@@ -70,13 +70,15 @@ Games import from `'../engine'`:
 | loop.ts | `createLoop({update, render})` → `.start()/.stop()` | Fixed-timestep (60 Hz) accumulator loop; frame-delta clamp (250 ms) + clock reset on focus; auto-pause on blur |
 | input.ts | `createInput(actions, {onFirstKey})`, `controlHints(input)`, `BUTTON_KEY` | Arrows/WASD → `input.dir`; buttons A = Space/Z, B = X/C, PAUSE = P/Esc (dedicated, aliased — down while ≥1 alias down); `pressed/held/released`, `endFrame()` per tick; labels declared in code |
 | scenes.ts | `createScenes()` → `.current/.is/.to/.onEnter` | Enforced machine `TITLE → PLAYING ⇄ PAUSED → (GAME_OVER | WIN) → restart` |
-| draw.ts | `createPixelCanvas`, `makeSprite`, `drawSprite`, `drawText`, `drawTextCentered`, `textWidth` | Pixel-scaled canvas, ASCII-art sprites, 3×5 bitmap font |
-| palette.ts | `PICO8`, `GAMEBOY`, `DUSK`, `NEON`, `SUNSET`, `OCEAN`, `PALETTES`, `swapPalette`, `contrast` | Curated retro palettes (roles documented per index) + swap support + `contrast(a,b)` legality check (actors ≥3:1 vs static surfaces; ambient 1.8–2.5:1 band) |
-| particles.ts | `createParticles({width, height, ambient, ambientColor})` → `.update/.render/.burst/.setAmbient` | Ambient presets (stars/rain/snow/embers/bubbles; band-compliant default colors, overridable) + 2–3 px impact bursts |
+| draw.ts | `createPixelCanvas`, `makeSprite(rows, map, shade?)`, `drawSprite`, `drawText`, `drawTextCentered`, `textWidth` | Pixel-scaled canvas, ASCII-art sprites (optional `SpriteShade` ramp — solid bands down each color's shade ladder; unset = byte-identical flat), 3×5 bitmap font |
+| palette.ts | `PICO8`, `GAMEBOY`, `DUSK`, `NEON`, `SUNSET`, `OCEAN`, `PALETTES`, `swapPalette`, `contrast`, `SHADE_LADDERS`, `SHADE_FLAT`, `shadeLadder` | Curated retro palettes (roles documented per index) + swap support + `contrast(a,b)` legality check (actors ≥3:1 vs static surfaces; ambient 1.8–2.5:1 band) + audited per-color shade ladders (`shadeLadder(color)`; colors in `SHADE_FLAT` degrade to flat) |
+| particles.ts | `createParticles({width, height, ambient, ambientColor, ambientColors})` → `.update/.render/.burst/.setAmbient/.setPaused` | Ambient presets (stars/rain/snow/embers/bubbles; band-compliant default colors, overridable — `ambientColors` for a multi-color mix) + 2–3 px impact bursts; `setPaused` freezes ambient drift on PAUSED |
+| background.ts | `createGrid(opts)` → `.update/.render/.setPaused/.setReducedMotion` | Scrolling background grid / parallax layer; draw between `juice.preRender` and the world pass; the game calls `setPaused(true)` on PAUSED (no scene awareness of its own) and `setReducedMotion` for the motion damper |
 | juice.ts | `createJuice()` → `.shake/.flash/.hitStop/.frozen/.update/.preRender/.postRender` | Screen shake, flash, hit-stop. Order: clear → `preRender` → world → `postRender` → CRT |
 | audio.ts | `createAudio()` → `.unlock/.play/.ready` | WebAudio chiptune sfx (`jump/pickup/explosion/hit/blip`); `unlock()` inside the first user gesture |
 | ui.ts | `SAFE_MARGIN`, `drawScore`, `drawLives`, `hudText` | HUD helpers, enforced edge margin |
-| crt.ts | `createCrt()` → `.render(ctx, w, h, dt)` | Scanlines + vignette + flicker; draw LAST |
+| glow.ts | `createGlow(opts)` → `.ctx/.halo/.bloom/.ring/.update/.setFrozen/.setDamped/.composite` | Additive glow layer — halos, impact blooms (rate-limited), crisp 1px boundary rings; `halo` is a per-frame queued command (re-issue every render frame — `composite` clears the queue) and `ring` draws immediately to the ctx passed, also per frame; `bloom` alone is a one-shot transient; `composite(target)` inside the shake window before crisp sprites; `setFrozen` mirrors `juice.frozen` |
+| crt.ts | `createCrt({aberration?})` → `.render(ctx, w, h, dt, drawOverlay?)/.pulse/.setFrozen` | Scanlines + vignette + flicker; draw LAST. Chromatic aberration is strictly opt-in/default-off (`CrtOptions.aberration`); `pulse(mag, s)` fires a decaying split transient (rate-limited), `setFrozen` pauses its decay during hit-stop, `drawOverlay` draws HUD/text after the aberration pass so text stays crisp |
 | runtime.ts | `createRuntime()` → `.gameOver/.scoreChanged/.stateChanged/.embedded/.send` | Host contract, pinned wire format `{source:'retrovibe', type, payload}` |
 
 ## Models & orchestration (revisit as models change — roles, not benchmarks)

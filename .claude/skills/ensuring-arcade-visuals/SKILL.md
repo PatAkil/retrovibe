@@ -55,6 +55,12 @@ An ad-hoc `'#ff00ff'` in game code is a visual bug: fix it by finding the neares
 - **Ambient prominence band:** ambient particle colors sit **just above the background** — contrast vs the clear color between ~1.8:1 and ~2.5:1, tuned toward the top of the band, at 1–2 px sizes. The engine preset defaults are band-compliant vs a **black** clear color; a brighter background needs `ambientColor` (or `setAmbient(preset, color)`) retuned into the band. The floor is 1.8 because the CRT pass darkens everything — a 1.2:1 dot renders sub-perceptual.
 - **Red-green safety:** a red-vs-green hue difference may never be the ONLY distinction between critical entity classes. Require two of: hue family (prefer blue/orange/yellow pairs), brightness, silhouette. Check: would the entities still be distinguishable in grayscale?
 
+**Amendment (graphics uplift) — the floor is measured on the composited post-CRT frame.** When a game uses any of the new layers (shaded sprites, grid, colored stars, glow, aberration), `contrast()` on flat palette hexes is the *design-time* gate, not the final one — glow and shading composite **before** `crt.render`, which darkens alternate rows and vignettes the edges, so a sprite can pass pre-CRT and fail on-screen at the periphery:
+
+- **Post-CRT composited sampling:** verify the actor read on the actual composited-and-CRT'd buffer over the worst region (peak-glow / grid-crossing / densest-star), on the worst-case bright frame, including a dark-scanline row at a vignette edge — actor contrast still ≥ 3.0. Do this **offline** (a scratch clone, a captured frame), never as per-frame readback — a per-frame `getImageData` clamp is a multi-ms stall and disallowed.
+- **Offline two-sample glow ratio:** for glow, contrast is a two-sample ratio taken from the composited post-CRT frame — one sample on the crisp actor pixel, one on the glow-bathed surface beside it — not a single luminance of the halo color. The engine's design-time luminance budget in `glow.ts` (per-source intensity clamp 0.5, composite `maxAlpha` 0.6, per-source channel budget, ≤3 stacked halos) is what makes this pass by construction; validate it offline, don't re-derive it per frame.
+- **HUD text vs the new bright layers:** the three new bright layers (glow bleed, near-grid rows, dense star clusters) share the HUD corners, and thin 1px text is never sampled by actor-pixel checks. **The engine implements the *measure* resolution, not a safe-zone:** `glow.ts` and `background.ts` do **not** mask or dim anything inside `SAFE_MARGIN` bands — there is no reserved HUD zone in code. So the burden is on the game: measure `drawScore` / `drawLives` / `hudText` contrast on the composited post-CRT frame against the brightest corner surface, and if the read fails, redesign — keep halos and the grid horizon out of the HUD corners by placement, or lower `maxAlpha`. (With aberration on, HUD legibility additionally requires the `drawOverlay` routing of §10.)
+
 ## 2. Pixel scale — low logical resolution, integer scale-up
 
 Use `createPixelCanvas` and keep the **logical** resolution low. The reference game uses 240×160 at scale 3 (a 720×480 canvas). The chunky-pixel look comes from drawing few logical pixels and scaling them up — not from drawing small shapes on a big canvas.
@@ -182,6 +188,102 @@ particles.setAmbient('embers');
 
 Call `particles.update(dt)` in the update tick and `particles.render(pc.ctx)` inside the juice pre/post window (usually first, behind the world). Density is `ambientCount` (default 48) — lower it if the background competes with gameplay. Whether the preset *matches the game world* is re-verified by **improving-game-quality**; impact `burst` tuning also lives there.
 
+## 7. Shaded sprites — baked shade ladders, never a lerp
+
+`makeSprite` takes an optional third argument `SpriteShade` — `{ ramp?: number[], band?: number }`. Shading is baked **once** at `makeSprite` time (solid bands, no dither); `drawSprite`'s hot loop is untouched, and an unset `ramp` is byte-identical to an unshaded sprite.
+
+```ts
+import { makeSprite, SUNSET, type SpriteShade } from '../engine';
+
+// Top-lit fade: row bands take 0, 1, 2 steps DOWN each color's own ladder.
+const towerSprite = makeSprite(
+  ['###', '###', '###', '###', '###', '###'],
+  { '#': SUNSET[7] },              // cream — has a 3-step ladder in SUNSET
+  { ramp: [0, 1, 2], band: 2 },    // 2-cell bands, top to bottom
+);
+```
+
+- **Shade-ladder semantics:** each `ramp` entry is "N steps down that color's **own** audited ladder" (`SHADE_LADDERS` in `palette.ts`, queried via `shadeLadder(color)`). It is **never** an RGB lerp — a free `{top, bottom}` gradient is forbidden — so multi-color rows stay on-palette and every band color already cleared the 3.0:1 darkest-step audit. Steps deeper than a ladder clamp to its darkest rung.
+- **Degrade-to-flat is explicit, never silent:** a color with no ladder renders flat under any ramp. Every such color is listed by name in `SHADE_FLAT`. Check before designing: on PICO8 only white/yellow/peach shade; ramp palettes (`SUNSET`/`OCEAN` especially) are the ones that actually show the gradient — pick one of those if shading is the point.
+- **Fixed-orientation caveat:** the fade is baked top-lit. A rotated, mirrored, or multi-facing actor is wrong-lit — keep rotating actors **flat**, or bake one sprite per orientation.
+- **Moire rule (PX=1):** the CRT scanline period is 2 logical px, so the band height in logical px (`band × px` at draw time) must be a multiple of 2. At `px >= 2` any band aligns; at `px = 1` use an even `band` — banding at `px = 1` combined with a strong `scanlineAlpha` is the flagged moire risk and the two are **mutually exclusive**.
+- **Actor-vs-actor floors:** two actors distinct as flat colors can converge to near-identical dark bottoms — verify separation at **every** band, not just against the background.
+
+## 8. Grid + parallax backgrounds — one depth metaphor, genre-gated
+
+`createGrid({ width, height, color, horizon, spacing, scroll })` (barrel export) draws a Tron-style receding floor **behind the world**, between `juice.preRender` and the world pass. `createParticles` gains `ambientColors?: string[]` for colored parallax stars. Both are opt-in — unused, the frame is byte-identical.
+
+Pick **one** depth metaphor per game — these two are alternatives, never combined (see the first bullet below):
+
+```ts
+import { createGrid, createParticles, NEON } from '../engine';
+
+// EITHER a receding ground-grid (ground-based scrolling genres)...
+const grid = createGrid({ width: W, height: H, color: NEON[3], horizon: 90, spacing: 12, scroll: 40 });
+// update tick: grid.update(dt);  render: juice.preRender -> grid.render(pc.ctx) -> world
+// on PAUSED: grid.setPaused(true) — the grid has no scene awareness of its own
+
+// ...OR a deep-space starfield (space genres) — NOT both:
+const particles = createParticles({
+  width: W, height: H, ambient: 'stars',
+  // near-grey cool tints, measured 2.31:1 / 2.01:1 vs the NEON[0] clear color —
+  // inside the 1.8–2.5:1 band; palette background entries (NEON[1]/[2]) are NOT in band
+  ambientColors: ['#4A4A5A', '#414150'],
+});
+// on PAUSED: particles.setPaused(true);  resume with false
+```
+
+- **Genre gating + single depth metaphor:** a scrolling grid/starfield belongs to scrolling/endless genres; a fixed-arena game uses `scroll: 0` (static) or drift-only — scrolling asserts false vection. **Never combine a receding ground-grid with a deep-space starfield** — contradictory depth cues; pick one.
+- **Node-brightness cap:** lines draw flat with **no emphasized intersection nodes** — a crossing brighter than the line reads as a point-like false target. The engine already draws flat; do not layer your own bright nodes on top.
+- **Integer-logical-step is the default:** lines quantize to whole logical px — pixel-pure and frame-stable. The device-space pass (`deviceSpace: true` + pass the pixel-canvas `scale` to `grid.render(ctx, scale)`) is an **explicit opt-in** for dense receding lines only. It preserves shake via a **relative** `ctx.scale(1/scale, 1/scale)` inside the shake window — never `setTransform`, which would discard the shake and leave a rock-still grid. The grid shakes fully with the world (one rigid scene).
+- **Grid in the contrast gate:** the grid is a static surface — every actor overlapping it needs `contrast(actor, gridColor) >= 3.0` (and the post-CRT check in §1b).
+- **Colored stars are a hue wash, not a rainbow:** every `ambientColors` entry stays in the 1.8–2.5:1 luminance band vs the clear color (the band governs luminance; the option only varies hue), low saturation, red-green-safe subset. Each particle's hue is fixed once at spawn — the engine stores it; never re-tint per frame.
+- **PAUSED freeze:** on entering PAUSED call `grid.setPaused(true)` and `particles.setPaused(true)` so ambient motion halts and "paused" reads as paused; un-pause with `false`. (The grid also honors the §11 reduced-motion damper; particles offer `setPaused` only — ambient star drift is not reduced-motion-damped in the engine, so a game wanting that dampens at the call site, e.g. fewer/slower stars when `matchMedia('(prefers-reduced-motion: reduce)').matches`.)
+
+## 9. Glow — two tiers, decoration only, contrast by design
+
+`createGlow({ width, height })` (barrel export; match `createPixelCanvas` dims + `scale`). Two tiers, **no `ctx.filter` anywhere**: (a) default cheap radial sprite via `glow.halo(x, y, radius, color)` / `glow.bloom(...)` — one precomputed radial-gradient sprite per color, blitted additively; (b) resample blur for arbitrary bright shapes — draw into `glow.ctx` with the same logical coordinates and `drawSprite` `px` you use on the main canvas; `glow.composite(pc.ctx)` blurs by successive bilinear halvings and composites additively.
+
+```ts
+const glow = createGlow({ width: W, height: H, scale: pc.scale }); // scale MUST match createPixelCanvas — omitting it silently defaults to 3 and misregisters tier b at any other scale
+// update tick: glow.update(dt);
+// render, inside the shake window, UNDER the crisp world:
+//   pc.clear(bg) -> juice.preRender -> glow.composite(pc.ctx) -> crisp world -> juice.postRender -> crt.render
+// halo and ring are PER-FRAME calls — issue them every render frame
+// (composite clears the halo queue); bloom alone is a fire-once transient.
+glow.halo(orb.x, orb.y, 14, NEON[6], { intensity: 0.35 });
+glow.ring(pc.ctx, orb.x, orb.y, 14, NEON[6]);   // crisp 1px ring ON the main ctx, over the halo
+glow.bloom(hit.x, hit.y, 20, NEON[4]);          // impact transient, co-fired with juice.shake/flash
+```
+
+- **Never bloom a tracked actor:** glow renders **behind** the crisp sprite and is scoped to telegraphs, decorative accents, projectiles, or self-glow — never under a different actor the player must track; additive blur on tracked edges dissolves the read exactly when positioning matters.
+- **Gameplay boundaries get a crisp ring:** any glow that *communicates* a boundary (range circle, blast radius, kill zone) pairs the halo with `glow.ring(...)` — a crisp 1px palette-indexed ring at the true edge. The bloom is decoration; the hard line is the contract.
+- **Impact bloom is a transient, not wallpaper:** `glow.bloom` has a snappy attack and ~0.1–0.2 s total envelope (`BloomOptions.duration`, clamped), matching `juice.flash` / `crt.pulse`, and is decoupled from ambient halos. **Frozen-hold:** while `juice.frozen`, call `glow.setFrozen(true)` — the envelope holds at peak and decays only after release, so the bloom doesn't drift through the emphasized hit-stop tableau. Blooms are also rate-limited by `minBloomInterval` (default 0.1 s — photosensitivity, §11).
+- **Contrast by design, not readback:** budget per-source `intensity` (clamped to 0.5), cap `maxAlpha` (default 0.6), and design-limit overlap to ~3 halos per region — decorate, don't floodlight. Per-frame `getImageData` clamping is disallowed; verification is the offline two-sample post-CRT ratio of §1b.
+- **Off-palette exemption:** glow colors are exempt from palette indexing — like the vignette and the death flash, a halo is a lighting effect, not a surface. But gameplay-meaning glow should reuse a palette color so the paired crisp ring stays palette-indexed.
+- Mark gameplay-telegraph halos with `{ telegraph: true }` — see §11.
+- **Tier b is pay-once-touched:** after the first `glow.ctx` access, `composite` resamples the buffer every frame forever (~0.5 ms on software-rendered clients) — never touch `glow.ctx` unless the game actually draws into it every frame; tier-a halos/blooms alone never allocate it.
+
+## 10. Chromatic aberration — strictly opt-in, capped, HUD un-split
+
+Off by default: `createCrt()` with no `aberration` key renders a byte-identical frame. Opt in with `createCrt({ aberration: {} })` (pulse-only) or `{ aberration: { steady: 1 } }`.
+
+- **Uniform, < 1 device px:** the split is a uniform whole-device-px channel offset, hard-capped at 1 device px, so a 1px projectile's ghosts still overlap its collision cell — apparent position == hitbox. Never radial, never raised "for gameplay layers".
+- **Steady and pulse are mutually exclusive per game:** under a <1 px whole-px cap the budget admits only 0 or 1 — a `steady` that rounds to a visible px (≥ 0.5) consumes it and `crt.pulse` then adds 0 visible px (the engine ignores pulses whenever the configured steady quantizes to 1; a steady that rounds to 0 is no steady and leaves pulses enabled). Pick one: `steady: 1` for a constant film-grain identity, or `{}` + `crt.pulse(mag, durationSeconds)` reserved for major events (the same branch as `juice.shake` ≥ 4–6 px / `juice.flash` ≥ 0.3 s). During hit-stop, mirror the freeze with `crt.setFrozen(true)` so the emphasized instant doesn't de-aberrate. **Cost:** `steady: 1` pays ~11 full-device-res canvas passes *every frame* (~3–5 ms on software-rendered clients — a third of the 60 Hz budget, title screen included); pulse-only pays that only during transients. Default to pulse-only.
+- **`drawOverlay` routing — HUD and ALL bitmap text:** `crt.render(ctx, W, H, dt, drawOverlay)` takes an optional callback invoked *after* the aberration pass and *before* scanlines, with the baked logical transform live. When aberration is on, move `drawScore` / `drawLives` / `hudText` **and every `drawText` / `drawTextCentered` call** (title text, PAUSED/GET READY popups, score combos) into it — 3×5 glyph strokes are 1 logical / 3 device px, so a 1 px split is ~33% fringing on every letter. If routing all text through the overlay is impractical, **forbid aberration for that game** — text-primary scenes (title-heavy, tutorial, word games) never opt in.
+
+## 11. Reduced motion + photosensitivity — one damper, three categories
+
+All new effects share one damper that defaults to `prefers-reduced-motion` at startup (each module reads `matchMedia` itself; override with `GridOptions.reducedMotion` / `GlowOptions.damped`, or at runtime via `grid.setReducedMotion(...)` / `glow.setDamped(...)`). Three categories:
+
+- **Ambient / decorative — dampened:** grid scroll slows to 25%; decorative halos and steady aberration are dampened (steady split drops to 0).
+- **Gameplay telegraphs — exempt:** the damper never zeroes a telegraph's urgency channel (pulse/blink) — a reduced-motion + colorblind player would lose both differentiators at once. Mark them `{ telegraph: true }` on `halo`/`bloom`; also encode urgency on a non-hue channel (pulse/size/blink), or provide a static reduced-motion-safe alternate cue. **Urgency is never zeroed.**
+- **Impact-feedback transients — dampened, not zeroed:** impact blooms render dampened; aberration pulse durations are halved. The crisp flash/shake still convey the hit.
+
+**Combined-transient ceiling:** major events can co-fire death-flash + `crt.pulse` + `glow.bloom`. The engine enforces minimum intervals — one accepted `juice.flash` start per 0.35 s (the full-screen flash is the only transient bright enough to count as a WCAG 2.3.1 flash; extra calls inside the window are dropped), one `crt.pulse` per 250 ms, `glow.bloom` gated by `minBloomInterval` (default 0.1 s) — so rapid events can't form a flash train. `CrtOptions.flicker` is hard-capped at 0.05 for the same reason — the flicker is a ~6.4 Hz full-field oscillation and higher amplitudes would sustain >3 flashes/s. Do not work around these (no per-frame re-triggering, no stacking extra full-screen flashes of your own on the same event), and keep the aggregate brightness step of a co-fired moment bounded by using the engine transients rather than hand-rolled overlays.
+
+The damper never touches the pre-existing flicker baseline: a fresh clone with all new options unset renders today's frame byte-identically, reduced-motion machine or not.
+
 ## Visual pass checklist (look only)
 
 - [ ] Style card comment atop `main.ts`; differs from the reference game AND every other game in `workspace/` per the divergence rule (§0).
@@ -192,4 +294,10 @@ Call `particles.update(dt)` in the update tick and `particles.render(pc.ctx)` in
 - [ ] All text via `drawText` / `drawTextCentered`; hierarchy from `scale` + palette index.
 - [ ] `crt.render` is the last call of every frame, after `juice.postRender`.
 - [ ] Ambient preset fits the fiction; bursts use the game's own palette colors, never the engine default.
+- [ ] If any new layer is used (shade ramp / grid / colored stars / glow / aberration): §1b's post-CRT composited check done offline, incl. the two-sample glow ratio and HUD-text-vs-bright-corners measurement.
+- [ ] Shaded sprites: ramp palette chosen (or degrade-to-flat accepted knowingly via `SHADE_FLAT`); rotating actors flat; band × px a multiple of 2 (no `px=1` banding with strong `scanlineAlpha`) (§7).
+- [ ] Background: one depth metaphor, genre-gated scroll (fixed arena ⇒ `scroll: 0`); `setPaused(true)` on PAUSED for grid AND particles; `ambientColors` in-band, red-green-safe (§8).
+- [ ] Glow: never under a tracked actor; boundary glow paired with `glow.ring`; blooms co-fired with juice and held via `glow.setFrozen` during hit-stop; ≤ ~3 halos per region (§9).
+- [ ] Aberration: opt-in only; steady XOR pulse; all HUD + bitmap text routed through `crt.render`'s `drawOverlay`; no aberration on text-primary scenes (§10).
+- [ ] Telegraph halos marked `{ telegraph: true }`; no hand-rolled full-screen flashes stacked on engine transients (§11).
 - [ ] `cd workspace/<game-name> && npm run check` passes.
