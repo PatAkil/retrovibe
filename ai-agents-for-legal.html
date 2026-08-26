@@ -2,7 +2,7 @@
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>What an AI agent actually does — and why legal should care</title>
+<title>What an AI agent actually does</title>
 <style>
   :root{
     --bg:#0b0e13;
@@ -58,33 +58,33 @@
   .rule{width:92px; height:5px; background:var(--accent); border-radius:3px; margin:34px 0}
   .center .rule{margin:34px auto}
 
-  /* one-line takeaway under a diagram */
-  .takeaway{
-    font-size:32px; color:var(--ink); text-align:center; margin:38px 0 0; font-weight:500;
-  }
+  .takeaway{font-size:32px; color:var(--ink); text-align:center; margin:34px 0 0; font-weight:500}
   .takeaway b{color:var(--accent); font-weight:600}
+  .takeaway + .note{text-align:center; margin-top:14px}
 
-  /* ---- reveal machinery ------------------------------------------------ */
+  /* ---- entry animation: everything arrives together, in one short beat -- */
   .rise{opacity:0; transform:translateY(20px); transition:opacity .6s var(--ease), transform .6s var(--ease)}
   .slide.active .rise{opacity:1; transform:none}
-  .slide.active .rise:nth-of-type(2){transition-delay:.09s}
-  .slide.active .rise:nth-of-type(3){transition-delay:.18s}
-  .slide.active .rise:nth-of-type(4){transition-delay:.27s}
+  .slide.active .rise.d1{transition-delay:.08s}
+  .slide.active .rise.d2{transition-delay:.16s}
+  .slide.active .rise.d3{transition-delay:.24s}
 
-  [data-step]{opacity:0; transition:opacity .55s var(--ease), transform .55s var(--ease)}
-  [data-step].on{opacity:1}
-  .up[data-step]{transform:translateY(18px)}
-  .up[data-step].on{transform:none}
+  .cascade > *{opacity:0; transform:translateY(16px); transition:opacity .5s var(--ease), transform .5s var(--ease)}
+  .slide.active .cascade > *{opacity:1; transform:none}
+  .slide.active .cascade > *:nth-child(1){transition-delay:.10s}
+  .slide.active .cascade > *:nth-child(2){transition-delay:.17s}
+  .slide.active .cascade > *:nth-child(3){transition-delay:.24s}
+  .slide.active .cascade > *:nth-child(4){transition-delay:.31s}
+  .slide.active .cascade > *:nth-child(5){transition-delay:.38s}
 
-  /* ---- three-phrase row (slide 2) -------------------------------------- */
+  /* ---- three-phrase row ------------------------------------------------ */
   .trio{display:grid; grid-template-columns:repeat(3,1fr); gap:58px; margin-top:64px}
-  .trio > div{border-top:3px solid var(--line); padding-top:30px}
-  .trio > div.on{border-top-color:var(--accent)}
+  .trio > div{border-top:3px solid var(--accent); padding-top:30px}
   .trio .big{font-size:50px; font-weight:600; letter-spacing:-.02em; line-height:1.15}
   .trio .small{font-size:25px; color:var(--dim); margin-top:16px; line-height:1.4}
 
-  /* ---- lists (only where the brief allows) ----------------------------- */
-  ol.list{list-style:none; margin:56px 0 0; padding:0; counter-reset:n}
+  /* ---- lists ----------------------------------------------------------- */
+  ol.list{list-style:none; margin:52px 0 0; padding:0; counter-reset:n}
   ol.list li{
     counter-increment:n; display:flex; align-items:baseline; gap:28px;
     padding:22px 0; border-bottom:1px solid var(--line);
@@ -98,10 +98,9 @@
   ol.list .term{font-size:38px; font-weight:550; letter-spacing:-.01em}
   ol.list .gloss{font-size:25px; color:var(--dim); margin-left:auto; text-align:right; max-width:520px; line-height:1.35}
   ol.list.tight li{padding:18px 0}
-  ol.list.q .term{font-size:36px; font-weight:500; line-height:1.3}
 
-  /* ---- two columns (slide 5) ------------------------------------------- */
-  .cols{display:grid; grid-template-columns:1fr 1fr; gap:70px; margin-top:54px}
+  /* ---- two columns ----------------------------------------------------- */
+  .cols{display:grid; grid-template-columns:1fr 1fr; gap:70px; margin-top:50px}
   .col{background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:44px 46px 40px}
   .col.hot{border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset}
   .col h3{font-size:23px; letter-spacing:.2em; text-transform:uppercase; margin:0 0 30px; color:var(--dim); font-weight:600}
@@ -109,17 +108,15 @@
   .col p{font-size:34px; line-height:1.32; margin:0 0 18px; font-weight:500}
   .col p:last-child{margin-bottom:0}
   .col p span{color:var(--dim); font-weight:400}
+  .col.big p{font-size:38px}
   .band{
-    margin-top:40px; text-align:center; font-size:30px; font-weight:550;
+    margin-top:36px; text-align:center; font-size:30px; font-weight:550;
     color:var(--accent); border:1px solid var(--accent); background:var(--accent-dim);
     border-radius:999px; padding:18px 0;
   }
 
-  /* ---- token completion (slide 3) -------------------------------------- */
-  .tokens{
-    margin-top:60px; font-size:46px; line-height:1.5; font-weight:500;
-    min-height:150px;
-  }
+  /* ---- token completion (the one slide that reveals over time) --------- */
+  .tokens{margin-top:56px; font-size:46px; line-height:1.5; font-weight:500; min-height:140px}
   .tokens span{opacity:0; transition:opacity .18s linear}
   .tokens span.on{opacity:1}
   .caret{
@@ -127,7 +124,7 @@
     vertical-align:-7px; margin-left:6px; animation:blink 1s steps(1) infinite;
   }
   @keyframes blink{50%{opacity:0}}
-  .cands{display:flex; gap:44px; margin-top:44px; opacity:0; transition:opacity .5s var(--ease)}
+  .cands{display:flex; gap:44px; margin-top:40px; opacity:0; transition:opacity .5s var(--ease)}
   .cands.on{opacity:1}
   .cand{min-width:230px}
   .cand .w{font-size:29px; font-weight:550}
@@ -177,25 +174,24 @@
 
 <!-- 1 ─ Title ─────────────────────────────────────────────────────────── -->
 <section class="slide">
-  <p class="kicker rise">In-house legal briefing</p>
-  <h1 class="rise">What an AI agent<br>actually does —<br><span class="accent">and why legal should care.</span></h1>
-  <div class="rule rise"></div>
-  <p class="note rise">Forty minutes. No engineering background assumed.</p>
+  <p class="kicker rise">In-house education</p>
+  <h1 class="rise d1">What an AI agent<br><span class="accent">actually does.</span></h1>
+  <div class="rule rise d2"></div>
 </section>
 
-<!-- 2 ─ Why this matters ─────────────────────────────────────────────── -->
+<!-- 2 ─ Why we need your help ─────────────────────────────────────────── -->
 <section class="slide">
-  <h2 class="rise">Why this matters to you</h2>
-  <div class="trio">
-    <div class="up" data-step="1">
+  <h2 class="rise">Why we need your help</h2>
+  <div class="trio cascade">
+    <div>
       <div class="big">Vendor terms</div>
       <div class="small">What the contract actually permits.</div>
     </div>
-    <div class="up" data-step="2">
+    <div>
       <div class="big">Data flows</div>
       <div class="small">Where our text goes — and where it stays.</div>
     </div>
-    <div class="up" data-step="3">
+    <div>
       <div class="big">Accountability</div>
       <div class="small">Who answers for what it did.</div>
     </div>
@@ -204,8 +200,8 @@
 
 <!-- 3 ─ What an LLM is ──────────────────────────────────────────────── -->
 <section class="slide" data-auto="tokens">
-  <p class="kicker rise">The building block</p>
-  <h2 class="rise">A model that predicts the next word.</h2>
+  <p class="kicker rise">LLM · large language model</p>
+  <h2 class="rise d1">A model that predicts the next word.</h2>
   <div class="tokens" id="tokline"></div>
   <div class="cands" id="cands">
     <div class="cand"><div class="w">England</div><div class="bar"><i style="--p:82%"></i></div><div class="p">most likely</div></div>
@@ -217,41 +213,41 @@
 <!-- 4 ─ Three consequences ──────────────────────────────────────────── -->
 <section class="slide">
   <h2 class="rise">Three consequences</h2>
-  <ol class="list">
-    <li class="up" data-step="1"><span class="term">Probabilistic</span><span class="gloss">The same question can give a different answer.</span></li>
-    <li class="up" data-step="2"><span class="term">No built-in truth</span><span class="gloss">Fluent is not the same as correct.</span></li>
-    <li class="up" data-step="3"><span class="term">Frozen knowledge</span><span class="gloss">It learned once, up to a date, and stopped.</span></li>
+  <ol class="list cascade">
+    <li><span class="term">Probabilistic</span><span class="gloss">The same question can give a different answer.</span></li>
+    <li><span class="term">No built-in truth</span><span class="gloss">Fluent is not the same as correct.</span></li>
+    <li><span class="term">Frozen knowledge</span><span class="gloss">It learned once, up to a date, and stopped.</span></li>
   </ol>
 </section>
 
-<!-- 5 ─ Training vs inference ───────────────────────────────────────── -->
+<!-- 5 ─ Training and inference ──────────────────────────────────────── -->
 <section class="slide">
-  <h2 class="rise">Training is not inference</h2>
-  <div class="cols">
-    <div class="col up" data-step="1">
+  <h2 class="rise">Training and inference</h2>
+  <div class="cols cascade">
+    <div class="col">
       <h3>Training</h3>
       <p>The model <span>learns.</span></p>
       <p>Once, <span>at the vendor.</span></p>
       <p>On their data, <span>not ours.</span></p>
     </div>
-    <div class="col hot up" data-step="2">
+    <div class="col hot">
       <h3>Inference</h3>
       <p>The model <span>is used.</span></p>
       <p>Every prompt, <span>every day.</span></p>
       <p>On <span>our</span> data.</p>
     </div>
   </div>
-  <div class="band up" data-step="3">Confidentiality lives in inference.</div>
+  <div class="band rise d3">Most — if not all — of our usage is inference.</div>
 </section>
 
 <!-- 6 ─ Where our inference runs ────────────────────────────────────── -->
 <section class="slide">
   <h2 class="rise">Where our inference runs</h2>
-  <svg class="fig short" viewBox="0 0 1400 560" role="img" aria-label="Two doors, Azure AI Foundry and GitHub Copilot, both marked zero data retention, both inside existing agreements">
-    <rect class="dash" x="210" y="30" width="980" height="452" rx="20" data-step="1"/>
-    <text class="tiny" x="700" y="528" data-step="1">inside existing Microsoft / GitHub agreements</text>
+  <svg class="fig short rise d1" viewBox="0 0 1400 560" role="img" aria-label="Two doors, Azure AI Foundry and GitHub Copilot, both marked zero data retention, both inside existing agreements">
+    <rect class="dash" x="210" y="30" width="980" height="452" rx="20"/>
+    <text class="tiny" x="700" y="528">inside existing Microsoft / GitHub agreements</text>
 
-    <g data-step="2">
+    <g>
       <rect class="node solid" x="300" y="58" width="300" height="48" rx="24"/>
       <text class="elabel hot" x="450" y="90">zero data retention</text>
       <rect class="node hot" x="350" y="132" width="200" height="280" rx="10"/>
@@ -261,7 +257,7 @@
       <text class="nlabel" x="450" y="450">Azure AI Foundry</text>
     </g>
 
-    <g data-step="3">
+    <g>
       <rect class="node solid" x="800" y="58" width="300" height="48" rx="24"/>
       <text class="elabel hot" x="950" y="90">zero data retention</text>
       <rect class="node hot" x="850" y="132" width="200" height="280" rx="10"/>
@@ -271,77 +267,72 @@
       <text class="nlabel" x="950" y="450">GitHub Copilot</text>
     </g>
   </svg>
-  <p class="takeaway up" data-step="4">Provider keeps nothing. <b>We keep the audit trail.</b></p>
+  <p class="takeaway rise d2">Providers keep nothing. <b>We keep the audit trail.</b></p>
+  <p class="note rise d3">Seamless onboarding to both paths.</p>
 </section>
 
 <!-- 7 ─ Chat vs agent ───────────────────────────────────────────────── -->
 <section class="slide">
   <h2 class="rise">Chat versus agent</h2>
-  <svg class="fig" viewBox="0 0 1400 460" role="img" aria-label="Chat is prompt then answer. An agent takes a goal, acts, observes and repeats.">
-    <line x1="700" y1="20" x2="700" y2="440" stroke="#212b39" stroke-width="2"/>
+  <svg class="fig rise d1" viewBox="0 0 1400 545" role="img" aria-label="Chat gives one answer to one prompt. An agent takes a goal, runs a loop, and stops when it is done.">
+    <line x1="700" y1="14" x2="700" y2="524" stroke="#212b39" stroke-width="2"/>
 
-    <g data-step="1">
-      <text class="tiny" x="350" y="34">chat</text>
-      <rect class="node" x="200" y="80" width="300" height="86" rx="12"/>
-      <text class="nlabel" x="350" y="123">prompt</text>
-      <path class="edge" d="M350,176 L350,246" marker-end="url(#ar)"/>
-      <rect class="node" x="200" y="256" width="300" height="86" rx="12"/>
-      <text class="nlabel" x="350" y="299">answer</text>
-      <text class="elabel" x="350" y="400">You do the next step.</text>
+    <g>
+      <text class="tiny" x="350" y="26">chat</text>
+      <rect class="node" x="200" y="130" width="300" height="86" rx="12"/>
+      <text class="nlabel" x="350" y="173">prompt</text>
+      <path class="edge" d="M350,226 L350,266" marker-end="url(#ar)"/>
+      <rect class="node" x="200" y="276" width="300" height="86" rx="12"/>
+      <text class="nlabel" x="350" y="319">answer</text>
+      <text class="elabel" x="350" y="492">You take every next step.</text>
     </g>
 
-    <g data-step="2">
-      <text class="tiny" x="1050" y="34">agent</text>
-      <rect class="node hot" x="900" y="60" width="300" height="72" rx="12"/>
-      <text class="nlabel" x="1050" y="96">goal</text>
-      <path class="edge hot" d="M1050,142 L1050,186" marker-end="url(#arh)"/>
-      <rect class="node" x="900" y="196" width="300" height="72" rx="12"/>
-      <text class="nlabel" x="1050" y="232">act</text>
-      <path class="edge hot" d="M1050,278 L1050,322" marker-end="url(#arh)"/>
-      <rect class="node" x="900" y="332" width="300" height="72" rx="12"/>
-      <text class="nlabel" x="1050" y="368">observe</text>
-      <path class="edge hot" d="M1210,368 Q1300,368 1300,232 Q1300,196 1216,196" marker-end="url(#arh)"/>
-      <text class="elabel hot" x="1345" y="300">repeat</text>
+    <g>
+      <text class="tiny" x="1050" y="26">agent</text>
+      <rect class="node hot" x="900" y="58" width="300" height="68" rx="12"/>
+      <text class="nlabel" x="1050" y="92">goal</text>
+      <path class="edge hot" d="M1050,136 L1050,176" marker-end="url(#arh)"/>
+
+      <circle cx="1050" cy="256" r="64" fill="none" stroke="#212b39" stroke-width="2"/>
+      <path class="edge hot" d="M1050,192 A64,64 0 1 1 986,256" marker-end="url(#arh)"/>
+      <text class="nlabel" x="1050" y="258" style="fill:#f0b429">loop</text>
+
+      <path class="edge hot" d="M1050,330 L1050,370" marker-end="url(#arh)"/>
+      <rect class="node" x="900" y="380" width="300" height="68" rx="12"/>
+      <text class="nlabel" x="1050" y="414">done</text>
+      <text class="elabel" x="1050" y="492">It repeats until the goal is met.</text>
     </g>
   </svg>
 </section>
 
-<!-- 8 ─ The agent loop (hero) ───────────────────────────────────────── -->
+<!-- 8 ─ The agent loop ──────────────────────────────────────────────── -->
 <section class="slide">
   <h2 class="rise">The agent loop</h2>
-  <svg class="fig" viewBox="0 0 1400 620" role="img" aria-label="A loop: think, call a tool, observe the result, back to think, with an exit arrow marked done">
-    <g data-step="1">
-      <rect class="node hot" x="570" y="134" width="260" height="92" rx="14"/>
-      <text class="nlabel" x="700" y="180">Think</text>
-    </g>
+  <svg class="fig rise d1" viewBox="0 0 1400 620" role="img" aria-label="Inside the loop: think, call a tool, observe the result, back to think, with an exit arrow marked done">
+    <rect class="node hot" x="570" y="134" width="260" height="92" rx="14"/>
+    <text class="nlabel" x="700" y="180">Think</text>
 
-    <path class="edge" d="M836,212 Q1012,252 1078,414" marker-end="url(#ar)" data-step="2"/>
-    <g data-step="2">
-      <rect class="node" x="950" y="424" width="260" height="92" rx="14"/>
-      <text class="nlabel" x="1080" y="470">Call a tool</text>
-    </g>
+    <path class="edge" d="M836,212 Q1012,252 1078,414" marker-end="url(#ar)"/>
+    <rect class="node" x="950" y="424" width="260" height="92" rx="14"/>
+    <text class="nlabel" x="1080" y="470">Call a tool</text>
 
-    <path class="edge" d="M944,492 Q700,600 458,492" marker-end="url(#ar)" data-step="3"/>
-    <g data-step="3">
-      <rect class="node" x="190" y="424" width="260" height="92" rx="14"/>
-      <text class="nlabel" x="320" y="470">Observe</text>
-    </g>
+    <path class="edge" d="M944,492 Q700,600 458,492" marker-end="url(#ar)"/>
+    <rect class="node" x="190" y="424" width="260" height="92" rx="14"/>
+    <text class="nlabel" x="320" y="470">Observe</text>
 
-    <path class="edge" d="M356,420 Q396,256 558,214" marker-end="url(#ar)" data-step="4"/>
+    <path class="edge" d="M356,420 Q396,256 558,214" marker-end="url(#ar)"/>
 
-    <g data-step="5">
-      <path class="edge hot" d="M700,130 L700,72" marker-end="url(#arh)"/>
-      <text class="elabel hot" x="700" y="50">Done</text>
-    </g>
+    <path class="edge hot" d="M700,130 L700,72" marker-end="url(#arh)"/>
+    <text class="elabel hot" x="700" y="50">Done</text>
   </svg>
-  <p class="takeaway up" data-step="6">Nothing else about an agent is new.</p>
+  <p class="takeaway rise d2">This is the <b>loop</b> from the last slide, opened up.</p>
 </section>
 
 <!-- 9 ─ Tools ───────────────────────────────────────────────────────── -->
 <section class="slide">
   <h2 class="rise">Tools are the reach</h2>
-  <svg class="fig" viewBox="0 0 1400 620" role="img" aria-label="The same loop, with tools attached to the call-a-tool step: read a file, run the tests, query a system">
-    <g transform="translate(-160,0) scale(0.9)" data-step="1">
+  <svg class="fig rise d1" viewBox="0 0 1400 620" role="img" aria-label="The same loop, with tools attached to the call-a-tool step: read a file, run the tests, query a system">
+    <g transform="translate(-160,0) scale(0.9)">
       <rect class="node hot" x="570" y="134" width="260" height="92" rx="14"/>
       <text class="nlabel" x="700" y="180">Think</text>
       <path class="edge" d="M836,212 Q1012,252 1078,414" marker-end="url(#ar)"/>
@@ -355,78 +346,64 @@
       <text class="elabel hot" x="700" y="50">Done</text>
     </g>
 
-    <g data-step="2">
-      <path class="edge hot" d="M936,410 Q984,404 1000,340" marker-end="url(#arh)"/>
-      <rect class="node solid" x="1006" y="262" width="350" height="76" rx="12"/>
-      <text class="nlabel" x="1181" y="300">read a file</text>
-    </g>
-    <g data-step="3">
-      <path class="edge hot" d="M936,423 L998,423" marker-end="url(#arh)"/>
-      <rect class="node solid" x="1006" y="385" width="350" height="76" rx="12"/>
-      <text class="nlabel" x="1181" y="423">run the tests</text>
-    </g>
-    <g data-step="4">
-      <path class="edge hot" d="M936,436 Q984,442 1000,506" marker-end="url(#arh)"/>
-      <rect class="node solid" x="1006" y="508" width="350" height="76" rx="12"/>
-      <text class="nlabel" x="1181" y="546">query a system</text>
-    </g>
+    <path class="edge hot" d="M936,410 Q984,404 1000,340" marker-end="url(#arh)"/>
+    <rect class="node solid" x="1006" y="262" width="350" height="76" rx="12"/>
+    <text class="nlabel" x="1181" y="300">read a file</text>
+
+    <path class="edge hot" d="M936,423 L998,423" marker-end="url(#arh)"/>
+    <rect class="node solid" x="1006" y="385" width="350" height="76" rx="12"/>
+    <text class="nlabel" x="1181" y="423">run the tests</text>
+
+    <path class="edge hot" d="M936,436 Q984,442 1000,506" marker-end="url(#arh)"/>
+    <rect class="node solid" x="1006" y="508" width="350" height="76" rx="12"/>
+    <text class="nlabel" x="1181" y="546">query a system</text>
   </svg>
-  <p class="takeaway up" data-step="5">It can reach <b>exactly</b> what you hand it. Nothing else.</p>
+  <p class="takeaway rise d2">It can reach <b>exactly</b> what you hand it. Nothing else.</p>
 </section>
 
 <!-- 10 ─ MCP ────────────────────────────────────────────────────────── -->
 <section class="slide">
   <h2 class="rise">MCP</h2>
-  <p class="lead rise">A standard adapter that lets an agent use existing systems as tools.</p>
-  <svg class="fig short" viewBox="0 0 1400 460" role="img" aria-label="An agent plugs into a universal adapter that fits the sockets of existing systems">
-    <g data-step="1">
-      <rect class="node hot" x="40" y="180" width="240" height="92" rx="14"/>
-      <text class="nlabel" x="160" y="226">agent</text>
-    </g>
+  <p class="lead rise d1">A standard adapter that lets an agent use existing systems as tools.</p>
+  <svg class="fig short rise d2" viewBox="0 0 1400 460" role="img" aria-label="An agent plugs into a universal adapter that fits the sockets of existing systems">
+    <rect class="node hot" x="40" y="180" width="240" height="92" rx="14"/>
+    <text class="nlabel" x="160" y="226">agent</text>
 
-    <g data-step="2">
-      <path class="edge hot" d="M280,226 L390,226"/>
-      <rect class="node solid" x="390" y="176" width="200" height="100" rx="14"/>
-      <text class="nlabel" x="490" y="226">MCP</text>
-      <rect x="590" y="196" width="46" height="14" rx="7" fill="#f0b429"/>
-      <rect x="590" y="242" width="46" height="14" rx="7" fill="#f0b429"/>
-    </g>
+    <path class="edge hot" d="M280,226 L390,226"/>
+    <rect class="node solid" x="390" y="176" width="200" height="100" rx="14"/>
+    <text class="nlabel" x="490" y="226">MCP</text>
+    <rect x="590" y="196" width="46" height="14" rx="7" fill="#f0b429"/>
+    <rect x="590" y="242" width="46" height="14" rx="7" fill="#f0b429"/>
 
-    <g data-step="3">
-      <path class="dash" d="M640,200 Q760,200 830,110"/>
-      <path class="dash" d="M640,226 L830,226"/>
-      <path class="dash" d="M640,252 Q760,252 830,342"/>
+    <path class="dash" d="M640,200 Q760,200 830,110"/>
+    <path class="dash" d="M640,226 L830,226"/>
+    <path class="dash" d="M640,252 Q760,252 830,342"/>
 
-      <g>
-        <rect class="node" x="836" y="62" width="150" height="96" rx="12"/>
-        <rect x="880" y="86" width="14" height="34" rx="7" fill="#5a6779"/>
-        <rect x="928" y="86" width="14" height="34" rx="7" fill="#5a6779"/>
-        <circle cx="911" cy="136" r="9" fill="#5a6779"/>
-        <text class="nsub" x="1130" y="110">code repository</text>
-      </g>
-      <g>
-        <rect class="node" x="836" y="178" width="150" height="96" rx="12"/>
-        <rect x="880" y="202" width="14" height="34" rx="7" fill="#5a6779"/>
-        <rect x="928" y="202" width="14" height="34" rx="7" fill="#5a6779"/>
-        <circle cx="911" cy="252" r="9" fill="#5a6779"/>
-        <text class="nsub" x="1130" y="226">ticketing system</text>
-      </g>
-      <g>
-        <rect class="node" x="836" y="294" width="150" height="96" rx="12"/>
-        <rect x="880" y="318" width="14" height="34" rx="7" fill="#5a6779"/>
-        <rect x="928" y="318" width="14" height="34" rx="7" fill="#5a6779"/>
-        <circle cx="911" cy="368" r="9" fill="#5a6779"/>
-        <text class="nsub" x="1130" y="342">internal documents</text>
-      </g>
-    </g>
+    <rect class="node" x="836" y="62" width="150" height="96" rx="12"/>
+    <rect x="880" y="86" width="14" height="34" rx="7" fill="#5a6779"/>
+    <rect x="928" y="86" width="14" height="34" rx="7" fill="#5a6779"/>
+    <circle cx="911" cy="136" r="9" fill="#5a6779"/>
+    <text class="nsub" x="1130" y="110">code repository</text>
+
+    <rect class="node" x="836" y="178" width="150" height="96" rx="12"/>
+    <rect x="880" y="202" width="14" height="34" rx="7" fill="#5a6779"/>
+    <rect x="928" y="202" width="14" height="34" rx="7" fill="#5a6779"/>
+    <circle cx="911" cy="252" r="9" fill="#5a6779"/>
+    <text class="nsub" x="1130" y="226">ticketing system</text>
+
+    <rect class="node" x="836" y="294" width="150" height="96" rx="12"/>
+    <rect x="880" y="318" width="14" height="34" rx="7" fill="#5a6779"/>
+    <rect x="928" y="318" width="14" height="34" rx="7" fill="#5a6779"/>
+    <circle cx="911" cy="368" r="9" fill="#5a6779"/>
+    <text class="nsub" x="1130" y="342">internal documents</text>
   </svg>
 </section>
 
 <!-- 11 ─ Memory ─────────────────────────────────────────────────────── -->
 <section class="slide">
   <h2 class="rise">Memory</h2>
-  <svg class="fig" viewBox="0 0 1400 620" role="img" aria-label="The loop with a memory box feeding the think step">
-    <g transform="translate(120,0)" data-step="1">
+  <svg class="fig rise d1" viewBox="0 0 1400 620" role="img" aria-label="The loop with a memory box feeding the think step">
+    <g transform="translate(120,0)">
       <rect class="node hot" x="570" y="134" width="260" height="92" rx="14"/>
       <text class="nlabel" x="700" y="180">Think</text>
       <path class="edge" d="M836,212 Q1012,252 1078,414" marker-end="url(#ar)"/>
@@ -440,220 +417,204 @@
       <text class="elabel hot" x="700" y="50">Done</text>
     </g>
 
-    <g data-step="2">
-      <rect class="node solid" x="130" y="138" width="250" height="84" rx="14"/>
-      <text class="nlabel" x="255" y="180">memory</text>
-      <path class="edge hot" d="M380,180 L682,180" marker-end="url(#arh)"/>
-    </g>
+    <rect class="node solid" x="130" y="138" width="250" height="84" rx="14"/>
+    <text class="nlabel" x="255" y="180">memory</text>
+    <path class="edge hot" d="M380,180 L682,180" marker-end="url(#arh)"/>
   </svg>
-  <p class="takeaway up" data-step="3">Context carried across steps and sessions.</p>
+  <p class="takeaway rise d2">Context carried across steps and sessions.</p>
 </section>
 
 <!-- 12 ─ Shaping the agent ──────────────────────────────────────────── -->
 <section class="slide">
   <h2 class="rise">Shaping the agent</h2>
-  <svg class="fig" viewBox="0 0 1600 700" role="img" aria-label="The loop sitting inside a bounded harness containing instruction files, skills, hooks and permissions">
-    <g data-step="1">
-      <rect x="40" y="50" width="1520" height="600" rx="24" fill="none" stroke="#f0b429" stroke-width="2.5"/>
-      <rect x="86" y="28" width="230" height="46" rx="10" fill="#0b0e13"/>
-      <text x="201" y="51" class="elabel hot" style="letter-spacing:.16em">HARNESS</text>
+  <svg class="fig rise d1" viewBox="0 0 1600 700" role="img" aria-label="The loop sitting inside a bounded harness containing instruction files, skills, hooks and permissions; examples are GitHub Copilot, Codex and Claude Code">
+    <rect x="40" y="50" width="1520" height="600" rx="24" fill="none" stroke="#f0b429" stroke-width="2.5"/>
+    <rect x="86" y="28" width="230" height="46" rx="10" fill="#0b0e13"/>
+    <text x="201" y="51" class="elabel hot" style="letter-spacing:.16em">HARNESS</text>
 
-      <g transform="translate(30,178) scale(0.62)" opacity=".95">
-        <rect class="node hot" x="570" y="134" width="260" height="92" rx="14"/>
-        <text class="nlabel" x="700" y="180">Think</text>
-        <path class="edge" d="M836,212 Q1012,252 1078,414" marker-end="url(#ar)"/>
-        <rect class="node" x="950" y="424" width="260" height="92" rx="14"/>
-        <text class="nlabel" x="1080" y="470">Call a tool</text>
-        <path class="edge" d="M944,492 Q700,600 458,492" marker-end="url(#ar)"/>
-        <rect class="node" x="190" y="424" width="260" height="92" rx="14"/>
-        <text class="nlabel" x="320" y="470">Observe</text>
-        <path class="edge" d="M356,420 Q396,256 558,214" marker-end="url(#ar)"/>
-        <path class="edge hot" d="M700,130 L700,72" marker-end="url(#arh)"/>
-        <text class="elabel hot" x="700" y="50">Done</text>
-      </g>
-      <line x1="856" y1="130" x2="856" y2="580" stroke="#212b39" stroke-width="2"/>
+    <g transform="translate(30,150) scale(0.58)" opacity=".95">
+      <rect class="node hot" x="570" y="134" width="260" height="92" rx="14"/>
+      <text class="nlabel" x="700" y="180">Think</text>
+      <path class="edge" d="M836,212 Q1012,252 1078,414" marker-end="url(#ar)"/>
+      <rect class="node" x="950" y="424" width="260" height="92" rx="14"/>
+      <text class="nlabel" x="1080" y="470">Call a tool</text>
+      <path class="edge" d="M944,492 Q700,600 458,492" marker-end="url(#ar)"/>
+      <rect class="node" x="190" y="424" width="260" height="92" rx="14"/>
+      <text class="nlabel" x="320" y="470">Observe</text>
+      <path class="edge" d="M356,420 Q396,256 558,214" marker-end="url(#ar)"/>
+      <path class="edge hot" d="M700,130 L700,72" marker-end="url(#arh)"/>
+      <text class="elabel hot" x="700" y="50">Done</text>
     </g>
 
-    <g data-step="2">
-      <text x="906" y="184" fill="#f0b429" font-size="34" font-weight="600">instruction files</text>
-      <text x="906" y="222" fill="#8d9aad" font-size="26">standing orders</text>
-    </g>
-    <g data-step="3">
-      <text x="906" y="304" fill="#f0b429" font-size="34" font-weight="600">skills</text>
-      <text x="906" y="342" fill="#8d9aad" font-size="26">playbooks for a task</text>
-    </g>
-    <g data-step="4">
-      <text x="906" y="424" fill="#f0b429" font-size="34" font-weight="600">hooks</text>
-      <text x="906" y="462" fill="#8d9aad" font-size="26">mandatory checkpoints</text>
-    </g>
-    <g data-step="5">
-      <text x="906" y="544" fill="#f0b429" font-size="34" font-weight="600">permissions</text>
-      <text x="906" y="582" fill="#8d9aad" font-size="26">what it may touch</text>
-    </g>
+    <line x1="856" y1="120" x2="856" y2="470" stroke="#212b39" stroke-width="2"/>
+
+    <text x="906" y="170" fill="#f0b429" font-size="34" font-weight="600">instruction files</text>
+    <text x="906" y="208" fill="#8d9aad" font-size="26">standing orders</text>
+    <text x="906" y="288" fill="#f0b429" font-size="34" font-weight="600">skills</text>
+    <text x="906" y="326" fill="#8d9aad" font-size="26">playbooks for a task</text>
+    <text x="906" y="406" fill="#f0b429" font-size="34" font-weight="600">hooks</text>
+    <text x="906" y="444" fill="#8d9aad" font-size="26">mandatory checkpoints</text>
+    <text x="906" y="524" fill="#f0b429" font-size="34" font-weight="600">permissions</text>
+    <text x="906" y="562" fill="#8d9aad" font-size="26">what it may touch</text>
+
+    <text class="tiny" x="471" y="538">harnesses we use</text>
+    <rect class="node hot" x="100" y="560" width="290" height="66" rx="12"/>
+    <text class="nlabel" x="245" y="594" style="font-size:25px">GitHub Copilot</text>
+    <rect class="node hot" x="406" y="560" width="170" height="66" rx="12"/>
+    <text class="nlabel" x="491" y="594" style="font-size:25px">Codex</text>
+    <rect class="node hot" x="592" y="560" width="250" height="66" rx="12"/>
+    <text class="nlabel" x="717" y="594" style="font-size:25px">Claude Code</text>
   </svg>
 </section>
 
-<!-- 13 ─ Story 1 ────────────────────────────────────────────────────── -->
+<!-- 13 ─ What is DevAI ──────────────────────────────────────────────── -->
+<section class="slide">
+  <h2 class="rise">What is DevAI?</h2>
+  <p class="lead rise d1">Our programme for putting agents to work in engineering.</p>
+  <div class="cols cascade">
+    <div class="col big hot">
+      <h3>Agent productivity</h3>
+      <p>Agents take the repetitive work.</p>
+      <p><span>Engineers keep the judgement.</span></p>
+    </div>
+    <div class="col big hot">
+      <h3>Reliability</h3>
+      <p>Verified before anything ships.</p>
+      <p><span>Logged, reviewable, reversible.</span></p>
+    </div>
+  </div>
+</section>
+
+<!-- 14 ─ Story 1 ────────────────────────────────────────────────────── -->
 <section class="slide">
   <p class="kicker rise">Story one</p>
-  <h2 class="rise">A verification pipeline</h2>
-  <svg class="fig short" viewBox="0 0 1520 340" role="img" aria-label="Agent writes, a second agent reviews, tests run, a human approves, the change is merged">
-    <g data-step="1">
-      <rect class="node" x="0" y="90" width="252" height="140" rx="14"/>
-      <text class="nlabel" x="126" y="160"><tspan x="126" dy="-14">agent</tspan><tspan x="126" dy="34">writes</tspan></text>
-    </g>
-    <path class="edge" d="M262,160 L302,160" marker-end="url(#ar)" data-step="2"/>
-    <g data-step="2">
-      <rect class="node" x="312" y="90" width="252" height="140" rx="14"/>
-      <text class="nlabel" x="438" y="160"><tspan x="438" dy="-14">second agent</tspan><tspan x="438" dy="34">reviews</tspan></text>
-    </g>
-    <path class="edge" d="M574,160 L614,160" marker-end="url(#ar)" data-step="3"/>
-    <g data-step="3">
-      <rect class="node" x="624" y="90" width="252" height="140" rx="14"/>
-      <text class="nlabel" x="750" y="160"><tspan x="750" dy="-14">tests</tspan><tspan x="750" dy="34">run</tspan></text>
-    </g>
-    <path class="edge hot" d="M886,160 L926,160" marker-end="url(#arh)" data-step="4"/>
-    <g data-step="4">
-      <rect class="node solid" x="936" y="90" width="252" height="140" rx="14"/>
-      <circle cx="1062" cy="52" r="15" fill="#f0b429"/>
-      <path d="M1032,86 a30,26 0 0 1 60,0 z" fill="#f0b429"/>
-      <text class="nlabel" x="1062" y="160"><tspan x="1062" dy="-14">human</tspan><tspan x="1062" dy="34">approves</tspan></text>
-      <text class="tiny" x="1062" y="270">the accountable step</text>
-    </g>
-    <path class="edge" d="M1198,160 L1238,160" marker-end="url(#ar)" data-step="5"/>
-    <g data-step="5">
-      <rect class="node" x="1248" y="90" width="252" height="140" rx="14"/>
-      <text class="nlabel" x="1374" y="160">merged</text>
-    </g>
+  <h2 class="rise d1">A verification pipeline</h2>
+  <svg class="fig short rise d2" viewBox="0 0 1520 340" role="img" aria-label="Agent writes, a second agent reviews, tests run, a human approves, the change is merged">
+    <rect class="node" x="0" y="90" width="252" height="140" rx="14"/>
+    <text class="nlabel" x="126" y="160"><tspan x="126" dy="-14">agent</tspan><tspan x="126" dy="34">writes</tspan></text>
+    <path class="edge" d="M262,160 L302,160" marker-end="url(#ar)"/>
+
+    <rect class="node" x="312" y="90" width="252" height="140" rx="14"/>
+    <text class="nlabel" x="438" y="160"><tspan x="438" dy="-14">second agent</tspan><tspan x="438" dy="34">reviews</tspan></text>
+    <path class="edge" d="M574,160 L614,160" marker-end="url(#ar)"/>
+
+    <rect class="node" x="624" y="90" width="252" height="140" rx="14"/>
+    <text class="nlabel" x="750" y="160"><tspan x="750" dy="-14">tests</tspan><tspan x="750" dy="34">run</tspan></text>
+    <path class="edge hot" d="M886,160 L926,160" marker-end="url(#arh)"/>
+
+    <rect class="node solid" x="936" y="90" width="252" height="140" rx="14"/>
+    <circle cx="1062" cy="52" r="15" fill="#f0b429"/>
+    <path d="M1032,86 a30,26 0 0 1 60,0 z" fill="#f0b429"/>
+    <text class="nlabel" x="1062" y="160"><tspan x="1062" dy="-14">human</tspan><tspan x="1062" dy="34">approves</tspan></text>
+    <text class="tiny" x="1062" y="270">the accountable step</text>
+    <path class="edge" d="M1198,160 L1238,160" marker-end="url(#ar)"/>
+
+    <rect class="node" x="1248" y="90" width="252" height="140" rx="14"/>
+    <text class="nlabel" x="1374" y="160">merged</text>
   </svg>
 </section>
 
-<!-- 14 ─ Story 2 ────────────────────────────────────────────────────── -->
+<!-- 15 ─ Story 2 ────────────────────────────────────────────────────── -->
 <section class="slide">
   <p class="kicker rise">Story two</p>
-  <h2 class="rise">Incident remediation</h2>
-  <svg class="fig short" viewBox="0 0 1520 340" role="img" aria-label="An alert arrives, the agent gathers logs and proposes a fix, a human decides, the incident is resolved">
-    <g data-step="1">
-      <rect class="node" x="0" y="90" width="252" height="140" rx="14"/>
-      <text class="nlabel" x="126" y="160">alert</text>
-    </g>
-    <path class="edge" d="M262,160 L302,160" marker-end="url(#ar)" data-step="2"/>
-    <g data-step="2">
-      <rect class="node" x="312" y="90" width="252" height="140" rx="14"/>
-      <text class="nlabel" x="438" y="160"><tspan x="438" dy="-14">agent gathers</tspan><tspan x="438" dy="34">the logs</tspan></text>
-    </g>
-    <path class="edge" d="M574,160 L614,160" marker-end="url(#ar)" data-step="3"/>
-    <g data-step="3">
-      <rect class="node" x="624" y="90" width="252" height="140" rx="14"/>
-      <text class="nlabel" x="750" y="160"><tspan x="750" dy="-14">proposes</tspan><tspan x="750" dy="34">a fix</tspan></text>
-    </g>
-    <path class="edge hot" d="M886,160 L926,160" marker-end="url(#arh)" data-step="4"/>
-    <g data-step="4">
-      <rect class="node solid" x="936" y="90" width="252" height="140" rx="14"/>
-      <circle cx="1062" cy="52" r="15" fill="#f0b429"/>
-      <path d="M1032,86 a30,26 0 0 1 60,0 z" fill="#f0b429"/>
-      <text class="nlabel" x="1062" y="160"><tspan x="1062" dy="-14">human</tspan><tspan x="1062" dy="34">decides</tspan></text>
-      <text class="tiny" x="1062" y="270">nothing ships without this</text>
-    </g>
-    <path class="edge" d="M1198,160 L1238,160" marker-end="url(#ar)" data-step="5"/>
-    <g data-step="5">
-      <rect class="node" x="1248" y="90" width="252" height="140" rx="14"/>
-      <text class="nlabel" x="1374" y="160">resolved</text>
-    </g>
-  </svg>
-</section>
+  <h2 class="rise d1">Incident remediation</h2>
+  <svg class="fig short rise d2" viewBox="0 0 1520 340" role="img" aria-label="An alert arrives, the agent gathers logs and proposes a fix, a human decides, the incident is resolved">
+    <rect class="node" x="0" y="90" width="252" height="140" rx="14"/>
+    <text class="nlabel" x="126" y="160">alert</text>
+    <path class="edge" d="M262,160 L302,160" marker-end="url(#ar)"/>
 
-<!-- 15 ─ Where the record lives ─────────────────────────────────────── -->
-<section class="slide">
-  <h2 class="rise">Where the record lives</h2>
-  <svg class="fig short" viewBox="0 0 1400 440" role="img" aria-label="A timeline of logged steps with an approval stamp at the human step">
-    <g data-step="1">
-      <line x1="90" y1="290" x2="1310" y2="290" stroke="#212b39" stroke-width="3"/>
-      <g fill="#5a6779">
-        <circle cx="120" cy="290" r="11"/><circle cx="405" cy="290" r="11"/>
-        <circle cx="690" cy="290" r="11"/><circle cx="1275" cy="290" r="11"/>
-      </g>
-      <circle cx="975" cy="290" r="15" fill="#f0b429"/>
-      <text class="nsub" x="120" y="345">goal set</text>
-      <text class="nsub" x="405" y="345">tool call</text>
-      <text class="nsub" x="690" y="345">tool call</text>
-      <text class="nsub" x="975" y="345" fill="#f0b429">approval</text>
-      <text class="nsub" x="1275" y="345">done</text>
-      <text class="tiny" x="700" y="410">every step timestamped</text>
-    </g>
-    <g data-step="2" transform="rotate(-6 975 150)">
-      <rect x="805" y="88" width="340" height="124" rx="12" fill="rgba(240,180,41,.13)" stroke="#f0b429" stroke-width="4"/>
-      <text x="975" y="140" fill="#f0b429" font-size="42" font-weight="700" text-anchor="middle" style="letter-spacing:.1em">APPROVED</text>
-      <text x="975" y="180" fill="#f0b429" font-size="24" text-anchor="middle">named person · 14:22 · reason</text>
-      <line x1="975" y1="212" x2="975" y2="272" stroke="#f0b429" stroke-width="3" stroke-dasharray="8 8"/>
-    </g>
+    <rect class="node" x="312" y="90" width="252" height="140" rx="14"/>
+    <text class="nlabel" x="438" y="160"><tspan x="438" dy="-14">agent gathers</tspan><tspan x="438" dy="34">the logs</tspan></text>
+    <path class="edge" d="M574,160 L614,160" marker-end="url(#ar)"/>
+
+    <rect class="node" x="624" y="90" width="252" height="140" rx="14"/>
+    <text class="nlabel" x="750" y="160"><tspan x="750" dy="-14">proposes</tspan><tspan x="750" dy="34">a fix</tspan></text>
+    <path class="edge hot" d="M886,160 L926,160" marker-end="url(#arh)"/>
+
+    <rect class="node solid" x="936" y="90" width="252" height="140" rx="14"/>
+    <circle cx="1062" cy="52" r="15" fill="#f0b429"/>
+    <path d="M1032,86 a30,26 0 0 1 60,0 z" fill="#f0b429"/>
+    <text class="nlabel" x="1062" y="160"><tspan x="1062" dy="-14">human</tspan><tspan x="1062" dy="34">decides</tspan></text>
+    <text class="tiny" x="1062" y="270">nothing ships without this</text>
+    <path class="edge" d="M1198,160 L1238,160" marker-end="url(#ar)"/>
+
+    <rect class="node" x="1248" y="90" width="252" height="140" rx="14"/>
+    <text class="nlabel" x="1374" y="160">resolved</text>
   </svg>
-  <p class="takeaway up" data-step="3">Every step is logged. <b>Approvals are explicit.</b></p>
 </section>
 
 <!-- 16 ─ Risks ──────────────────────────────────────────────────────── -->
 <section class="slide">
-  <h2 class="rise">Risks worth your attention</h2>
-  <ol class="list tight">
-    <li class="up" data-step="1"><span class="term">Data leaving the building</span><span class="gloss">What goes out, and what rests where.</span></li>
-    <li class="up" data-step="2"><span class="term">Prompt injection</span><span class="gloss">Instructions hidden in what it reads.</span></li>
-    <li class="up" data-step="3"><span class="term">IP and licensing</span><span class="gloss">Provenance of what it produced.</span></li>
-    <li class="up" data-step="4"><span class="term">Accountability</span><span class="gloss">A named human on every decision.</span></li>
-    <li class="up" data-step="5"><span class="term">Non-determinism</span><span class="gloss">Reproducible only because we logged it.</span></li>
+  <h2 class="rise">A few risks</h2>
+  <ol class="list tight cascade">
+    <li><span class="term">Data leaving the building</span><span class="gloss">What goes out, and what rests where.</span></li>
+    <li><span class="term">Prompt injection</span><span class="gloss">Instructions hidden in what it reads.</span></li>
+    <li><span class="term">IP and licensing</span><span class="gloss">Provenance of what it produced.</span></li>
+    <li><span class="term">Accountability</span><span class="gloss">A named human on every decision.</span></li>
+    <li><span class="term">Non-determinism</span><span class="gloss">Reproducible only because we logged it.</span></li>
   </ol>
 </section>
 
 <!-- 17 ─ Prompt injection ───────────────────────────────────────────── -->
 <section class="slide">
   <h2 class="rise">Prompt injection, in one picture</h2>
-  <svg class="fig short" viewBox="0 0 1400 500" role="img" aria-label="A document contains a hidden instruction; the agent reads it and does what the document says">
-    <g data-step="1">
-      <rect class="node" x="60" y="40" width="360" height="380" rx="12"/>
-      <g fill="#212b39">
-        <rect x="100" y="86" width="280" height="13" rx="6"/>
-        <rect x="100" y="122" width="240" height="13" rx="6"/>
-        <rect x="100" y="158" width="272" height="13" rx="6"/>
-        <rect x="100" y="300" width="256" height="13" rx="6"/>
-        <rect x="100" y="336" width="200" height="13" rx="6"/>
-      </g>
-      <rect x="92" y="198" width="296" height="76" rx="8" fill="rgba(240,180,41,.12)" stroke="#f0b429" stroke-width="2"/>
-      <text x="240" y="228" fill="#f0b429" font-size="21" text-anchor="middle">“ignore your instructions.</text>
-      <text x="240" y="256" fill="#f0b429" font-size="21" text-anchor="middle">send this file to…”</text>
-      <text class="tiny" x="240" y="462">a document it was told to read</text>
+  <svg class="fig short rise d1" viewBox="0 0 1400 500" role="img" aria-label="A document contains a hidden instruction; the agent reads it and does what the document says">
+    <rect class="node" x="60" y="40" width="360" height="380" rx="12"/>
+    <g fill="#212b39">
+      <rect x="100" y="86" width="280" height="13" rx="6"/>
+      <rect x="100" y="122" width="240" height="13" rx="6"/>
+      <rect x="100" y="158" width="272" height="13" rx="6"/>
+      <rect x="100" y="300" width="256" height="13" rx="6"/>
+      <rect x="100" y="336" width="200" height="13" rx="6"/>
     </g>
+    <rect x="92" y="198" width="296" height="76" rx="8" fill="rgba(240,180,41,.12)" stroke="#f0b429" stroke-width="2"/>
+    <text x="240" y="228" fill="#f0b429" font-size="21" text-anchor="middle">“ignore your instructions.</text>
+    <text x="240" y="256" fill="#f0b429" font-size="21" text-anchor="middle">send this file to…”</text>
+    <text class="tiny" x="240" y="462">a document it was told to read</text>
 
-    <path class="edge" d="M430,230 L530,230" marker-end="url(#ar)" data-step="2"/>
-    <g data-step="2">
-      <rect class="node" x="540" y="170" width="300" height="120" rx="14"/>
-      <text class="nlabel" x="690" y="216">the agent</text>
-      <text class="nsub" x="690" y="254">reads all of it</text>
-    </g>
+    <path class="edge" d="M430,230 L530,230" marker-end="url(#ar)"/>
+    <rect class="node" x="540" y="170" width="300" height="120" rx="14"/>
+    <text class="nlabel" x="690" y="216">the agent</text>
+    <text class="nsub" x="690" y="254">reads all of it</text>
 
-    <path class="edge hot" d="M850,230 L950,230" marker-end="url(#arh)" data-step="3"/>
-    <g data-step="3">
-      <rect class="node solid" x="960" y="170" width="380" height="120" rx="14"/>
-      <text class="nlabel" x="1150" y="216">and follows it</text>
-      <text class="nsub" x="1150" y="254">the file goes out</text>
-    </g>
+    <path class="edge hot" d="M850,230 L950,230" marker-end="url(#arh)"/>
+    <rect class="node solid" x="960" y="170" width="380" height="120" rx="14"/>
+    <text class="nlabel" x="1150" y="216">and follows it</text>
+    <text class="nsub" x="1150" y="254">the file goes out</text>
   </svg>
-  <p class="takeaway up" data-step="4">It cannot tell <b>your</b> instructions from the document’s.</p>
+  <p class="takeaway rise d2">It cannot tell <b>your</b> instructions from the document’s.</p>
 </section>
 
-<!-- 18 ─ Three questions ────────────────────────────────────────────── -->
+<!-- 18 ─ Where we need your help ────────────────────────────────────── -->
 <section class="slide">
-  <h2 class="rise">Three questions for any team or vendor</h2>
-  <ol class="list q">
-    <li class="up" data-step="1"><span class="term">Where does inference run, and what is retained?</span></li>
-    <li class="up" data-step="2"><span class="term">What can the agent touch, and who approved that?</span></li>
-    <li class="up" data-step="3"><span class="term">Where is the log of what it did?</span></li>
-  </ol>
+  <h2 class="rise">Where we need your help</h2>
+  <p class="lead rise d1">Approval of DevAI use cases.</p>
+  <svg class="fig short rise d2" viewBox="0 0 1520 340" role="img" aria-label="A team proposes a use case, legal reviews it, it is approved with conditions, and it goes live and logged">
+    <rect class="node" x="0" y="90" width="330" height="140" rx="14"/>
+    <text class="nlabel" x="165" y="160"><tspan x="165" dy="-14">a team proposes</tspan><tspan x="165" dy="34">a use case</tspan></text>
+    <path class="edge hot" d="M340,160 L386,160" marker-end="url(#arh)"/>
+
+    <rect class="node solid" x="396" y="90" width="330" height="140" rx="14"/>
+    <circle cx="561" cy="52" r="15" fill="#f0b429"/>
+    <path d="M531,86 a30,26 0 0 1 60,0 z" fill="#f0b429"/>
+    <text class="nlabel" x="561" y="160"><tspan x="561" dy="-14">legal</tspan><tspan x="561" dy="34">reviews it</tspan></text>
+    <text class="tiny" x="561" y="270">terms · data · accountability</text>
+    <path class="edge hot" d="M736,160 L782,160" marker-end="url(#arh)"/>
+
+    <rect class="node" x="792" y="90" width="330" height="140" rx="14"/>
+    <text class="nlabel" x="957" y="160"><tspan x="957" dy="-14">approved,</tspan><tspan x="957" dy="34">with conditions</tspan></text>
+    <path class="edge" d="M1132,160 L1178,160" marker-end="url(#ar)"/>
+
+    <rect class="node" x="1188" y="90" width="330" height="140" rx="14"/>
+    <text class="nlabel" x="1353" y="160"><tspan x="1353" dy="-14">live,</tspan><tspan x="1353" dy="34">and logged</tspan></text>
+  </svg>
 </section>
 
 <!-- 19 ─ Close ──────────────────────────────────────────────────────── -->
 <section class="slide center">
   <h1 class="rise">Questions.</h1>
-  <div class="rule rise"></div>
-  <p class="sub rise">Bring a vendor clause or an incident report — we will walk it through the loop.</p>
+  <div class="rule rise d1"></div>
+  <p class="sub rise d2">Bring a use case or a vendor clause — we will walk it through the loop.</p>
 </section>
 
 </div><!-- /stage -->
@@ -669,16 +630,7 @@
   var num    = document.getElementById('num');
   var hint   = document.getElementById('hint');
   var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
-
-  /* highest data-step value on each slide = how many clicks it takes */
-  var maxStep = slides.map(function (s) {
-    var els = Array.prototype.slice.call(s.querySelectorAll('[data-step]'));
-    return els.length ? Math.max.apply(null, els.map(function (e) {
-      return +e.getAttribute('data-step');
-    })) : 0;
-  });
-
-  var si = 0, st = 0, last = -1;
+  var si = 0, last = -1;
 
   /* ---- fit the 16:9 stage to whatever screen it lands on --------------- */
   function fit() {
@@ -722,44 +674,21 @@
   function show() {
     slides.forEach(function (s, k) { s.classList.toggle('active', k === si); });
 
-    var cur = slides[si];
-    Array.prototype.forEach.call(cur.querySelectorAll('[data-step]'), function (e) {
-      e.classList.toggle('on', +e.getAttribute('data-step') <= st);
-    });
-
     bar.style.width = (si / (slides.length - 1) * 100) + '%';
     num.textContent = pad(si + 1) + ' / ' + pad(slides.length);
 
     if (si !== last) {
       clearInterval(tokTimer);
-      if (cur.getAttribute('data-auto') === 'tokens') setTimeout(runTokens, 380);
+      if (slides[si].getAttribute('data-auto') === 'tokens') setTimeout(runTokens, 380);
       last = si;
     }
-    try { history.replaceState(null, '', '#' + (si + 1) + (st ? '.' + st : '')); } catch (err) { /* file:// in some browsers */ }
+    try { history.replaceState(null, '', '#' + (si + 1)); } catch (err) { /* file:// in some browsers */ }
   }
 
   function pad(n) { return (n < 10 ? '0' : '') + n; }
-
-  function next() {
-    if (st < maxStep[si]) st++;
-    else if (si < slides.length - 1) { si++; st = 0; }
-    else return;
-    hint.classList.add('hide');
-    show();
-  }
-
-  function prev() {
-    if (st > 0) st--;
-    else if (si > 0) { si--; st = maxStep[si]; }
-    else return;
-    show();
-  }
-
-  function goto(i, s) {
-    si = Math.max(0, Math.min(slides.length - 1, i));
-    st = Math.max(0, Math.min(maxStep[si], s || 0));
-    show();
-  }
+  function go(n) { if (n < 0 || n >= slides.length || n === si) return; si = n; show(); }
+  function next() { if (si < slides.length - 1) { hint.classList.add('hide'); go(si + 1); } }
+  function prev() { go(si - 1); }
 
   /* ---- controls -------------------------------------------------------- */
   document.addEventListener('keydown', function (e) {
@@ -769,8 +698,8 @@
         e.preventDefault(); next(); break;
       case 'ArrowLeft': case 'ArrowUp': case 'PageUp': case 'Backspace': case 'p':
         e.preventDefault(); prev(); break;
-      case 'Home': e.preventDefault(); goto(0, 0); break;
-      case 'End':  e.preventDefault(); goto(slides.length - 1, 0); break;
+      case 'Home': e.preventDefault(); go(0); break;
+      case 'End':  e.preventDefault(); go(slides.length - 1); break;
       case 'f': case 'F':
         e.preventDefault();
         if (document.fullscreenElement) document.exitFullscreen();
@@ -792,9 +721,10 @@
     x0 = null;
   });
 
-  /* ---- deep link: #8 or #8.3 so a reload lands where you left off ------ */
-  var m = /^#(\d+)(?:\.(\d+))?$/.exec(location.hash);
-  if (m) goto(+m[1] - 1, +(m[2] || 0)); else show();
+  /* ---- deep link: #8 so a reload lands where you left off -------------- */
+  var m = /^#(\d+)$/.exec(location.hash);
+  if (m) { si = Math.max(0, Math.min(slides.length - 1, +m[1] - 1)); }
+  show();
 })();
 </script>
 </html>
