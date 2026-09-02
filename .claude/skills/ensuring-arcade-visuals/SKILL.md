@@ -56,6 +56,7 @@ An ad-hoc `'#ff00ff'` in game code is a visual bug: fix it by finding the neares
 - **Actor floor:** every gameplay-critical entity color must have `contrast(entity, surface) >= 3.0` (the `contrast()` helper is exported from the barrel) against **every static surface it can overlap** — the clear color AND drawn scenery/terrain. A role partition alone provably fails (PICO8 red vs dark-grey is 1.81:1 — "partition-legal" and invisible); compute the ratio.
 - **Ambient prominence band:** ambient particle colors sit **just above the background** — contrast vs the clear color between ~1.8:1 and ~2.5:1, tuned toward the top of the band, at 1–2 px sizes. The engine preset defaults are band-compliant vs a **black** clear color; a brighter background needs `ambientColor` (or `setAmbient(preset, color)`) retuned into the band. The floor is 1.8 because the CRT pass darkens everything — a 1.2:1 dot renders sub-perceptual.
 - **Red-green safety:** a red-vs-green hue difference may never be the ONLY distinction between critical entity classes. Require two of: hue family (prefer blue/orange/yellow pairs), brightness, silhouette. Check: would the entities still be distinguishable in grayscale?
+- **Role-hue contract:** player, pickup, and hazard must come from three different hue families AND use three different silhouettes — never reuse the reference/fixture shapes (arrow-ship, `+`, `x`) across two roles in the same game, and never let two roles share a silhouette even if their palette indices differ. Pickups take the palette's brightest warm accent (PICO8 10/9 territory — yellow/orange); hazards are red-family or read as spiky/jagged regardless of hue (a round friendly-looking hazard fails even if it's red). **Actual-size check:** before committing to a sprite, render it at its actual `px × cell` size in your head (or on scrap paper) — silhouettes must still read as distinct shapes at 6–12 px, the size floor from §3; a design that only reads at preview zoom is too fussy for the arena.
 
 ## 2. Pixel scale — low logical resolution, integer scale-up
 
@@ -139,7 +140,9 @@ const label = 'READY?';
 drawText(pc.ctx, label, W - 4 - textWidth(label, 2), 40, { color: PICO8[7], scale: 2 });
 ```
 
-`TextOptions` are `color`, `scale` (size of each font pixel in logical px), and `spacing` (gap between glyphs in font pixels). Establish hierarchy with scale + palette index: title at scale 2–3 in an accent color, body at scale 1 in white (`PICO8[7]`), hints in grey (`PICO8[6]` / `PICO8[5]`). Whether HUD text is *positioned* safely is **improving-game-quality**'s check.
+`TextOptions` are `color`, `scale` (size of each font pixel in logical px), `spacing` (gap between glyphs in font pixels), `shadow`, and `outline`. Establish hierarchy with scale + palette index: title at scale 2–3 in an accent color, body at scale 1 in white (`PICO8[7]`), hints in grey (`PICO8[6]` / `PICO8[5]`). Whether HUD text is *positioned* safely is **improving-game-quality**'s check.
+
+**Shadow/outline defaults — headline vs HUD.** `drawTextCentered` at `scale >= 2` (titles, GAME OVER, YOU WIN, big prompts) gets a 1-px all-round dark keyline (`outline`) by default, so headline words stay legible over a live, moving scene. `drawScore`/`drawLives`/`hudText` (`ui.ts`) get a 1-px drop shadow by default instead — enough separation for HUD text that sits over a mostly-static ground. Opt out (`{ shadow: false }` / `{ outline: false }`) only when the text already sits on a solid plate or a dimmed background (`drawPanel`/`dimScene`) and the extra ink would look muddy; never opt out of both shadow and outline for text over live gameplay.
 
 ## 5. CRT filter — created once, rendered LAST
 
@@ -160,6 +163,8 @@ function render(): void {
 ```
 
 Tune via `CrtOptions` only if the game demands it (e.g. a very dark game may want `vignetteAlpha` lowered); the defaults are calibrated. The full frame-order rule (clear before preRender, etc.) is owned by **improving-game-quality**.
+
+**The glass is not neutral.** A phosphor lift means pure-black art no longer renders as pure black — the CRT pass adds a faint lit-tube glow on top, so don't chase "true black" by darkening game colors further; the lift is deliberate and part of the calibrated look. `scanlineAlpha` (default 0.18) is a **multiply depth**, not an opacity over black — it scales each row toward its own hue rather than dragging it toward black, so raising it darkens proportionally without banding into hard stripes.
 
 ## 6. Ambient particles — a preset that fits the scene
 
@@ -184,14 +189,17 @@ particles.setAmbient('embers');
 
 Call `particles.update(dt)` in the update tick and `particles.render(pc.ctx)` inside the juice pre/post window (usually first, behind the world). Density is `ambientCount` (default 48) — lower it if the background competes with gameplay. Whether the preset *matches the game world* is re-verified by **improving-game-quality**; impact `burst` tuning also lives there.
 
+**Depth, twinkle, and clustering are defaults now — nothing to opt into.** Every ambient preset builds 2–3 depth layers automatically (far specks dimmer/slower, near ones a touch brighter/faster/bigger, plus a handful of bright sparks for `'stars'`/`'embers'`); each particle twinkles on its own deterministic clock instead of holding a flat alpha; and every preset but `'rain'` clusters into clumps or streams rather than an even sprinkle (an even scatter reads as dirt on the glass, not atmosphere). `ambientColor` (or `setAmbient(preset, color)`) still exists for retuning the whole band to a non-black background — the depth-layer tones are derived from whatever color you pass, so an override keeps the ramp. The far layer is always dimmer than the mid layer, which is dimmer than the near layer — don't hand-tune that ordering per game.
+
 ## Visual pass checklist (look only)
 
 - [ ] Style card comment atop `main.ts`; differs from the reference game AND every other game in `workspace/` per the divergence rule (§0).
 - [ ] One named palette (`PICO8` / `GAMEBOY` / `DUSK` / `NEON` / `SUNSET` / `OCEAN`); zero ad-hoc hex strings in `game/`.
 - [ ] Every gameplay-critical entity color clears `contrast() >= 3.0` vs the clear color and any scenery it overlaps; ambient color in the 1.8–2.5:1 band; entities distinguishable in grayscale (§1b).
+- [ ] Player, pickup, hazard use three different hue families AND three different silhouettes (never the reference/fixture shapes reused across roles); pickup is the palette's brightest warm accent; hazard is red-family or spiky (§1b role-hue contract).
 - [ ] Logical resolution low (reference: 240×160, scale 3); all drawing in logical units.
-- [ ] Sprites are `makeSprite` ASCII art, distinct silhouettes + colors per entity type; size floors met (player ≥ H/16, other critical entities ≥ H/26) and hitboxes within ~1 px of rendered size (§3).
-- [ ] All text via `drawText` / `drawTextCentered`; hierarchy from `scale` + palette index.
+- [ ] Sprites are `makeSprite` ASCII art, distinct silhouettes + colors per entity type; size floors met (player ≥ H/16, other critical entities ≥ H/26) and hitboxes within ~1 px of rendered size (§3); silhouettes checked at their actual rendered px size, not preview zoom.
+- [ ] All text via `drawText` / `drawTextCentered`; hierarchy from `scale` + palette index; headline text keeps the default outline at scale >= 2, HUD text the default shadow, unless already on a plate/dimmed background (§4).
 - [ ] `crt.render` is the last call of every frame, after `juice.postRender`.
 - [ ] Ambient preset fits the fiction; bursts use the game's own palette colors, never the engine default.
 - [ ] `cd workspace/<game-name> && npm run check` passes.
