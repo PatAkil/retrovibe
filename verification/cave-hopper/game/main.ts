@@ -280,7 +280,7 @@ function loseLife(): void {
     count: 10, color: PAL[4], speed: 140,
   });
   juice.shake(5, 0.45);
-  juice.flash(PAL[4], 0.35);
+  juice.flash(PAL[4], 0.35, { x: player.x + player.w / 2, y: player.y + player.h / 2 });
   juice.hitStop(0.15);
   lives -= 1;
   dying = true; // resolved when the hit-stop expires: respawn or GAME_OVER

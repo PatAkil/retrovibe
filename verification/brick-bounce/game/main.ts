@@ -214,7 +214,7 @@ function loseBall(): void {
   particles.burst(bx, by, { count: 16, color: PAL[12], speed: 160 });
   particles.burst(bx, by, { count: 6, color: PAL[7], speed: 90 });
   juice.shake(5, 0.45);
-  juice.flash(PAL[8], 0.35); // saturated accent, never white: a white flash bleaches the frame
+  juice.flash(PAL[8], 0.35, { x: bx, y: by }); // saturated accent, never white; radial from the clamped miss point
   juice.hitStop(0.15);
   lives -= 1;
   dying = true;

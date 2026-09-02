@@ -114,7 +114,7 @@ Pair it with a burst (item 4) and a brief flash-twin of the player sprite (a sam
 
 ## 5. Shake on impactful events — and the render ORDER rule
 
-**Check:** Player damage/death shakes the screen; the biggest moments also flash and hit-stop — all above the floors: **shake ≥ 4–6 px amplitude for ≥ 0.4 s on major events (death/explosion); give the death flash ≥ 0.3 s so its held peak (the first 12 % of the duration) covers the hit-stop and the fall is still visible on the tableau; the hit-stop's frozen tableau is actually rendered** (≥1 frame of frozen world visible before the terminal screen — see the death-flow pattern below). Apply the arm's-length test: a death must be unmissable without looking for it. Then check the frame order in `render()` — the single most common juice bug is clearing inside the shake transform, which smears stale pixels along the canvas edges.
+**Check:** Player damage/death shakes the screen; the biggest moments also flash and hit-stop — all above the floors: **shake ≥ 4–6 px amplitude for ≥ 0.4 s on major events (death/explosion); give the death flash ≥ 0.3 s so its held peak (the first 12 % of the duration) covers the hit-stop and the fall is still visible on the tableau, and pass the death point as the flash origin (`juice.flash(color, 0.35, {x, y})`) so it radiates from the impact instead of washing the whole viewport to one hue; the hit-stop's frozen tableau is actually rendered** (≥1 frame of frozen world visible before the terminal screen — see the death-flow pattern below). Apply the arm's-length test: a death must be unmissable without looking for it. Then check the frame order in `render()` — the single most common juice bug is clearing inside the shake transform, which smears stale pixels along the canvas edges.
 
 **Death feedback must scale with significance, not just event type.** A death after 10 seconds and a death after 2 minutes of a good run should not feel identical — bigger runs deserve a bigger send-off. Derive a `0..1` magnitude from something the player earned (score, distance, combo) and scale shake/burst/flash off it, on top of the escalation-by-event-type below:
 
@@ -142,8 +142,13 @@ if (dying) {
 juice.shake(2, 0.2);            // solid hit
 // biggest events — death, boss kill — add:
 juice.shake(5, 0.45);           // >= 4-6 px, >= 0.4 s
-juice.flash(PICO8[8], 0.35);    // full-screen flash in a SATURATED palette accent — never white or
-                                //   near-white: a white flash bleaches the whole tableau
+juice.flash(PICO8[8], 0.35, { x: ship.x + ship.w / 2, y: ship.y + ship.h / 2 });
+                                // flash in a SATURATED palette accent — never white or near-white:
+                                //   a white flash bleaches the whole tableau. The third arg is the
+                                //   DEATH POINT (logical px): the flash radiates from there, so the
+                                //   impact glows with the burst readable inside it while the HUD and
+                                //   the far side of the frame keep their own colours. Omit it (WIN,
+                                //   pickups) and the flash is the uniform full-screen overlay.
 juice.hitStop(0.15);            // freeze-frame emphasis
 ```
 
@@ -151,7 +156,7 @@ juice.hitStop(0.15);            // freeze-frame emphasis
 
 ```ts
 // on hazard contact: effects + a flag, NOT scenes.to
-juice.shake(5, 0.45); juice.flash(PICO8[8], 0.35); juice.hitStop(0.15);
+juice.shake(5, 0.45); juice.flash(PICO8[8], 0.35, { x: ship.x + ship.w / 2, y: ship.y + ship.h / 2 }); juice.hitStop(0.15);
 dying = true;
 // at the top of the PLAYING branch, before the pause/freeze checks:
 if (dying) {
@@ -173,7 +178,7 @@ function render(): void {
   pc.clear(PICO8[0]);               // 1. clear FIRST, un-shaken
   juice.preRender(pc.ctx);          // 2. shake transform on (save)
   // ...everything in the world...
-  juice.postRender(pc.ctx, W, H);   // 3. restore + flash overlay
+  juice.postRender(pc.ctx, W, H);   // 3. restore + flash overlay (radial when an origin was given)
   crt.render(pc.ctx, W, H, 1 / 60); // 4. CRT — last, always
 }
 ```

@@ -226,7 +226,9 @@ function update(dt: number): void {
         particles.burst(ship.x + ship.w / 2, ship.y + ship.h / 2,
           { count: 6, color: PICO8[7], speed: 70, life: 0.45 }); // white-hot core
         juice.shake(5 + mag * 3, 0.45 + mag * 0.15);
-        juice.flash(PICO8[8], 0.35);
+        // Radial flash from the ship: the impact point glows, the HUD and the
+        // far side of the frame keep their own colours.
+        juice.flash(PICO8[8], 0.35, { x: ship.x + ship.w / 2, y: ship.y + ship.h / 2 });
         juice.hitStop(0.15); // the tableau renders for its whole duration
         dying = true;
       }

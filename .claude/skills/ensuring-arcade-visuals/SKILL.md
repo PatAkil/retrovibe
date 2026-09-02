@@ -218,7 +218,7 @@ function render(): void {
   pc.clear(PICO8[0]);              // 1. clear (un-shaken)
   juice.preRender(pc.ctx);         // 2. shake transform on
   // ...world, sprites, text, HUD...
-  juice.postRender(pc.ctx, W, H);  // 3. shake off + flash overlay
+  juice.postRender(pc.ctx, W, H);  // 3. shake off + flash overlay (radial from the death point when flash() got an origin)
   crt.render(pc.ctx, W, H, 1 / 60); // 4. CRT — ALWAYS the last call
 }
 ```

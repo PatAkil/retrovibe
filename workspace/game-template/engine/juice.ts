@@ -2,10 +2,14 @@
 //
 // Magnitude floors (feedback must be unmissable — see improving-game-quality):
 //   shake: major events (death/explosion) >= 4-6 px amplitude, >= 0.4 s
-//   flash: hold-then-fall, not a plain fade — the overlay sits at its 0.55 peak
+//   flash: hold-then-fall, not a plain fade — the overlay sits at its peak
 //     (never a full-opacity wash) for the first 12 % of the duration so the
 //     death instant reads as a strike, then falls on a quadratic ease-out over
-//     the remaining 80 %. Give it >= 0.3 s so the hold covers the hit-stop.
+//     the remaining 88 %. Give it >= 0.3 s so the hold covers the hit-stop.
+//     Pass an ORIGIN (logical px) on a death flash and the overlay becomes a
+//     RADIAL burst centred there — full colour at the impact point, clear at
+//     the frame edges — so the HUD, the far background and the opposite side
+//     of the frame keep their own colours instead of being washed to one hue.
 //   hit-stop: the frozen tableau must actually RENDER — stay in PLAYING while
 //     frozen (~0.15 s, burst/shake/flash visible over the frozen world) and
 //     transition to GAME_OVER only when the hit-stop expires. Transitioning in
@@ -26,8 +30,15 @@
 export interface Juice {
   /** Shake for `duration` s at pixel amplitude `intensity`. Strongest wins. */
   shake(intensity: number, duration: number): void;
-  /** Full-screen colour flash fading over `duration` s. */
-  flash(color: string, duration: number): void;
+  /**
+   * Colour flash fading over `duration` s.
+   * Without `origin`, a uniform full-screen overlay (peak 0.55).
+   * With `origin` (LOGICAL px, the space the world draws in), a radial burst
+   * centred there: peak 0.75 at the centre, transparent by RADIUS_SCALE x the
+   * larger frame dimension. The gradient is cached and rebuilt only when the
+   * origin, colour or frame size changes — no per-frame allocation.
+   */
+  flash(color: string, duration: number, origin?: { x: number; y: number }): void;
   /** Freeze the simulation for `duration` s (impact emphasis). */
   hitStop(duration: number): void;
   /** True while a hit-stop is active — skip world simulation when set. */
@@ -35,6 +46,26 @@ export interface Juice {
   update(dt: number): void;
   preRender(ctx: CanvasRenderingContext2D): void;
   postRender(ctx: CanvasRenderingContext2D, width: number, height: number): void;
+}
+
+// Flash overlay constants. The uniform peak is deliberately low (it covers the
+// whole frame); the radial peak can be higher because only the impact point
+// reaches it and the edges stay clear.
+const PEAK_UNIFORM = 0.55;
+const RADIAL_PEAK = 0.75;
+/** Radial flash reaches full transparency at this x the larger frame dimension. */
+const RADIUS_SCALE = 0.55;
+
+/** '#RRGGBB' -> 'rgba(r,g,b,a)'; setup-time only (gradient build), never per frame. */
+function withAlpha(color: string, alpha: number): string {
+  const hex = color.trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(hex)) {
+    const n = parseInt(hex.slice(1), 16);
+    return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
+  }
+  // Non-hex colours (rgb()/named): fall back to a transparent-black stop, which
+  // still fades out cleanly on every ground the palettes use.
+  return `rgba(0,0,0,${alpha === 0 ? 0 : alpha * 0})`;
 }
 
 export function createJuice(): Juice {
@@ -45,6 +76,13 @@ export function createJuice(): Juice {
   let flashColor = '#FFFFFF';
   let flashTime = 0;
   let flashDur = 0;
+  let flashX = 0;
+  let flashY = 0;
+  let flashRadial = false;
+
+  // Cached radial gradient — rebuilt only when origin/colour/frame size change.
+  let grad: CanvasGradient | null = null;
+  let gradKey = '';
 
   let freezeTime = 0;
 
@@ -57,10 +95,15 @@ export function createJuice(): Juice {
         shakeDur = duration;
       }
     },
-    flash(color, duration) {
+    flash(color, duration, origin) {
       flashColor = color;
       flashTime = duration;
       flashDur = duration;
+      flashRadial = !!origin;
+      if (origin) {
+        flashX = origin.x;
+        flashY = origin.y;
+      }
     },
     hitStop(duration) {
       freezeTime = Math.max(freezeTime, duration);
@@ -99,7 +142,7 @@ export function createJuice(): Juice {
         // well before GAME_OVER. Peak capped below full opacity so the
         // burst/shake/frozen tableau stays visible through the flash
         // instead of being washed out by it.
-        const PEAK = 0.55;
+        const PEAK = flashRadial ? RADIAL_PEAK : PEAK_UNIFORM;
         const HOLD = 0.12; // fraction of duration held at full peak before falling (a 2-3 frame strike at 0.35 s; ~0.27 alpha by the last hit-stop frame so the tableau reads through it)
         let shape;
         if (t > 1 - HOLD) {
@@ -109,7 +152,27 @@ export function createJuice(): Juice {
           shape = u * u;
         }
         ctx.globalAlpha = PEAK * shape;
-        ctx.fillStyle = flashColor;
+        if (flashRadial) {
+          // Radial burst from the impact point. postRender runs after
+          // ctx.restore(), so the origin is un-shaken logical space — correct:
+          // the tableau under it shakes, the flash is the screen itself.
+          const radius = RADIUS_SCALE * Math.max(width, height);
+          const key = flashColor + '|' + flashX + '|' + flashY + '|' + width + '|' + height;
+          if (key !== gradKey || grad === null) {
+            const g = ctx.createRadialGradient(flashX, flashY, 0, flashX, flashY, radius);
+            g.addColorStop(0, flashColor);
+            // Front-loaded midpoints keep a bright core with a fast falloff, so
+            // the far side of the frame is untinted rather than half-washed.
+            g.addColorStop(0.14, withAlpha(flashColor, 0.8));
+            g.addColorStop(0.42, withAlpha(flashColor, 0.24));
+            g.addColorStop(1, withAlpha(flashColor, 0));
+            grad = g;
+            gradKey = key;
+          }
+          ctx.fillStyle = grad;
+        } else {
+          ctx.fillStyle = flashColor;
+        }
         ctx.fillRect(0, 0, width, height);
         ctx.globalAlpha = 1;
       }
