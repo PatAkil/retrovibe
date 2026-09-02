@@ -7,10 +7,12 @@
 //                                                  verification/baseline/ (the approved look)
 //   node verification/capture.mjs --game <dir>     capture ONE arbitrary game folder (e.g. a
 //                                                  freshly generated workspace/<name>) with a
-//                                                  generic input script — title / play / paused
-//                                                  frames only, no baseline. For judging a change
-//                                                  to generator GUIDANCE (a skill), where the
-//                                                  fixtures cannot see the effect.
+//                                                  generic input script — shell / title / play /
+//                                                  paused always, plus best-effort score / impact
+//                                                  (flash detected by a brightness jump) / end if
+//                                                  the sweep reaches them; no baseline. For
+//                                                  judging a change to generator GUIDANCE (a
+//                                                  skill), where the fixtures cannot see it.
 //
 // What one fixture run does, per fixture under verification/<name>/:
 //   1. Replaces the fixture's engine/ with a fresh copy of
@@ -71,6 +73,20 @@ const RING = 16; // frames of history kept for the impact (death tableau) shot
 const hold = (key, from, to) => [{ at: from, key, type: 'down' }, { at: to, key, type: 'up' }];
 const tap = (key, at) => hold(key, at, at + 3);
 const every = (key, from, to, step) => { const out = []; for (let f = from; f <= to; f += step) out.push(...tap(key, f)); return out; };
+// Lawnmower sweep: full-width passes alternating right/left, stepping down a
+// little between them, pressing A once per pass — covers a 240x160 arena at
+// the template's 90 px/s in ~16 passes (~42 s), meeting whatever is there.
+const lawnmower = (from, passes) => {
+  const out = [];
+  let f = from;
+  for (let i = 0; i < passes; i++) {
+    out.push(...hold(i % 2 ? 'ArrowLeft' : 'ArrowRight', f, f + 150), ...tap('Space', f + 40));
+    f += 150;
+    out.push(...hold(i < passes / 2 ? 'ArrowDown' : 'ArrowUp', f, f + 8));
+    f += 8;
+  }
+  return out;
+};
 
 const FIXTURES = {
   'space-dodge': {
@@ -153,7 +169,11 @@ const FIXTURES = {
 const FIXTURE_NAMES = Object.keys(FIXTURES).sort();
 const MOMENTS = ['shell', 'title', 'play', 'score', 'paused', 'impact', 'end', 'win'];
 
-// Generic script for --game: enough to see a title, a moving frame and pause.
+// Generic script for --game: a title, a moving frame, a pause, then a long
+// sweep of the arena. The sweep is BEST EFFORT: the first scoreChanged gives
+// `score`; a sudden jump in frame brightness (a flash) gives `impact` 4 frames
+// later; a terminal scene gives `end` — whichever of those the unknown game
+// happens to reach. Absent moments are simply not written.
 const GENERIC_RUN = {
   fixed: { title: 40, play: 150, paused: 190 },
   shell: 40,
@@ -162,10 +182,13 @@ const GENERIC_RUN = {
     ...hold('ArrowRight', 70, 130),
     ...hold('ArrowUp', 100, 150),
     ...tap('KeyP', 180),
+    ...tap('KeyP', 210),
+    ...lawnmower(220, 16),
   ],
   expects: [],
   terminal: null,
-  stopAt: 200,
+  sweepFrom: 220,
+  stopAt: 2800,
 };
 
 // --- Virtual clock + seeded RNG + audio stub, installed before any page script --
@@ -225,9 +248,25 @@ const INIT_SCRIPT = `(() => {
     let scoreAt = -1;
     let endAt = -1;
     let winAt = -1;
+    let impactAt = -1;
     let stopAt = run.stopAt || -1;
     let terminal = null;
     let frames = 0;
+    // Brightness sweep (generic --game runs only): a 1/10-scale copy is cheap
+    // to read back; a jump in mean luminance marks a full-screen flash.
+    const sweepFrom = run.sweepFrom || -1;
+    const probe = document.createElement('canvas');
+    probe.width = Math.max(1, Math.floor(canvas.width / 10));
+    probe.height = Math.max(1, Math.floor(canvas.height / 10));
+    const pctx = probe.getContext('2d', { willReadFrequently: true });
+    let prevLum = -1;
+    const meanLum = () => {
+      pctx.drawImage(canvas, 0, 0, probe.width, probe.height);
+      const d = pctx.getImageData(0, 0, probe.width, probe.height).data;
+      let sum = 0;
+      for (let i = 0; i < d.length; i += 4) sum += 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+      return sum / (d.length / 4) / 255;
+    };
     for (let frame = 1; frame <= maxFrames; frame++) {
       while (ei < events.length && events[ei].at === frame) {
         const ev = events[ei++];
@@ -255,6 +294,12 @@ const INIT_SCRIPT = `(() => {
           }
         }
       }
+      if (sweepFrom > 0 && frame >= sweepFrom && !shots.impact && impactAt < 0) {
+        const lum = meanLum();
+        if (prevLum >= 0 && lum - prevLum > 0.12) impactAt = frame + 4;
+        prevLum = lum;
+      }
+      if (frame === impactAt && !shots.impact) shots.impact = canvas.toDataURL('image/png');
       if (frame === scoreAt) shots.score = canvas.toDataURL('image/png');
       if (frame === endAt) { shots.end = canvas.toDataURL('image/png'); break; }
       if (frame === winAt) { shots.win = canvas.toDataURL('image/png'); break; }
