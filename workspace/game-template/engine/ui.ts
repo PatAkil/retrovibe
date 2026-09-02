@@ -72,11 +72,27 @@ export function drawPanel(
 /**
  * Darken the whole frame — for GAME_OVER / WIN / PAUSED screens that keep the
  * world visible behind the message. Call it after the world, before the text.
+ *
+ * The fill is OVERSIZED by DIM_BLEED logical px on every side. dimScene is
+ * normally called between juice.preRender/postRender, i.e. inside the shake
+ * translate: a death shake displaces the whole frame by several px, and an
+ * exactly-sized (0,0,W,H) rect would leave an undimmed strip of world along the
+ * leading edges for the length of the shake. Bleeding past the viewport costs
+ * nothing (it clips) and keeps the darkening edge-to-edge at any shake
+ * amplitude the engine can produce.
  */
 export function dimScene(pc: PixelCanvas, alpha = 0.55): void {
   pc.ctx.fillStyle = `rgba(0,0,0,${Math.max(0, Math.min(1, alpha))})`;
-  pc.ctx.fillRect(0, 0, pc.width, pc.height);
+  pc.ctx.fillRect(
+    -DIM_BLEED,
+    -DIM_BLEED,
+    pc.width + 2 * DIM_BLEED,
+    pc.height + 2 * DIM_BLEED,
+  );
 }
+
+/** Overscan for dimScene, in logical px — covers the largest sane screen shake. */
+const DIM_BLEED = 16;
 
 /** Score, anchored inside the top-left safe corner. */
 export function drawScore(pc: PixelCanvas, score: number, opts: HudOptions = {}): void {
