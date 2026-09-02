@@ -5,6 +5,8 @@ description: Use when the user asks for an easter egg, a secret, a cheat code, o
 
 # Adding an easter egg
 
+**Editing this skill's palette-swap guidance or `swapPalette`/`PALETTES` in the engine changes how every future game can look — run **verifying-graphics** before calling such an edit done.** This skill itself is for one game's secret.
+
 Easter eggs combine two engine features: **palette swaps** (`engine/palette.ts`) and the **input module** (`engine/input.ts`). Import only from the barrel (`'../engine'`). Reference game: `workspace/game-template/game/main.ts`. After every edit: `cd workspace/<game-name> && npm run check`.
 
 ## Palette swaps

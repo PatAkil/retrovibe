@@ -1,14 +1,19 @@
 // VERIFICATION FIXTURE — brick-bounce. FROZEN: edit only under the fixture rule
 // in the verifying-graphics skill. Measures what the other fixtures cannot:
-// a small FAST-MOVING actor (the ball) over a NAVY, non-black background —
-// the case where scanlines and vignette are most visible — a dense grid of
-// same-shape targets told apart by color alone, 'bubbles' ambient, frequent
-// minor impacts (bricks) beside a major one (lost ball), and a WIN on clear.
+// a small FAST-MOVING actor (the ball) over a MID-NAVY ground (OCEAN[1], not
+// the near-black OCEAN[0]) — the large mid-luminance field where scanline
+// banding and vignette crush actually show — a dense grid of same-shape
+// targets told apart by color alone, 'bubbles' ambient, frequent minor impacts
+// (bricks) beside a major one (lost ball), and a WIN on clear.
 //
-// STYLE CARD: palette OCEAN — bg 0, bricks 3/4/5/6 by row, paddle + ball 7 (foam:
-// the player's pair shares the one color no brick row uses)
-// · ambient 'bubbles' · silhouettes: flat bar / square ball / brick slabs ·
-// juice: cyan lost-ball flash, brick-colored chip bursts, tiny paddle shake.
+// STYLE CARD: palette OCEAN — bg 1 (mid navy), bricks 3/4/5/6 by row, paddle +
+// ball 7 (foam: the player's pair shares the one color no brick row uses) ·
+// ambient 'bubbles' · silhouettes: flat bar / square ball / brick slabs ·
+// juice: white lost-ball flash, brick-colored chip bursts, tiny paddle shake.
+// Contrast note: bricks are TARGETS consumed on contact, not static surfaces
+// the ball rests on, so the 3:1 actor-vs-surface floor applies to ball/paddle
+// vs the ground (foam vs OCEAN[1] ≈ 14:1) and bricks vs the ground (≥ 3:1),
+// not ball vs brick.
 
 import {
   createPixelCanvas,
@@ -146,7 +151,7 @@ function loseBall(): void {
   audio.play('explosion');
   particles.burst(ball.x + ball.w / 2, H - 4, { count: 10, color: PAL[4], speed: 140 });
   juice.shake(5, 0.45);
-  juice.flash(PAL[4], 0.35);
+  juice.flash(PAL[7], 0.35);
   juice.hitStop(0.15);
   lives -= 1;
   dying = true;
@@ -281,7 +286,7 @@ function drawWorld(): void {
 }
 
 function render(): void {
-  pc.clear(PAL[0]);
+  pc.clear(PAL[1]);
   juice.preRender(pc.ctx);
   particles.render(pc.ctx);
 

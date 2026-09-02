@@ -50,8 +50,9 @@ retrovibe/
   Restore: `git checkout -- workspace/game-template && git clean -fd workspace/game-template`.
 - **No commits during the create/iterate loop.** Git is touched only at
   deletion moments — resetting-the-workspace's safety commit and
-  creating-a-game's overwrite branch — or on an explicit "commit/save my
-  game" request. Every commit is pathspec-scoped
+  creating-a-game's overwrite branch — on an explicit "commit/save my
+  game" request, or when a verification baseline is accepted
+  (verifying-graphics step 6, pathspec-scoped to `verification/baseline`). Every commit is pathspec-scoped
   (`git add workspace/<name> && git commit ... -- workspace/<name>`), never
   `git add -A`; deleted games stay recoverable via the reported
   `git checkout <hash> -- workspace/<name>`.

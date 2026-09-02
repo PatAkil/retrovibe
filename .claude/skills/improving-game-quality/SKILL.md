@@ -5,6 +5,8 @@ description: Use when a game is about to be handed off to the user, after substa
 
 # Improving game quality
 
+**Editing this skill's visual items (margins, contrast, particles, feedback sizing) or the engine changes how every future game looks — run **verifying-graphics** before calling such an edit done.** This skill itself is for one game's quality pass.
+
 This skill owns the **only** quality checklist in the repo — **creating-a-game** and **iterating-on-a-game** defer here instead of carrying their own. Scope is *feel & correctness*; pure look (palette, pixel scale, sprite art, CRT) belongs to **ensuring-arcade-visuals** — the scopes are disjoint by design, but margins/readability live **here**, not there.
 
 Work through every item below. Each has a *check* (how to detect the problem by reading `game/main.ts` and playing) and a *fix* (the engine primitive to use). All imports come from `'../engine'`; the reference implementation is `workspace/game-template/game/main.ts`. After every fix: `cd workspace/<game-name> && npm run check`.

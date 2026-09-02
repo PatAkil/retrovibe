@@ -19,15 +19,19 @@ verification/
 ├── space-dodge/       # fixture: PICO8 on black, 'stars', 3 hue-separated actors,
 │                      #   red death flash — the reference-game archetype
 ├── cave-hopper/       # fixture: platformer on STATIC SURFACES, SUNSET, 'embers',
-│                      #   lives HUD, minor landing puff vs major death, WIN flag
-└── brick-bounce/      # fixture: fast small ball on a NAVY ground (where scanlines/
-                       #   vignette show most), OCEAN, 'bubbles', color-only targets
+│                      #   lives HUD, minor landing puff vs major death, a scripted
+│                      #   WIN run to the flag
+└── brick-bounce/      # fixture: fast small ball on a MID-NAVY ground (OCEAN[1] — the
+                       #   large mid-luminance field where scanline banding and
+                       #   vignette crush show), 'bubbles', color-only targets
 ```
 
 - Each fixture is a clone of the template (`game/`, `index.html`, `smoke.mjs`, configs) **without a committed `engine/`**: `capture.mjs` deletes and re-copies `workspace/game-template/engine` into every fixture before each run, so a fixture can never test a stale engine. The copies are gitignored.
 - **Fixtures are frozen.** Their `game/main.ts` changes only when a new engine feature must be demonstrated to be measurable — with the user's explicit OK — and the corresponding input script in `capture.mjs` is updated in the same change. A fixture that stops producing one of its promised moments fails the run.
-- The driver runs each fixture in headless Chromium under a **virtual clock** (rAF and `performance.now` replaced, one exact 1/60 s step per frame) with **seeded `Math.random`**, dispatches the fixture's scripted key events, and grabs the canvas at these **moments**: `title`, `play` (in motion), `paused` (fixed frames); `score` (first `scoreChanged`), `impact` (last frozen death-tableau frame: burst + shake + flash), `end` (terminal scene) — detected from the runtime's `[retrovibe]` console messages, so they survive timing drift.
+- The driver runs each fixture in headless Chromium under a **virtual clock** (rAF and `performance.now` replaced, one exact 1/60 s step per frame), with **seeded `Math.random`** and a **stubbed AudioContext** (so the engine's noise synth never consumes seeded draws), dispatches each scripted **run**'s key events, and grabs the canvas at these **moments**: `title`, `play` (in motion), `paused` (fixed frames); `score` (2 frames after the first `scoreChanged`), `impact` (the last frozen death-tableau frame before `GAME_OVER`: burst + shake + flash), `end` (30 frames after `GAME_OVER`, flash faded), `win` (30 frames after `WIN`, cave-hopper's second run) — the semantic ones detected from the runtime's `[retrovibe]` console messages; plus `shell`, a real page screenshot of the title with the arcade cabinet around the canvas (the only moment that sees `index.html`). A run that ends in a terminal scene other than the one its script expects fails.
 - Two runs of the same tree produce identical frames (0.00 % changed on every moment). That is the instrument's self-check: a non-zero diff with no code change means something in the engine became non-deterministic (unseeded randomness, wall-clock reads) — report it, do not accept.
+- **What the instrument cannot see:** anything not driven by `requestAnimationFrame` (timers and promises never fire inside a run); mid-shake frames other than the ones captured; respawn frames; reduced-motion modes; and — most importantly — **the choices a future game-writer makes from guidance**. The fixtures have hard-coded style cards, so an edit to a skill's *advice* leaves all frames byte-identical. Guidance changes are verified differently: see "Verifying a guidance change" below.
+- The orchestrating session runs the loop itself (it is judgement work, not lifecycle command-following); `lifecycle-runner` never touches `verification/`.
 
 ## The loop
 
@@ -35,7 +39,7 @@ Run it from the repo root. Never run the template in place; the fixtures are the
 
 ### 1. Trigger
 
-Any of: a diff under `workspace/game-template/` (engine, `game/main.ts`, `index.html`); an edit to `ensuring-arcade-visuals`, or to the visual items of `improving-game-quality`; a change to `verification/` itself. If none applies, this skill does not run.
+Any of: a diff under `workspace/game-template/` (engine, `game/main.ts`, `index.html`); an edit to `ensuring-arcade-visuals`, to the visual items of `improving-game-quality`, or to `adding-easter-egg`'s palette-swap guidance; a change to `verification/` itself. If none applies, this skill does not run. Engine and template diffs take the fixture loop (steps 2–7); skill-text diffs take "Verifying a guidance change" (below) — a skill edit that also touches the engine takes both.
 
 ### 2. Refresh the engine copies, then run the functional gates
 
@@ -103,7 +107,7 @@ node verification/capture.mjs --accept
 git add verification/baseline && git commit -m "verification: accept new baseline — <what changed and why>" -- verification/baseline
 ```
 
-Accepting rewrites the approved look; it is part of the same change, committed alongside it. A baseline is ~2.6 MB, so accept deliberately, once per approved change — not per iteration.
+`--accept` refuses to promote a capture that failed, and removes baseline frames the capture no longer produces. Accepting rewrites the approved look; it is part of the same change, committed alongside it. A baseline is a few MB (identical frames dedupe as git blobs), so accept deliberately, once per approved change — not per iteration.
 
 ### 7. Cleanup
 
@@ -112,6 +116,19 @@ lsof -ti:5301,5302,5303 | xargs -r kill
 ```
 
 `verification/out/` and the fixture `engine/` copies are gitignored; leave them.
+
+## Verifying a guidance change
+
+When the diff is to a *skill* (what future game-writers are told to do), the fixtures show nothing. Verify by generating, then looking:
+
+1. Pick the fixed prompt set below and create each game with **creating-a-game** exactly as a user would (clone, develop with the edited guidance in force, gates green). Keep them small; they are throwaway. Do not commit them.
+   - "A top-down space game: move a ship, collect crystals, dodge a drifting mine; touching the mine ends the run."
+   - "A one-screen platformer in a cave: jump between ledges over spikes, grab three gems, reach the exit door."
+   - "A breakout game under water: paddle, ball, a wall of shells to clear; three balls then game over."
+2. Capture each: `node verification/capture.mjs --game workspace/<name>` writes `verification/out/game-<name>-{shell,title,play,paused}.png` with a generic input script (start, move, pause). There is no baseline; the frames are judged in absolute terms.
+3. View every frame at full size and score R1–R7 per game, in words, with regions. The three fixtures are the bar: a generated game that reads worse than its fixture counterpart on any criterion is evidence the guidance regressed.
+4. For a before/after, generate the same prompts on the base branch (`git stash` or a worktree) and compare — generation varies run to run, so judge the *pattern* across the three games, not one frame.
+5. Report as in step 5; delete the throwaway games afterwards (`rm -rf workspace/<name>` — never the template, never the fixtures).
 
 ## Reviewing at scale — blind and adversarial passes
 
@@ -130,7 +147,8 @@ Only when an existing fixture cannot exercise something the generator now does (
 
 - [ ] Trigger applies (template/engine, visual skill, or `verification/` changed).
 - [ ] Engine copies refreshed, then functional gates green on all three fixtures.
-- [ ] Capture ran with exit 0 (all promised moments produced).
+- [ ] Capture ran with exit 0 (all promised moments produced, runs ended in the expected scene, no MISSING rows).
+- [ ] For a guidance (skill) change: three prompt-set games generated, captured with `--game`, and judged.
 - [ ] Diff table read mechanically: invisible-by-default → all 0.00 % | 0.00 %; targeted change → non-zero where intended; global default → high "any", judged by eye.
 - [ ] `compare.png` AND the full-size changed frames were viewed in this session.
 - [ ] Per-criterion (R1–R8), per-fixture verdicts written; regressions named with a region.
