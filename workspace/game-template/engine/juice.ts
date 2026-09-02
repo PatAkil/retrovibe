@@ -90,7 +90,7 @@ export function createJuice(): Juice {
         // burst/shake/frozen tableau stays visible through the flash
         // instead of being washed out by it.
         const PEAK = 0.65;
-        const HOLD = 0.35; // fraction of duration held at full peak before falling
+        const HOLD = 0.2; // fraction of duration held at full peak before falling (a 3-4 frame strike at 0.35 s; ~0.4 alpha by the last hit-stop frame so the world reads through it)
         let shape;
         if (t > 1 - HOLD) {
           shape = 1;
