@@ -215,7 +215,7 @@ const FONT: Record<string, string[]> = {
   T: ['###', '.#.', '.#.', '.#.', '.#.'],
   U: ['#.#', '#.#', '#.#', '#.#', '###'],
   V: ['#.#', '#.#', '#.#', '#.#', '.#.'],
-  W: ['#.#', '#.#', '#.#', '###', '.#.'], // pointed-bottom W: the old form was one pixel from H ('YOU WIN' read as 'YOU HIN'); distinct from H, V and M
+  W: ['#.#', '#.#', '###', '###', '.#.'], // bottom-heavy pointed W: the old form ('#.#','#.#','###','###','#.#') was one pixel from H and 'YOU WIN' read as 'YOU HIN'; the point separates it from H, the filled lower rows from V, and the fill sitting LOW (M's sits high) from M
   X: ['#.#', '#.#', '.#.', '#.#', '#.#'],
   Y: ['#.#', '#.#', '.#.', '.#.', '.#.'],
   Z: ['###', '..#', '.#.', '#..', '###'],

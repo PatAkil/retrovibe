@@ -11,8 +11,8 @@
 // field (no texture under the fast ball); depth comes from one dithered 1/0
 // seam under the shell wall, a dithered 0/1 seabed strip with coral
 // silhouettes (2) below the paddle line, a black arena bezel (0) with a grey 5
-// keyline on the walls the ball bounces off, and two sparse light shafts
-// (5 over 1) hanging below the HUD strip and tapering out before mid-field.
+// keyline on the walls the ball bounces off. No light shafts: a sparse dither
+// column read as dust on the glass wherever it was put.
 // Bricks are BEVELED SHELLS: fill 8/9/10/11 by row (red, orange, yellow,
 // green), each with its own lighter/darker PICO8 pair for the 1-px light and
 // dark edges (14/2, 15/4, 7/9, 7/3). Paddle 12 (blue) beveled with a white
@@ -351,11 +351,9 @@ function drawBackdrop(): void {
   ctx.fillRect(0, 0, W, SEABED_Y);
   fillDither(ctx, 0, 62, W, 6, PAL[1], PAL[0], 'sparse');
 
-  // Light shafts: sparse grey over navy, starting BELOW the HUD strip (which
-  // they used to dot with grey) and tapering out well before mid-field.
-  for (const sx of [40, 168]) {
-    for (let s = 0; s < 4; s++) fillDither(ctx, sx + s * 2, 20 + s * 10, 7 - s, 10, PAL[1], PAL[5], 'sparse');
-  }
+  // The light shafts are GONE. Moved out of the HUD strip they still read as
+  // dust on the glass rather than as light — a sparse dither column is dirt at
+  // this size, and the ambient bubbles already carry the water.
 
   // Seabed: out of play, below the paddle line. Near-black sand so the strip
   // stays scenery — the coral silhouettes are the only tone that carries.

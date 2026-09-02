@@ -122,7 +122,7 @@ const coinFrames = [
 const spikeSprite = makeSprite(
   [
     '...LL...',
-    '..OLLO..',
+    '..OWWO..',
     '..WWWW..',
     '.OWWWWO.',
     '.WWWWWW.',
