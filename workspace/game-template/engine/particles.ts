@@ -8,13 +8,16 @@
 // for the drifting presets, a sideways wobble; no Math.random is consumed after
 // spawn, so seeded captures stay reproducible.
 //
-// Their default colors sit in the prominence band — contrast ~1.8-2.5:1 vs a
+// Their default colors sit in the prominence band — contrast 1.78-2.47:1 vs a
 // black clear color (see palette.ts contrast()) — visible atmosphere that never
-// competes with actors; the near layer sits at the top of the band and 'stars'
-// adds a handful of 1 px bright sparks above it (1 px, so they can never be
-// mistaken for a pickup). Pass `ambientColor` to retune for a non-black
-// background: every layer tone is derived from that one color by scaling, so an
-// override keeps the hue and inherits the depth ramp.
+// competes with actors. The whole authored ramp, near layer and sparks included,
+// stays at or below 2.5: the CRT phosphor lift adds roughly another 0.8 of a
+// ratio point on black, so a tone authored at the ceiling already reaches the
+// eye near the 3:1 actor floor. 'stars' adds a handful of 1 px bright sparks at
+// the top of the ramp (1 px, so they can never be mistaken for a pickup).
+// Pass `ambientColor` to retune for a non-black background: every layer tone is
+// derived from that one color by scaling, so an override keeps the hue and
+// inherits the depth ramp.
 //
 // burst() spawns short-lived 2-3 px particles that radiate out and fade — tune
 // the count to the event's significance (see improving-game-quality: ~5-10 on
@@ -107,15 +110,20 @@ export function createParticles(opts: ParticleOptions): ParticleSystem {
   const transient: Particle[] = [];
   let clock = 0; // seconds since start — drives every deterministic pulse
 
-  // Preset mid-layer colors: dimmed variants of the classic hues, each ~2.3:1
-  // vs black (inside the 1.8-2.5 prominence band, toward the top). The far
-  // layer is 0.85x of this (~1.95:1) and the near layer 1.1x (~2.6:1).
+  // Preset mid-layer colors: dimmed variants of the classic hues. Measured with
+  // palette.ts contrast() against a black clear color, the whole authored ramp
+  // now sits INSIDE the 1.8-2.5 prominence band (the previous tones ran to
+  // ~2.6:1 near / ~2.9:1 spark, above the band — and the CRT phosphor lift adds
+  // roughly another 0.8 of a ratio point on black, which pushed a spark up to
+  // the 3:1 actor floor and made it read as a collectible):
+  //   far (0.85x) 1.78-1.82 · mid (1x) 2.08-2.12 · near (1.1x) 2.31-2.36 ·
+  //   spark (1.15x) 2.42-2.47 · bubble gloss (1.15x) 2.42-2.47
   const AMBIENT_COLOR: Record<AmbientPreset, string> = {
-    stars: '#4D4846',
-    rain: '#124E73',
-    snow: '#424B54',
-    embers: '#664100',
-    bubbles: '#4D465C',
+    stars: '#45413F',
+    rain: '#104668',
+    snow: '#3B444C',
+    embers: '#5C3B00',
+    bubbles: '#453F53',
   };
 
   const FAR = 0.85;
@@ -124,8 +132,8 @@ export function createParticles(opts: ParticleOptions): ParticleSystem {
   // NEAR layer rather than far above it: at 1.45x a spark landed brighter than
   // the actor floor against the CRT-lifted ground and started reading as a
   // collectible. Ambient must stay atmosphere, never compete with a pickup.
-  const SPARK = 1.2;
-  const GLOSS = 1.3; // the 1 px specular dot on a near bubble
+  const SPARK = 1.15;
+  const GLOSS = 1.15; // the 1 px specular dot on a near bubble
 
   /**
    * Build one ambient particle. `d` is the depth ticket: 0 far, 1 mid, 2 near,
@@ -323,7 +331,10 @@ export function createParticles(opts: ParticleOptions): ParticleSystem {
       for (let i = 0; i < count; i++) {
         const a = rand(0, Math.PI * 2);
         const s = speed * rand(0.4, 1);
-        const size = rand(2, 3); // 2-3 logical px — 1-2 px is barely visible under CRT darkening
+        // 2 or 3 logical px — an INTEGER: a fractional size lands the rect on a
+        // half pixel and the CRT pass smears it into a soft blob. Same single
+        // Math.random() call as before, so seeded captures stay reproducible.
+        const size = Math.random() < 0.5 ? 2 : 3;
         transient.push({
           x, y,
           vx: Math.cos(a) * s,
