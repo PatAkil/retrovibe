@@ -81,7 +81,12 @@ export function createJuice(): Juice {
     postRender(ctx, width, height) {
       ctx.restore();
       if (flashTime > 0 && flashDur > 0) {
-        ctx.globalAlpha = Math.max(0, flashTime / flashDur);
+        const t = Math.max(0, flashTime / flashDur);
+        // Fast cubic ease-out: snaps bright, then clears quickly, capped
+        // well below full opacity so the burst/shake/frozen tableau stays
+        // visible through the flash instead of being washed out by it.
+        const PEAK = 0.65;
+        ctx.globalAlpha = PEAK * t * t * t;
         ctx.fillStyle = flashColor;
         ctx.fillRect(0, 0, width, height);
         ctx.globalAlpha = 1;
