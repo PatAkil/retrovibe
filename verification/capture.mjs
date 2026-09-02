@@ -19,7 +19,7 @@
 //      runtime's console messages (`[retrovibe] scoreChanged / gameOver`):
 //      score = first score change, impact = the death tableau (frozen frame
 //      just after the fatal hit, taken from a ring buffer of recent frames),
-//      end = the terminal scene after the hit-stop.
+//      end = the terminal scene 0.5 s after it is entered (flash and burst gone).
 //   5. Writes verification/out/<fixture>-<moment>.png, and — when a baseline
 //      exists — verification/out/compare.png (baseline | candidate | diff per
 //      moment) with a changed-pixel percentage per moment printed to stdout.
@@ -169,7 +169,7 @@ const INIT_SCRIPT = `(() => {
           // expires; one frame back is the last frozen death tableau — burst,
           // shake and the (by design, still strong) death flash all visible.
           shots.impact = ringBack(1);
-          endAt = frame + 12;
+          endAt = frame + 30; // 0.5 s later: flash and burst have faded, the terminal screen reads clean
         }
       }
       if (frame === scoreAt) shots.score = canvas.toDataURL('image/png');

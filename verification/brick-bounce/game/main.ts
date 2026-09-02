@@ -5,7 +5,8 @@
 // same-shape targets told apart by color alone, 'bubbles' ambient, frequent
 // minor impacts (bricks) beside a major one (lost ball), and a WIN on clear.
 //
-// STYLE CARD: palette OCEAN — bg 0, bricks 3/4/5/6 by row, paddle 4, ball 7
+// STYLE CARD: palette OCEAN — bg 0, bricks 3/4/5/6 by row, paddle + ball 7 (foam:
+// the player's pair shares the one color no brick row uses)
 // · ambient 'bubbles' · silhouettes: flat bar / square ball / brick slabs ·
 // juice: cyan lost-ball flash, brick-colored chip bursts, tiny paddle shake.
 
@@ -61,7 +62,7 @@ const runtime = createRuntime();
 // --- Sprites (PX = 2 logical px per cell) ------------------------------------
 
 const PX = 2;
-const paddleSprite = makeSprite(['############', '############'], { '#': PAL[4] }); // 24x4 px
+const paddleSprite = makeSprite(['############', '############'], { '#': PAL[7] }); // 24x4 px — foam, never a brick color
 const ballSprite = makeSprite(['.#.', '###', '.#.'], { '#': PAL[7] }); // 6x6 px
 
 // --- World -------------------------------------------------------------------
