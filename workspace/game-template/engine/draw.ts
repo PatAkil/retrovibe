@@ -190,9 +190,35 @@ export interface TextOptions {
    * `true` uses SHADOW_COLOR, a string uses that color. drawTextCentered turns
    * it ON for scale >= 2; pass `false` to opt out. When set, it replaces the
    * offset shadow (the two together read as a smear).
+   *
+   * Only honoured at font scale >= 3. At smaller scales the keyline would close
+   * the glyph counters, so it quietly degrades to the 1-px drop shadow — asking
+   * for an outline is always safe, it just may render as a shadow.
    */
   outline?: boolean | string;
 }
+
+/**
+ * Backing-pass offsets, hoisted to module constants: drawText runs on every
+ * frame, and these arrays never vary, so allocating them per call was pure
+ * garbage.
+ */
+const OUTLINE_OFFSETS: ReadonlyArray<readonly [number, number]> = [
+  [-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, -1], [-1, 1], [1, 1],
+];
+const SHADOW_OFFSETS: ReadonlyArray<readonly [number, number]> = [[1, 1]];
+const NO_OFFSETS: ReadonlyArray<readonly [number, number]> = [];
+
+/**
+ * Smallest font scale at which the full 8-way keyline is safe. The 3x5 glyphs
+ * have 1-font-px counters, so at scale 2 a counter is 2 logical px wide and a
+ * 1-px keyline pressing in from BOTH sides closes it completely — A, O, 0, 8,
+ * B, D, P and R turn into solid blobs. At scale 3 a counter is 3 px and one
+ * pixel of hole survives, so the keyline reads as a keyline. Below the
+ * threshold drawText silently falls back to the single drop shadow, which
+ * separates the word from the ground without touching the counters.
+ */
+const OUTLINE_MIN_SCALE = 3;
 
 /** Default drop-shadow / outline color for bitmap text. */
 export const SHADOW_COLOR = 'rgba(0,0,0,0.7)';
@@ -223,13 +249,16 @@ export function drawText(
   // Backing pass: an outline (keyline all round) if asked for, otherwise a
   // shadow one LOGICAL pixel down-right whatever the scale — so it lifts the
   // word off the ground without thickening the 3x5 glyphs at scale 1.
-  const outline = opts.outline;
-  const shadow = opts.shadow;
-  const offsets: Array<[number, number]> = outline
-    ? [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, -1], [-1, 1], [1, 1]]
-    : shadow
-      ? [[1, 1]]
-      : [];
+  //
+  // The full keyline is only applied from OUTLINE_MIN_SCALE up: at scale 2 it
+  // would close the 1-font-px counters and turn A/O/0/8/B/D/P/R into blobs, so
+  // a requested outline degrades to the single drop shadow there instead.
+  const wantsOutline = opts.outline !== undefined && opts.outline !== false;
+  const outline = wantsOutline && scale >= OUTLINE_MIN_SCALE ? opts.outline : undefined;
+  // A demoted outline still wants SOME backing — fall through to the shadow,
+  // using the caller's colour if they gave one.
+  const shadow = outline === undefined && wantsOutline ? opts.outline : opts.shadow;
+  const offsets = outline ? OUTLINE_OFFSETS : shadow ? SHADOW_OFFSETS : NO_OFFSETS;
   if (offsets.length > 0) {
     // The outline overlaps itself at the corners, so its default must be
     // OPAQUE — a translucent one would mottle where the passes stack.
@@ -272,9 +301,10 @@ export function drawText(
 
 /**
  * Draw text horizontally centered within [0, areaWidth]. Large text (scale >= 2
- * — titles, GAME OVER, YOU WIN) gets a drop shadow by DEFAULT so headline words
- * read against whatever the live scene leaves behind them; pass
- * `{ shadow: false }` to opt out.
+ * — titles, GAME OVER, YOU WIN) gets a backing pass by DEFAULT so headline words
+ * read against whatever the live scene leaves behind them: a full keyline at
+ * scale >= 3, and a drop shadow at scale 2 where a keyline would close the
+ * counters (see OUTLINE_MIN_SCALE). Pass `{ shadow: false }` to opt out.
  */
 export function drawTextCentered(
   ctx: CanvasRenderingContext2D,
