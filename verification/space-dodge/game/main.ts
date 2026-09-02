@@ -13,8 +13,11 @@
 // STYLE CARD (this combination is RESERVED for the reference game — every
 // generated game must diverge, see ensuring-arcade-visuals):
 //   palette PICO8 — bg 0 (black), ship 12 (blue), pickup 10 (yellow),
-//   hazard 8 (red) · ambient 'stars' · silhouettes: arrow-ship / plus / cross
-//   · juice: red death flash, hard freeze-frame.
+//   hazard 8 (red) · ambient 'stars' · silhouettes: arrow-ship / cut gem /
+//   spiked mine · far layer: dithered horizon haze + a dark corner planet
+//   · juice: red death flash, hard freeze-frame · attract-screen title (logo +
+//   hero ship). ART: footprint-preserving PX=1 redraws, keyline authored into
+//   the rows, 2-frame frameIndex animation, far layer under the ambient band.
 
 import {
   createPixelCanvas,
@@ -30,6 +33,11 @@ import {
   makeSprite,
   drawSprite,
   drawTextCentered,
+  frameIndex,
+  fillDither,
+  drawFrame,
+  drawLogo,
+  pulse,
   drawScore,
   hudText,
   BUTTON_KEY,
@@ -66,24 +74,50 @@ const crt = createCrt();
 const runtime = createRuntime();
 
 // --- Sprites -----------------------------------------------------------------
-// Rendered at PX=2 logical px per cell so gameplay entities meet the size
-// floors (player >= H/16 = 10 px, other critical entities >= H/26 ≈ 6 px in
-// their larger dimension). Entity hitboxes below match the rendered size.
+// ART (same language as the reference game): each actor is drawn at PX=1 with a
+// sprite whose CELL COUNT equals its rendered footprint — 10x8 ship, 6x6 pickup,
+// 6x6 hazard — so the hitboxes and every scripted collision below are unchanged.
+// The 1-cell dark keyline is authored INTO the rows ('o'), never baked on.
 
-const PX = 2;
+const PX = 1;
 
-const shipSprite = makeSprite(
-  ['..#..', '.###.', '#####', '#.#.#'],
-  { '#': PICO8[12] },
-); // 5x4 cells → 10x8 px rendered
-const pickupSprite = makeSprite(
-  ['.#.', '###', '.#.'],
-  { '#': PICO8[10] },
-); // 3x3 cells → 6x6 px rendered
-const hazardSprite = makeSprite(
-  ['#.#', '.#.', '#.#'],
-  { '#': PICO8[8] },
-); // 3x3 cells → 6x6 px rendered
+const SHIP_ROWS = [
+  '....oo....',
+  '...o##o...',
+  '...owwo...',
+  '..o#ww#o..',
+  '.o##ww##o.',
+  'o########o',
+  'o#oo##oo#o',
+];
+// Two 8th rows = a 2-frame engine flicker (frameIndex): a ship that is ON.
+const shipFrames = [
+  makeSprite([...SHIP_ROWS, '.e..ee..e.'], { o: PICO8[1], '#': PICO8[12], w: PICO8[7], e: PICO8[7] }),
+  makeSprite([...SHIP_ROWS, '....ee....'], { o: PICO8[1], '#': PICO8[12], w: PICO8[7], e: PICO8[6] }),
+];
+// A cut gem whose white glint MOVES between the two frames — the sparkle is the
+// animation; the silhouette never changes.
+const GEM_MAP = { d: PICO8[9], '#': PICO8[10], w: PICO8[7] };
+const pickupFrames = [
+  makeSprite(['..##..', '.w##d.', 'w####d', '#####d', '.d##d.', '..dd..'], GEM_MAP),
+  makeSprite(['..##..', '.##wd.', '#w###d', '####wd', '.d##d.', '..dd..'], GEM_MAP),
+];
+// A spiked mine with a dark core: spikes on the AXES, then on the DIAGONALS —
+// alternating the two frames reads as a slow tumble.
+const MINE_MAP = { '#': PICO8[8], k: PICO8[2] };
+const hazardFrames = [
+  makeSprite(['#.##.#', '.####.', '##kk##', '##kk##', '.####.', '#.##.#'], MINE_MAP),
+  makeSprite(['..##..', '#.##.#', '.#kk#.', '.#kk#.', '#.##.#', '..##..'], MINE_MAP),
+];
+// FAR LAYER: a dark planet, terminator dithered by hand. One tone, PICO8[1]
+// (1.57:1 vs black — under the ambient band): depth that can never be mistaken
+// for something the player can touch.
+const planetSprite = makeSprite(
+  ['....pppp....', '..pppppppp..', '.ppppppppp..', '.pppppppp.p.',
+   'ppppppppp.p.', 'pppppppp.p..', 'ppppppppp.p.', 'pppppppp.p..',
+   '.pppppppp.p.', '.ppppppppp..', '..ppppppp...', '....pppp....'],
+  { p: PICO8[1] },
+);
 
 // --- World state -------------------------------------------------------------
 
@@ -110,6 +144,7 @@ const hazard: Entity & { vx: number; vy: number } = {
 };
 let score = 0;
 let dying = false; // death seen; GAME_OVER deferred until the hit-stop expires
+let clock = 0; // ONE accumulated clock — drives every animation, nothing else
 
 function placePickup(): void {
   pickup = {
@@ -156,6 +191,7 @@ function startPlaying(): void {
 }
 
 function update(dt: number): void {
+  clock += dt;
   juice.update(dt);
   particles.update(dt);
 
@@ -247,31 +283,55 @@ function update(dt: number): void {
 
 // --- Render ------------------------------------------------------------------
 
+/** FAR LAYER: four sparse dither strips under a rising alpha ramp read as haze
+ *  thickening toward a horizon (a flat slab would read as a FLOOR and compete),
+ *  plus a corner planet and a hairline arena bezel. Static; all under the band. */
+function renderBackdrop(): void {
+  for (let i = 0; i < 4; i++) {
+    pc.ctx.globalAlpha = 0.2 + i * 0.16;
+    fillDither(pc.ctx, 0, H - 26 + i * 7, W, 7, PICO8[0], PICO8[1], 'sparse');
+  }
+  pc.ctx.globalAlpha = 0.85;
+  drawSprite(pc.ctx, planetSprite, W - 48, 12, 2);
+  pc.ctx.globalAlpha = 1;
+  drawFrame(pc.ctx, 0, 0, W, H, PICO8[1], 1);
+}
+
 function render(): void {
   // Clear FIRST, un-shaken — clearing inside the shake translate would leave
   // stale pixels along the canvas edges for the duration of the shake.
   pc.clear(PICO8[0]);
   juice.preRender(pc.ctx);
+  renderBackdrop(); // far layer BEHIND the starfield — depth is layer order
   particles.render(pc.ctx);
 
   switch (scenes.current) {
     case 'TITLE': {
-      drawTextCentered(pc.ctx, 'RETROVIBE', W, 48, { color: PICO8[10], scale: 3 });
-      drawTextCentered(pc.ctx, 'COLLECT + DODGE', W, 78, { color: PICO8[6] });
-      // Control hints rendered FROM the action declarations — never hand-written.
-      controlHints(input).forEach((hint, i) => {
-        drawTextCentered(pc.ctx, hint, W, 100 + i * 10, { color: PICO8[7] });
+      // An ATTRACT SCREEN, not a text card: a lit logo, the hero ship large and
+      // running, one line of hook, then the hints.
+      drawLogo(pc.ctx, 'RETROVIBE', W, 16, {
+        color: PICO8[10], shade: PICO8[9], shadow: PICO8[1], scale: 3,
       });
-      drawTextCentered(pc.ctx, 'ARROWS/WASD MOVE', W, 100 + controlHints(input).length * 10, {
+      drawTextCentered(pc.ctx, 'COLLECT + DODGE', W, 38, { color: PICO8[6] });
+      drawSprite(pc.ctx, shipFrames[frameIndex(clock, 12, 2)], (W - 50) / 2, 48, 5);
+      drawTextCentered(pc.ctx, `PRESS ${BUTTON_KEY.A.hint}`, W, 100, {
+        color: pulse(clock, 1.2) > 0.5 ? PICO8[7] : PICO8[6], scale: 2,
+      });
+      // Control hints rendered FROM the action declarations — never hand-written.
+      const hints = controlHints(input);
+      hints.forEach((hint, i) => {
+        drawTextCentered(pc.ctx, hint, W, 116 + i * 9, { color: PICO8[6] });
+      });
+      drawTextCentered(pc.ctx, 'ARROWS/WASD MOVE', W, 116 + hints.length * 9, {
         color: PICO8[5],
       });
       break;
     }
     case 'PLAYING':
     case 'PAUSED': {
-      drawSprite(pc.ctx, pickupSprite, pickup.x, pickup.y, PX);
-      drawSprite(pc.ctx, hazardSprite, hazard.x, hazard.y, PX);
-      drawSprite(pc.ctx, shipSprite, ship.x, ship.y, PX);
+      drawSprite(pc.ctx, pickupFrames[frameIndex(clock, 6, 2)], pickup.x, pickup.y, PX);
+      drawSprite(pc.ctx, hazardFrames[frameIndex(clock, 8, 2)], hazard.x, hazard.y, PX);
+      drawSprite(pc.ctx, shipFrames[frameIndex(clock, 12, 2)], ship.x, ship.y, PX);
       drawScore(pc, score);
       if (scenes.is('PAUSED')) {
         hudText(pc, 'PAUSED', 'center', 'middle', { color: PICO8[10], scale: 2 });
@@ -279,12 +339,14 @@ function render(): void {
       break;
     }
     case 'GAME_OVER': {
+      drawFrame(pc.ctx, 44, 46, W - 88, 72, PICO8[5], 1);
       drawTextCentered(pc.ctx, 'GAME OVER', W, 56, { color: PICO8[8], scale: 2 });
       drawTextCentered(pc.ctx, `SCORE ${score}`, W, 80, { color: PICO8[7] });
       drawTextCentered(pc.ctx, `${BUTTON_KEY.A.hint} RESTART`, W, 100, { color: PICO8[6] });
       break;
     }
     case 'WIN': {
+      drawFrame(pc.ctx, 44, 46, W - 88, 72, PICO8[5], 1);
       drawTextCentered(pc.ctx, 'YOU WIN', W, 56, { color: PICO8[11], scale: 2 });
       drawTextCentered(pc.ctx, `SCORE ${score}`, W, 80, { color: PICO8[7] });
       drawTextCentered(pc.ctx, `${BUTTON_KEY.A.hint} RESTART`, W, 100, { color: PICO8[6] });
