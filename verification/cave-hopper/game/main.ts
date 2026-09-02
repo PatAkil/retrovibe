@@ -6,13 +6,15 @@
 //
 // STYLE CARD: palette SUNSET — cave depth banded/dithered 0→1 with far rock
 // humps (0) and stalactite + side-wall silhouettes (1) well under the ambient
-// band; terrain = beveled slabs (fill 2, light 3, dark 1) with a dithered rock
-// face and a lit top lip; the pit is a 1→0→black gradient, not a seam.
+// band; terrain = beveled slabs (fill 2, light 2, dark 1) with a dithered rock
+// face and a 2/5 dithered lit top lip; the pit is a 1→0→0 gradient (0 is
+// SUNSET's darkest tone, not black), not a seam.
 // Actors carry authored dark outlines and 2-frame animation: player cream 7
 // with a 5 fold and a 3 visor (walk/idle + facing flip), coin gold 6 with a 7
-// glint (wide/narrow spin), spikes a 4 body under a CREAM 7 tip with 3 only as
-// the 1-px base shadow (body 4.72:1 vs the floor, 3.17:1 vs the slab; tip 7 is
-// 13.4:1 / 8.98:1 — hazard and pickup differ in hue AND tip value), flag a 5
+// glint (wide/narrow spin), spikes a 4 body under a PEACH 5 tip with 3 only as
+// the 1-px base shadow (body 4.72:1 vs the floor, 3.17:1 vs the slab; tip 5 is
+// 7.19:1 / 4.82:1 — the tip is off both the gold 6 coin and the cream 7
+// player), flag a 5
 // pennant
 // on a 7 pole (flutter) · ambient 'embers' at ambientCount 28 (the default 48
 // read as dirt on the cave wall) · juice: orange death flash, hard
@@ -117,14 +119,14 @@ const coinFrames = [
   ),
 ];
 
-// Spikes: 8x6 cells — a CREAM 7 tip over a 4 body, with 3 used ONLY as the
+// Spikes: 8x6 cells — a PEACH 5 tip over a 4 body, with 3 used ONLY as the
 // 1-px base shadow. The old form put 3 across the lower half, the same tone as
-// the slab's light lip, so the hazard read as a bump in the terrain; and its
-// tip was gold 6, the coin's own body colour, so hazard and pickup shared a
-// hue. Cream 7 separates them in BOTH hue and tip value (the coin's 7 is a
-// 2-cell glint inside a gold disc; the spike's is the whole point).
-// contrast(): body 4 vs cave floor 1 = 4.72:1, vs slab 2 = 3.17:1; tip 7 is
-// 13.4:1 / 8.98:1. Authored black sides keep the silhouette off the rock.
+// the slab's light lip, so the hazard read as a bump in the terrain; then the
+// tip was gold 6 (the coin's body colour) and later cream 7 (the PLAYER's own
+// tone) — both collided with another role. Peach 5 is the one bright tone no
+// other actor owns.
+// contrast(): body 4 vs cave floor 1 = 4.72:1, vs slab 2 = 3.17:1; tip 5 is
+// 7.19:1 / 4.82:1. Authored black sides keep the silhouette off the rock.
 const spikeSprite = makeSprite(
   [
     '...LL...',
@@ -134,7 +136,7 @@ const spikeSprite = makeSprite(
     '.WWWWWW.',
     'ORRRRRRO',
   ],
-  { L: PAL[7], W: PAL[4], R: PAL[3], O: PAL[0] },
+  { L: PAL[5], W: PAL[4], R: PAL[3], O: PAL[0] },
 );
 
 // Flag: 8x12 cells — cream pole, peach pennant, 2-frame flutter.
@@ -466,12 +468,13 @@ function drawCave(): void {
 
 /** A beveled rock slab with a dithered face and a lit top lip. */
 function drawSlab(x: number, y: number, w: number, h: number): void {
-  // The lit lip is a single dithered 2/4 row and the bevel light is 2, NOT 3:
+  // The lit lip is a single dithered 2/5 row and the bevel light is 2, NOT 3:
   // 3 is the spike body's neighbour tone, and a slab lip in 3 made the hazards
-  // read as part of the terrain they stand on.
+  // read as part of the terrain they stand on. The mix tone is 5, not 4: 4 is
+  // the spike BODY, and a lip in the hazard's own fill tone camouflaged it.
   drawBevel(pc.ctx, x, y, w, h, PAL[2], PAL[2], PAL[1]);
   if (h > 3) fillDither(pc.ctx, x + 1, y + 3, w - 2, h - 4, PAL[2], PAL[1], 'sparse');
-  fillDither(pc.ctx, x + 1, y + 1, w - 2, 1, PAL[2], PAL[4], 'sparse');
+  fillDither(pc.ctx, x + 1, y + 1, w - 2, 1, PAL[2], PAL[5], 'sparse');
 }
 
 function drawLevel(): void {
@@ -543,7 +546,7 @@ function render(): void {
         drawTextCentered(pc.ctx, hint, W, 130 + i * 8, { color: PAL[6], shadow: true });
       });
       drawTextCentered(pc.ctx, 'ARROWS/WASD MOVE', W, 130 + hints.length * 8, {
-        color: PAL[3],
+        color: PAL[5],
         shadow: true,
       });
       break;
