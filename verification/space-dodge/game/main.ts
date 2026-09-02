@@ -269,7 +269,7 @@ function update(dt: number): void {
           count: 10, color: PICO8[8], speed: 140,
         });
         juice.shake(5, 0.45);
-        juice.flash(PICO8[8], 0.35);
+        juice.flash(PICO8[8], 0.35, { x: ship.x + ship.w / 2, y: ship.y + ship.h / 2 });
         juice.hitStop(0.15);
         dying = true;
       }
