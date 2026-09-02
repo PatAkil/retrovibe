@@ -12,12 +12,12 @@
 //
 // STYLE CARD (this combination is RESERVED for the reference game — every
 // generated game must diverge, see ensuring-arcade-visuals):
-//   palette PICO8 — bg 0 (black), ship 12 (blue), pickup 10 (yellow),
-//   hazard 8 (red) · ambient 'stars' · silhouettes: arrow-ship / cut gem /
-//   spiked mine · far layer: dithered horizon haze + a dark corner planet
+//   palette PICO8 — bg 0 (black), ship 16x12 (12 hull / 13 shade / 6 highlight
+//   / 7 cockpit), pickup 8x8 gem (10), hazard 10x10 barbed mine (8/2/14) ·
+//   ambient 'stars' · far layer: soft horizon haze + a dark corner planet
 //   · juice: red death flash, hard freeze-frame · attract-screen title (logo +
-//   hero ship). ART: footprint-preserving PX=1 redraws, keyline authored into
-//   the rows, 2-frame frameIndex animation, far layer under the ambient band.
+//   hero ship at px 4). ART: PX=1 arcade-scale sprites (hitbox == sprite),
+//   keyline authored into the rows, 2-frame frameIndex animation.
 
 import {
   createPixelCanvas,
@@ -75,39 +75,51 @@ const runtime = createRuntime();
 
 // --- Sprites -----------------------------------------------------------------
 // ART (same language as the reference game): each actor is drawn at PX=1 with a
-// sprite whose CELL COUNT equals its rendered footprint — 10x8 ship, 6x6 pickup,
-// 6x6 hazard — so the hitboxes and every scripted collision below are unchanged.
-// The 1-cell dark keyline is authored INTO the rows ('o'), never baked on.
+// sprite whose CELL COUNT equals its rendered footprint — 16x12 ship, 8x8
+// pickup, 10x10 hazard — so each hitbox IS the sprite. The 1-cell dark keyline
+// is authored INTO the rows ('o'), never baked on. ARCADE SCALE: 6-10 px actors
+// read as tasteful minimal, not as a 16-bit cabinet.
 
 const PX = 1;
 
+// A 16x12 fighter: pointed nose, white cockpit, swept wings lit from above
+// (6 highlight on the leading edge, 12 hull, 13 shade), twin engine nozzles.
 const SHIP_ROWS = [
-  '....oo....',
-  '...o##o...',
-  '...owwo...',
-  '..o#ww#o..',
-  '.o##ww##o.',
-  'o########o',
-  'o#oo##oo#o',
+  '.......oo.......',
+  '......o##o......',
+  '......o##o......',
+  '.....o#ww#o.....',
+  '.....o#ww#o.....',
+  '....o##ww##o....',
+  '....o#m##m#o....',
+  '..olm######mlo..',
+  'ol##m######m##lo',
+  '..o#mm####mm#o..',
+  '....o##..##o....',
 ];
-// Two 8th rows = a 2-frame engine flicker (frameIndex): a ship that is ON.
+const SHIP_MAP = { o: PICO8[1], '#': PICO8[12], m: PICO8[13], l: PICO8[6], w: PICO8[7], e: PICO8[10] };
+// Two 12th rows = a 2-frame engine flicker (frameIndex): a ship that is ON.
 const shipFrames = [
-  makeSprite([...SHIP_ROWS, '.e..ee..e.'], { o: PICO8[1], '#': PICO8[12], w: PICO8[7], e: PICO8[7] }),
-  makeSprite([...SHIP_ROWS, '....ee....'], { o: PICO8[1], '#': PICO8[12], w: PICO8[7], e: PICO8[6] }),
+  makeSprite([...SHIP_ROWS, '.....ee..ee.....'], SHIP_MAP),
+  makeSprite([...SHIP_ROWS, '......e..e......'], { ...SHIP_MAP, e: PICO8[9] }),
 ];
-// A cut gem whose white glint MOVES between the two frames — the sparkle is the
-// animation; the silhouette never changes.
+// An 8x8 cut gem whose white glint MOVES between the two frames — the sparkle
+// is the animation; the silhouette never changes.
 const GEM_MAP = { d: PICO8[9], '#': PICO8[10], w: PICO8[7] };
 const pickupFrames = [
-  makeSprite(['..##..', '.w##d.', 'w####d', '#####d', '.d##d.', '..dd..'], GEM_MAP),
-  makeSprite(['..##..', '.##wd.', '#w###d', '####wd', '.d##d.', '..dd..'], GEM_MAP),
+  makeSprite(['...##...', '..w###..', '.w#####.', '#w#####d',
+    '#####ddd', '.####dd.', '..##dd..', '...dd...'], GEM_MAP),
+  makeSprite(['...##...', '..####..', '.######.', '##w####d',
+    '###w#ddd', '.####dd.', '..##dd..', '...dd...'], GEM_MAP),
 ];
-// A spiked mine with a dark core: spikes on the AXES, then on the DIAGONALS —
-// alternating the two frames reads as a slow tumble.
-const MINE_MAP = { '#': PICO8[8], k: PICO8[2] };
+// A 10x10 barbed mine with a dark core and a lit rim: barbs on the AXES, then
+// on the DIAGONALS — alternating the two frames reads as a slow tumble.
+const MINE_MAP = { '#': PICO8[8], k: PICO8[2], h: PICO8[14] };
 const hazardFrames = [
-  makeSprite(['#.##.#', '.####.', '##kk##', '##kk##', '.####.', '#.##.#'], MINE_MAP),
-  makeSprite(['..##..', '#.##.#', '.#kk#.', '.#kk#.', '#.##.#', '..##..'], MINE_MAP),
+  makeSprite(['....##....', '....##....', '..h#####..', '.#h######.', '####kk####',
+    '####kk####', '.########.', '..######..', '....##....', '....##....'], MINE_MAP),
+  makeSprite(['.##....##.', '.##....##.', '..h#####..', '.#h######.', '.###kk###.',
+    '.###kk###.', '.########.', '..######..', '.##....##.', '.##....##.'], MINE_MAP),
 ];
 // FAR LAYER: a dark planet, terminator dithered by hand. One tone, PICO8[1]
 // (1.57:1 vs black — under the ambient band): depth that can never be mistaken
@@ -129,18 +141,19 @@ interface Entity {
 }
 
 const SHIP_SPEED = 90;
-// Hitboxes match the rendered sprite sizes (PX * cell counts) within 1 px.
-const SHIP_W = 10;
-const SHIP_H = 8;
-const ITEM_SIZE = 6;
+// Hitboxes ARE the rendered sprite sizes (PX * cell counts).
+const SHIP_W = 16;
+const SHIP_H = 12;
+const PICKUP_SIZE = 8;
+const HAZARD_SIZE = 10;
 // Difficulty ramp: felt inside 30 s, threatening by ~2 min (endless game bar).
 const PICKUP_SPEEDUP = 1.12; // per pickup
 const TIME_SPEEDUP = 0.01; // +1%/s compounding, so idling doesn't stall the ramp
 
 const ship: Entity = { x: W / 2 - SHIP_W / 2, y: H - 30, w: SHIP_W, h: SHIP_H };
-let pickup: Entity = { x: 0, y: 0, w: ITEM_SIZE, h: ITEM_SIZE };
+let pickup: Entity = { x: 0, y: 0, w: PICKUP_SIZE, h: PICKUP_SIZE };
 const hazard: Entity & { vx: number; vy: number } = {
-  x: 20, y: 20, w: ITEM_SIZE, h: ITEM_SIZE, vx: 55, vy: 40,
+  x: 20, y: 20, w: HAZARD_SIZE, h: HAZARD_SIZE, vx: 55, vy: 40,
 };
 let score = 0;
 let dying = false; // death seen; GAME_OVER deferred until the hit-stop expires
@@ -148,10 +161,10 @@ let clock = 0; // ONE accumulated clock — drives every animation, nothing else
 
 function placePickup(): void {
   pickup = {
-    x: SAFE_MARGIN + Math.random() * (W - 2 * SAFE_MARGIN - ITEM_SIZE),
-    y: SAFE_MARGIN + 12 + Math.random() * (H - 2 * SAFE_MARGIN - 12 - 28 - ITEM_SIZE),
-    w: ITEM_SIZE,
-    h: ITEM_SIZE,
+    x: SAFE_MARGIN + Math.random() * (W - 2 * SAFE_MARGIN - PICKUP_SIZE),
+    y: SAFE_MARGIN + 12 + Math.random() * (H - 2 * SAFE_MARGIN - 12 - 28 - PICKUP_SIZE),
+    w: PICKUP_SIZE,
+    h: PICKUP_SIZE,
   };
 }
 
@@ -283,13 +296,17 @@ function update(dt: number): void {
 
 // --- Render ------------------------------------------------------------------
 
-/** FAR LAYER: four sparse dither strips under a rising alpha ramp read as haze
- *  thickening toward a horizon (a flat slab would read as a FLOOR and compete),
- *  plus a corner planet and a hairline arena bezel. Static; all under the band. */
+/** FAR LAYER: HAZE, not a floor — one faint sparse-dither seam feathers the top
+ *  edge, then three low-alpha PICO8[1] bands thicken downward. Plus a corner
+ *  planet and a hairline arena bezel. Static; all under the ambient band. */
 function renderBackdrop(): void {
-  for (let i = 0; i < 4; i++) {
-    pc.ctx.globalAlpha = 0.2 + i * 0.16;
-    fillDither(pc.ctx, 0, H - 26 + i * 7, W, 7, PICO8[0], PICO8[1], 'sparse');
+  pc.ctx.globalAlpha = 0.10;
+  fillDither(pc.ctx, 0, H - 34, W, 8, PICO8[0], PICO8[1], 'sparse');
+  const haze = [0.10, 0.18, 0.28];
+  for (let i = 0; i < haze.length; i++) {
+    pc.ctx.globalAlpha = haze[i];
+    pc.ctx.fillStyle = PICO8[1];
+    pc.ctx.fillRect(0, H - 26 + i * 9, W, 9);
   }
   pc.ctx.globalAlpha = 0.85;
   drawSprite(pc.ctx, planetSprite, W - 48, 12, 2);
@@ -313,7 +330,7 @@ function render(): void {
         color: PICO8[10], shade: PICO8[9], shadow: PICO8[1], scale: 3,
       });
       drawTextCentered(pc.ctx, 'COLLECT + DODGE', W, 38, { color: PICO8[6] });
-      drawSprite(pc.ctx, shipFrames[frameIndex(clock, 12, 2)], (W - 50) / 2, 48, 5);
+      drawSprite(pc.ctx, shipFrames[frameIndex(clock, 12, 2)], (W - 64) / 2, 46, 4);
       drawTextCentered(pc.ctx, `PRESS ${BUTTON_KEY.A.hint}`, W, 100, {
         color: pulse(clock, 1.2) > 0.5 ? PICO8[7] : PICO8[6], scale: 2,
       });
