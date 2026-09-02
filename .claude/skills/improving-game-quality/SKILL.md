@@ -32,11 +32,11 @@ hudText(pc, 'PAUSED', 'center', 'middle', { scale: 2 });
 
 **Check:** Any "PRESS A" / "RESTART" style prompt must stay visible at every instant — it may swap between two visible tones (a bright and a dim palette index) on a clock-driven cycle, but it must never disappear entirely for part of the cycle. A prompt that goes fully transparent for its "off" half fails this check even if it reads fine while watching — a screenshot taken during the off half shows a broken screen, and a first-time player's first glance may land there.
 
-**Fix:** Drive the color swap from the accumulated game clock (never `Date.now()`/`setInterval` — see item 9), using `blink`/`pulse` from `engine/draw.ts` (exported via the barrel) or an equivalent local clock-driven helper as the reference game's own `blink(hz)`/`pulse(hz, duty)` do — both alternate *color*, never toggle the draw call itself:
+**Fix:** Drive the color swap from the accumulated game clock (never `Date.now()`/`setInterval` — see item 9), using `blink`/`pulse` from `engine/draw.ts` (exported via the barrel) or an equivalent local clock-driven helper as the reference game's own `blinkHz(hz)`/`accentHz(hz, duty)` wrappers do — both alternate *color*, never toggle the draw call itself. `clock` below is the game's own accumulated `dt`, and `blink(clock, period, onRatio)` returns 1/0:
 
 ```ts
 drawTextCentered(pc.ctx, `PRESS ${BUTTON_KEY.A.hint}`, W, 84, {
-  color: blink(1.2) ? PICO8[7] : PICO8[6], scale: 2,
+  color: blink(clock, 1 / 1.2, 0.5) === 1 ? PICO8[7] : PICO8[6], scale: 2,
 });
 ```
 
@@ -74,12 +74,12 @@ Level advance is a `PLAYING → PLAYING` re-entry (allowed by the machine). Note
 **Fix:** Drive both off the same accumulated clock as item 1b, and swap sprites/offsets rather than animating shape:
 
 ```ts
-const bob = Math.round(wave(0.6) * 1.5);
-drawSprite(pc.ctx, pulse(1.2, 0.25) ? pickupHotSprite : pickupSprite, pickup.x, pickup.y + bob, PX);
-drawSprite(pc.ctx, pulse(2, 0.18) ? hazardHotSprite : hazardSprite, hazard.x, hazard.y, PX);
+const bob = Math.round((pulse(clock, 1 / 0.6) * 2 - 1) * 1.5); // smooth 0..1 sine, remapped to -1..1
+drawSprite(pc.ctx, blink(clock, 1 / 1.2, 0.2) === 1 ? pickupHotSprite : pickupSprite, pickup.x, pickup.y + bob, PX);
+drawSprite(pc.ctx, blink(clock, 1 / 2, 0.18) === 1 ? hazardHotSprite : hazardSprite, hazard.x, hazard.y, PX);
 ```
 
-Keep the hazard's `duty` (the fraction of each cycle spent in the hot frame) low — 0.15–0.25 — so its base hue still dominates at a glance; a hazard that's pink half the time reads as pink, not red, and breaks the role-hue contract (**ensuring-arcade-visuals** §1b). The hot frame must stay in the same hue family as the base sprite (yellow → orange, red → pink) — never borrow another actor's hue for a pulse.
+`blink`'s third argument IS the duty, exactly (`onRatio`), so the accented fraction is what you typed — no sine threshold to guess at. Keep the hazard's `duty` (the fraction of each cycle spent in the hot frame) low — 0.15–0.25 — so its base hue still dominates at a glance; a hazard that's pink half the time reads as pink, not red, and breaks the role-hue contract (**ensuring-arcade-visuals** §1b). The hot frame must stay in the same hue family as the base sprite (yellow → orange, red → pink) — never borrow another actor's hue for a pulse.
 
 ## 4. Impact particles TUNED TO SIGNIFICANCE
 
@@ -114,7 +114,7 @@ Pair it with a burst (item 4) and a brief flash-twin of the player sprite (a sam
 
 ## 5. Shake on impactful events — and the render ORDER rule
 
-**Check:** Player damage/death shakes the screen; the biggest moments also flash and hit-stop — all above the floors: **shake ≥ 4–6 px amplitude for ≥ 0.4 s on major events (death/explosion); full-screen death flash holds ≥ 0.3 s; the hit-stop's frozen tableau is actually rendered** (≥1 frame of frozen world visible before the terminal screen — see the death-flow pattern below). Apply the arm's-length test: a death must be unmissable without looking for it. Then check the frame order in `render()` — the single most common juice bug is clearing inside the shake transform, which smears stale pixels along the canvas edges.
+**Check:** Player damage/death shakes the screen; the biggest moments also flash and hit-stop — all above the floors: **shake ≥ 4–6 px amplitude for ≥ 0.4 s on major events (death/explosion); give the death flash ≥ 0.3 s so its held peak (the first 20 % of the duration) covers the hit-stop and the fall is still visible on the tableau; the hit-stop's frozen tableau is actually rendered** (≥1 frame of frozen world visible before the terminal screen — see the death-flow pattern below). Apply the arm's-length test: a death must be unmissable without looking for it. Then check the frame order in `render()` — the single most common juice bug is clearing inside the shake transform, which smears stale pixels along the canvas edges.
 
 **Death feedback must scale with significance, not just event type.** A death after 10 seconds and a death after 2 minutes of a good run should not feel identical — bigger runs deserve a bigger send-off. Derive a `0..1` magnitude from something the player earned (score, distance, combo) and scale shake/burst/flash off it, on top of the escalation-by-event-type below:
 
@@ -184,7 +184,7 @@ function render(): void {
 
 **Check:** `PAUSED` is reachable from `PLAYING` and exitable back to `PLAYING` (the machine also allows `PAUSED → TITLE` — optional, the reference doesn't use it). If the game has a goal, `WIN` is reachable via `scenes.to('WIN')` and exitable to restart. Every state renders something (a paused game showing a frozen frame with no `PAUSED` text fails). Games with no win condition may omit `WIN`, but never `PAUSED`.
 
-**Overlay text sits on a plate or a dimmed scene — never bare over a live/frozen frame.** `PAUSED`/`GAME_OVER`/`WIN` text must be visually separated from whatever's behind it: `hudText`'s large-centered-text default plate (`ui.ts`, on automatically at `h:'center', v:'middle', scale >= 2`) handles single lines; for a whole terminal screen with the world still visible behind it (PAUSED keeping gameplay frozen in view), dim the world first with `dimScene(pc, alpha)` before drawing text over it, as the reference's local `dimWorld` does. Skipping both and drawing text straight over a busy background fails this check even if it's technically legible in a screenshot.
+**Overlay text sits on a plate or a dimmed scene — never bare over a live/frozen frame.** `PAUSED`/`GAME_OVER`/`WIN` text must be visually separated from whatever's behind it: `hudText`'s large-centered-text default plate (`ui.ts`, on automatically at `h:'center', v:'middle', scale >= 2`) handles single lines; for a whole terminal screen with the world still visible behind it (PAUSED keeping gameplay frozen in view), dim the world first with `dimScene(pc, alpha)` before drawing text over it, as the reference game does — and pass `{ plate: false }` to `hudText` there: dim OR plate, never both. Skipping both and drawing text straight over a busy background fails this check even if it's technically legible in a screenshot.
 
 **BEST is shown on the terminal screens.** `GAME_OVER`/`WIN` must display a running best score, not just this run's score — a single run with no memory of past runs fails to turn play into a session. Track it in module scope (survives restarts within the tab) and treat `localStorage` as a bonus, wrapped in `try`/`catch` since sandboxed/headless hosts can throw on access:
 
