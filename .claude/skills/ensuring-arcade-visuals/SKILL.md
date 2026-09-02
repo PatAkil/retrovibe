@@ -15,9 +15,20 @@ All engine imports come from the barrel: `import { ... } from '../engine';` (fro
 
 Before the first milestone save, derive **2–3 distinct visual directions** from the game's fiction — each a one-liner: palette + background/actor color indices, ambient preset, sprite silhouette language, juice personality. Pick one and record it as a comment block atop `game/main.ts` (the reference game shows the format).
 
+**The style card records the ART DECISIONS, not just the palette.** It must name, in one compact block:
+
+- **palette** + the background/actor index scheme;
+- **sprite tones** — the 2–3 palette indices per actor (body / shade / highlight) and whether the keyline is authored into the rows or baked with `{ outline }` (§3b), plus what each living thing's 2 frames do;
+- **background planes** — the far band/ramp and the silhouette layer, with their indices, and the note that both sit under the ambient band (§7);
+- **surface treatment** — the `drawBevel` fill/light/dark triple, the one texture strip, and how edges/pits read as depth;
+- **logo colors** — the `drawLogo` `color`/`shade`/`shadow` indices, and what the title's hero prop is;
+- ambient preset, juice personality, terminal-screen treatment.
+
+The two art-passed fixtures show the format at full length: `verification/cave-hopper/game/main.ts` and `verification/brick-bounce/game/main.ts` (read only — never run or modify a fixture).
+
 **Divergence rule — a concrete comparison set.** The chosen style card must differ from:
 
-- **(a) the reference game's combination** — PICO8 / black bg / blue arrow-ship / yellow `+` pickup / red `x` hazard / `'stars'` — **always reserved**; and
+- **(a) the reference game's combination** — PICO8 / black bg / blue arrow-ship / yellow `+` pickup / red `x` hazard / `'stars'` — **always reserved**; and the two fixtures' combinations are reserved with it: **cave-hopper** (SUNSET / banded cave + stalactite silhouettes / cream outlined hopper / gold coin / fang spikes / `'embers'`) and **brick-bounce** (PICO8 underwater / navy depth ramp + coral + arena bezel / white pearl / beveled shell rows / `'bubbles'`). Borrow the *techniques* from a fixture; never its look; and
 - **(b) the style cards of every game currently in `workspace/`** — read the comment blocks atop their `main.ts` files before choosing.
 
 Any two coexisting games must differ on **sprite silhouettes AND at least one other axis** (palette-index scheme, ambient preset, or burst colors beyond the palette mapping). Ambient is exempt from the count when the fiction locks it (two space games may both use `'stars'` — they still differ on silhouette plus another axis). Bursts use the game's **own palette colors** — never the engine default yellow.
@@ -122,6 +133,45 @@ drawSprite(pc.ctx, heartSprite, 100, 40, 2); // 2x2 logical px per cell
 
 Rules: `.` and space are transparent (as is any char missing from the map); distinct game entities get distinct silhouettes *and* distinct palette indices; a sprite that needs a caption to be understood is too abstract — redraw it.
 
+## 3b. Sprite craft — full-size, multi-tone, outlined, animated
+
+§3 gets a shape on screen. This section is what separates a **game** from a demo: a one-color blob at `px: 2` is legible and still looks like a placeholder. Worked examples: `verification/cave-hopper/game/main.ts` (player, coin, spikes, flag) and `verification/brick-bounce/game/main.ts` (the pearl). Read them; never run or modify them.
+
+- **Author at `px = 1`, at the sprite's full rendered size.** A 10×8-px ship is a **10×8-cell** ASCII map drawn at `px: 1` — not a 5×4 map at `px: 2`. Cells are your resolution: at `px: 2` you cannot draw a keyline, a shade or an eye, only 2×2 chunks. The size floors and the hitbox rule from §3 are unchanged (rendered size = `px × cells`; here `px` is 1, so the map size *is* the hitbox size). `px >= 2` stays legitimate for **title-screen props** (§7) and for coarse background dressing, not for gameplay actors.
+- **2–3 palette tones per sprite:** a body tone, a shade for the lower/away side, and (optionally) a highlight where the light hits. Same palette, same indices as everything else (§1) — three chars in the `SpriteMap`, no extra cost.
+- **Plus a dark keyline.** Either author the outline **into the rows** (an `O` char mapped to the darkest palette index — cave-hopper does this, and the sprite's `w`/`h` stay exactly as written), or pass `makeSprite(rows, map, { outline: PAL[0] })`, which bakes an 8-neighbour keyline and **grows the sprite by one cell on every side** — a hitbox derived from it must use the inner size. Authoring it in is preferred precisely because the footprint stays honest.
+- **Silhouette first, still.** All of the above is on top of §1b's role-hue contract: the shape must read in one flat color before any tone is added. Tones make it look built; they never rescue a mushy outline.
+- **Anything alive gets a 2-frame animation**, picked from the game clock with `frameIndex(clock, fps, count)`: an engine flame flicker, a coin spin (wide→narrow disc), a walk cycle, a flag flutter, an idle bob. Two frames is enough — 3–8 fps. Build the frames once at module scope (§10 of improving-game-quality); `frameIndex` is the only per-frame cost.
+- **Facing is a second sprite, not a transform.** `flipSprite(sprite)` (or `makeSprite(..., { flipX: true })`) at **setup**, then index by facing in render. Never flip per frame.
+
+```ts
+import { makeSprite, flipSprite, frameIndex, drawSprite, SUNSET } from '../engine';
+
+const PAL = SUNSET;
+// 8x10 cells at px 1: O = authored keyline, C = body, F = shade, V = highlight.
+const MAP = { O: PAL[0], C: PAL[7], F: PAL[5], V: PAL[3] };
+const BODY = [
+  '..OOOO..',
+  '.OCCCCO.',
+  '.OCCVVO.',
+  '.OCCCCO.',
+  '..OCCO..',
+  'OCCCCCCO',
+  'OCFFFFCO',
+  '.OFFFFO.',
+];
+// Two frames: legs together / legs apart. Facing mirrored ONCE, at setup.
+const heroRight = [
+  makeSprite([...BODY, '.OC..CO.', 'OCC..CCO'], MAP),
+  makeSprite([...BODY, '.OC..CO.', '.OC..CO.'], MAP),
+];
+const heroLeft = heroRight.map(flipSprite);
+
+// In render — px 1, and the hitbox is the 8x10 the rows describe.
+const set = player.facing < 0 ? heroLeft : heroRight;
+drawSprite(pc.ctx, set[frameIndex(clock, 8, 2)], Math.round(player.x), Math.round(player.y), 1);
+```
+
 ## 4. Retro text — the built-in 3×5 bitmap font
 
 All text goes through `drawText` / `drawTextCentered` (never canvas `fillText` — a system font instantly breaks the retro look). The engine font is 3×5 pixels per glyph and **uppercases input automatically**; it covers A–Z, 0–9, and common punctuation. Write strings in uppercase anyway so what you read in code is what renders.
@@ -192,14 +242,88 @@ Call `particles.update(dt)` in the update tick and `particles.render(pc.ctx)` in
 
 **Depth, twinkle, and clustering are defaults now — nothing to opt into.** Every ambient preset builds 2–3 depth layers automatically (far specks dimmer/slower, near ones a touch brighter/faster/bigger, plus a handful of bright sparks for `'stars'`/`'embers'`); each particle twinkles on its own deterministic clock instead of holding a flat alpha; and every preset but `'rain'` clusters into clumps or streams rather than an even sprinkle (an even scatter reads as dirt on the glass, not atmosphere). `ambientColor` (or `setAmbient(preset, color)`) still exists for retuning the whole band to a non-black background — the depth-layer tones are derived from whatever color you pass, so an override keeps the ramp. The far layer is always dimmer than the mid layer, which is dimmer than the near layer — don't hand-tune that ordering per game.
 
+## 7. Art direction — backgrounds, surfaces, title
+
+The single loudest "this is a demo" tell is not the sprites: it is a **flat clear color behind a flat rectangle under a text-only title**. Every game gets a background with depth, surfaces with a light source, and a drawn title. All four helpers below are cheap and setup-free (`fillBands`, `fillDither`, `drawBevel`, `drawFrame`, `drawLogo` — all from `'../engine'`). Worked examples: cave-hopper (cave depth, rock slabs, pit) and brick-bounce (underwater ramp, light shafts, arena bezel, beveled shells).
+
+### Backgrounds — at least two depth planes
+
+1. **A far band or horizon** — `fillBands(ctx, 0, 0, W, h, [c1, c2, c3])` for sky/water/cave depth, or a short `fillDither` ladder between the palette's **two darkest** tones for a smooth seam (`fillDither(ctx, x, y, w, h, colorA, colorB, 'sparse' | 'checker')` — two palette colors mixed into a third without leaving the palette).
+2. **Silhouettes that frame the arena** — stalactites, coral, a planet, a city line, side walls closing in — drawn in the **darkest** tones.
+
+Both planes must sit **at or below the ambient band vs the clear color** (§1b): scenery may never compete with an actor. The engine ambient layer renders *on top* of them (`particles.render` after the backdrop, before the world). Keep the play field itself **calm** — no texture directly under fast actors, or the pattern beats against their motion. Two or three dither seams low in the frame read as depth; a tall dither ladder across the play area reads as stripes.
+
+```ts
+import { fillBands, fillDither, SUNSET } from '../engine';
+const PAL = SUNSET;
+
+function drawBackdrop(): void {
+  const ctx = pc.ctx;
+  fillBands(ctx, 0, 0, W, 104, [PAL[0], PAL[0]]);        // far plane: cave dark
+  fillDither(ctx, 0, 104, W, 5, PAL[0], PAL[1], 'sparse');   // seam, low in frame
+  fillDither(ctx, 0, 109, W, 5, PAL[0], PAL[1], 'checker');
+  ctx.fillStyle = PAL[1];
+  ctx.fillRect(0, 114, W, H - 114);                      // near plane
+  for (const [x, w, h] of STALACTITES) drawSpike(x, w, h, PAL[1]); // silhouettes
+}
+```
+
+### Surfaces — every slab is beveled, edges read as depth
+
+- Every platform, brick, paddle and panel is `drawBevel(ctx, x, y, w, h, fill, light, dark)` — a 1-px lit top/left and dark bottom/right edge turns a rectangle into an object. Take `fill`/`light`/`dark` from three neighbouring palette indices.
+- **At most one texture strip** per surface (a `fillDither` face, or a lit top lip) — more and the surface competes with the actors standing on it.
+- **Pits and edges are depth, not seams:** `fillBands(ctx, pit.x, y, pit.w, h, [PAL[1], PAL[0], '#000000'])` falls away into black. (The literal black here is the one legitimate non-palette color — it is the absence of surface, not an art color.)
+- **An arena frame where the fiction has walls:** `drawFrame(ctx, x, y, w, h, color, thickness)`, optionally twice (a thick dark bezel plus a 1-px light keyline) so the walls the actor bounces off are visibly the walls.
+
+```ts
+import { drawBevel, fillDither, drawFrame } from '../engine';
+
+function drawSlab(x: number, y: number, w: number, h: number): void {
+  drawBevel(pc.ctx, x, y, w, h, PAL[2], PAL[3], PAL[1]);            // fill / light / dark
+  if (h > 3) fillDither(pc.ctx, x + 1, y + 3, w - 2, h - 4, PAL[2], PAL[1], 'sparse');
+  fillDither(pc.ctx, x + 1, y + 1, w - 2, 1, PAL[3], PAL[4], 'sparse'); // lit top lip
+}
+drawFrame(pc.ctx, 4, 12, W - 8, 164, PAL[0], 4);   // bezel
+drawFrame(pc.ctx, 7, 15, W - 14, 158, PAL[5], 1);  // keyline on the bounce walls
+```
+
+### Title screen — a drawn wordmark, a hook, and the hero
+
+A title made of `drawTextCentered` at scale 3 is a placeholder. The title screen carries four things:
+
+1. **`drawLogo(ctx, text, W, y, { color, shade, shadow, scale })`** — a two-tone lit-from-above wordmark with an offset shadow, in one call (`color` lights the top 3 font rows, `shade` is the body, `shadow` the offset). Take all three from the palette.
+2. **A one-line hook** at scale 1 — what the player does, in six words ("HOP THE SPIKES  REACH THE FLAG").
+3. **The hero as a prop** — the player sprite drawn **large** (`px` 3–5) on a beveled ledge, with a pickup beside it. This is the one place `px > 1` is right: it is a poster, not a hitbox. Props show the still frame (`frames[0]`) or a slow `frameIndex`; they never animate at gameplay speed.
+4. **A pulsing prompt + control hints** — `blink`/`pulse` per improving-game-quality §1b, then `controlHints(input)`.
+
+Terminal screens (GAME_OVER / WIN) keep the world visible: `dimScene(pc, 0.6)` then a **beveled plaque** (`drawBevel`) or `drawPanel` behind the headline block. Dim **or** plate for a given piece of text, never both.
+
+```ts
+import { drawLogo, drawTextCentered, drawSprite, blink, controlHints, BUTTON_KEY } from '../engine';
+
+drawLogo(pc.ctx, 'CAVE HOPPER', W, 18, { color: PAL[6], shade: PAL[5], shadow: PAL[1], scale: 3 });
+drawTextCentered(pc.ctx, 'HOP THE SPIKES  REACH THE FLAG', W, 42, { color: PAL[5] });
+drawSlab(40, 104, 68, 10);                                  // the ledge
+drawSprite(pc.ctx, heroRight[0], 52, 56, 4);                // hero prop at px 4
+drawSprite(pc.ctx, coinFrames[0], 122, 74, 3);              // pickup prop
+drawTextCentered(pc.ctx, `PRESS ${BUTTON_KEY.A.hint} TO START`, W, 118, {
+  color: blink(clock, 1.0, 0.6) ? PAL[7] : PAL[5],
+});
+controlHints(input).forEach((h, i) => drawTextCentered(pc.ctx, h, W, 130 + i * 8, { color: PAL[6] }));
+```
+
 ## Visual pass checklist (look only)
 
-- [ ] Style card comment atop `main.ts`; differs from the reference game AND every other game in `workspace/` per the divergence rule (§0).
+- [ ] Style card comment atop `main.ts`, recording the art decisions (sprite tones, background planes, surface treatment, logo colors) as well as palette/ambient/juice; differs from the reference game, both fixtures, AND every other game in `workspace/` per the divergence rule (§0).
 - [ ] One named palette (`PICO8` / `GAMEBOY` / `DUSK` / `NEON` / `SUNSET` / `OCEAN`); zero ad-hoc hex strings in `game/`.
 - [ ] Every gameplay-critical entity color clears `contrast() >= 3.0` vs the clear color and any scenery it overlaps; ambient color in the 1.8–2.5:1 band; entities distinguishable in grayscale (§1b).
 - [ ] Player, pickup, hazard use three different hue families AND three different silhouettes (never the reference/fixture shapes reused across roles); pickup is the palette's brightest warm accent; hazard is red-family or spiky (§1b role-hue contract).
 - [ ] Logical resolution low (reference: 240×160, scale 3); all drawing in logical units.
 - [ ] Sprites are `makeSprite` ASCII art, distinct silhouettes + colors per entity type; size floors met (player ≥ H/16, other critical entities ≥ H/26) and hitboxes within ~1 px of rendered size (§3); silhouettes checked at their actual rendered px size, not preview zoom.
+- [ ] Sprites authored at `px = 1` at full rendered size, 2–3 palette tones each, with a dark keyline (authored into the rows, or `makeSprite {outline}` with the hitbox on the inner size); every living thing has a 2-frame `frameIndex` animation and facing via `flipSprite` mirrored at setup (§3b).
+- [ ] Background has ≥2 depth planes (a `fillBands`/`fillDither` far band plus dark silhouettes), both at or below the ambient band, with the play field kept calm; ambient renders on top (§7).
+- [ ] Every platform/brick/panel is a `drawBevel` slab with at most one texture strip; pits/edges fall away via `fillBands` into black; `drawFrame` bezel where the fiction has walls (§7).
+- [ ] Title is `drawLogo` + a one-line hook + the hero prop drawn large (`px` 3–5) + a pulsing prompt + control hints; terminal screens use `dimScene` plus a beveled plaque/`drawPanel` (dim OR plate, never both) (§7).
 - [ ] All text via `drawText` / `drawTextCentered`; hierarchy from `scale` + palette index; headline text keeps the default outline at scale >= 2 (rendered as a keyline from scale >= 3, as a drop shadow at scale 2), HUD text the default shadow, unless already on a plate/dimmed background (§4).
 - [ ] `crt.render` is the last call of every frame, after `juice.postRender`.
 - [ ] Ambient preset fits the fiction; bursts use the game's own palette colors, never the engine default.
