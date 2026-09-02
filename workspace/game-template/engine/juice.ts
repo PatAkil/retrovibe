@@ -82,11 +82,23 @@ export function createJuice(): Juice {
       ctx.restore();
       if (flashTime > 0 && flashDur > 0) {
         const t = Math.max(0, flashTime / flashDur);
-        // Fast cubic ease-out: snaps bright, then clears quickly, capped
-        // well below full opacity so the burst/shake/frozen tableau stays
-        // visible through the flash instead of being washed out by it.
+        // Hold-then-fall: full peak for the first HOLD fraction of the
+        // duration (the hit-stop tableau stays lit so the death instant
+        // reads as a hit even on a mid-luminance ground), then a quadratic
+        // ease-out clears the rest of the way so the world is legible again
+        // well before GAME_OVER. Peak capped below full opacity so the
+        // burst/shake/frozen tableau stays visible through the flash
+        // instead of being washed out by it.
         const PEAK = 0.65;
-        ctx.globalAlpha = PEAK * t * t * t;
+        const HOLD = 0.35; // fraction of duration held at full peak before falling
+        let shape;
+        if (t > 1 - HOLD) {
+          shape = 1;
+        } else {
+          const u = t / (1 - HOLD); // renormalize remaining fall to 0..1
+          shape = u * u;
+        }
+        ctx.globalAlpha = PEAK * shape;
         ctx.fillStyle = flashColor;
         ctx.fillRect(0, 0, width, height);
         ctx.globalAlpha = 1;
