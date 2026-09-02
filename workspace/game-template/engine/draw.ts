@@ -128,12 +128,16 @@ const FONT: Record<string, string[]> = {
   K: ['#.#', '#.#', '##.', '#.#', '#.#'],
   L: ['#..', '#..', '#..', '#..', '###'],
   M: ['#.#', '###', '###', '#.#', '#.#'],
-  N: ['#.#', '##.', '#.#', '.##', '#.#'],
+  // Opposite-corner chamfer (not the reversing zig-zag): reads as N without
+  // being mistaken for K's single mid-row diagonal notch or crossing into an X.
+  N: ['##.', '#.#', '#.#', '#.#', '.##'],
   O: ['###', '#.#', '#.#', '#.#', '###'],
   P: ['###', '#.#', '###', '#..', '#..'],
   Q: ['###', '#.#', '#.#', '###', '..#'],
   R: ['###', '#.#', '###', '##.', '#.#'],
-  S: ['###', '#..', '###', '..#', '###'],
+  // Distinct from digit '5' (boxy, flat-top) — a curvy diagonal S so the two
+  // never render as the same bitmap.
+  S: ['.##', '#..', '.#.', '..#', '##.'],
   T: ['###', '.#.', '.#.', '.#.', '.#.'],
   U: ['#.#', '#.#', '#.#', '#.#', '###'],
   V: ['#.#', '#.#', '#.#', '#.#', '.#.'],
@@ -177,6 +181,13 @@ export interface TextOptions {
   scale?: number;
   /** Gap between glyphs in font pixels (default 1). */
   spacing?: number;
+  /**
+   * Opt-in 1px dark drop shadow behind the glyphs, for legibility on a
+   * mid-luminance ground. Default OFF — does not change any existing look.
+   */
+  shadow?: boolean;
+  /** Shadow color when `shadow` is on (default '#000000'). */
+  shadowColor?: string;
 }
 
 /** Width in logical px that drawText would occupy for `text`. */
@@ -196,23 +207,29 @@ export function drawText(
   const color = opts.color ?? '#FFF1E8';
   const scale = opts.scale ?? 1;
   const spacing = opts.spacing ?? 1;
-  ctx.fillStyle = color;
   const advance = (GLYPH_W + spacing) * scale;
-  let cursor = x;
-  for (const raw of text.toUpperCase()) {
-    const glyph = FONT[raw];
-    if (glyph) {
-      for (let gy = 0; gy < GLYPH_H; gy++) {
-        const row = glyph[gy];
-        for (let gx = 0; gx < GLYPH_W; gx++) {
-          if (row[gx] === '#') {
-            ctx.fillRect(cursor + gx * scale, y + gy * scale, scale, scale);
+
+  const paint = (color: string, dx: number, dy: number) => {
+    ctx.fillStyle = color;
+    let cursor = x;
+    for (const raw of text.toUpperCase()) {
+      const glyph = FONT[raw];
+      if (glyph) {
+        for (let gy = 0; gy < GLYPH_H; gy++) {
+          const row = glyph[gy];
+          for (let gx = 0; gx < GLYPH_W; gx++) {
+            if (row[gx] === '#') {
+              ctx.fillRect(cursor + gx * scale + dx, y + gy * scale + dy, scale, scale);
+            }
           }
         }
       }
+      cursor += advance;
     }
-    cursor += advance;
-  }
+  };
+
+  if (opts.shadow) paint(opts.shadowColor ?? '#000000', 1, 1);
+  paint(color, 0, 0);
 }
 
 /** Draw text horizontally centered within [0, areaWidth]. */
