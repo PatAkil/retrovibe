@@ -4,10 +4,16 @@
 // 'embers' ambient, a lives HUD, a minor landing burst next to a major death
 // tableau, respawn, and both terminal scenes (WIN flag, GAME_OVER on 0 lives).
 //
-// STYLE CARD: palette SUNSET — bg 0, tiles 2 with a 3 top edge, spikes 4,
-// flag 5, coins 6, player 7 · ambient 'embers' · silhouettes: tall runner /
-// diamond coin / picket spikes / pennant flag · juice: orange death flash,
-// hard freeze-frame, tiny landing puff; terminal screens dimScene the world.
+// STYLE CARD: palette SUNSET — cave depth banded/dithered 0→1 with far rock
+// humps (0) and stalactite + side-wall silhouettes (1) well under the ambient
+// band; terrain = beveled slabs (fill 2, light 3, dark 1) with a dithered rock
+// face and a lit top lip; the pit is a 1→0→black gradient, not a seam.
+// Actors carry authored dark outlines and 2-frame animation: player cream 7
+// with a 5 fold and a 3 visor (walk/idle + facing flip), coin gold 6 with a 7
+// glint (wide/narrow spin), spikes hostile 4/3 with a 6 tip, flag a 5 pennant
+// on a 7 pole (flutter) · ambient 'embers' · juice: orange death flash, hard
+// freeze-frame, tiny landing puff; terminal screens dimScene the world behind
+// a beveled panel. TITLE: drawLogo + the player large (px 4) on a ledge.
 
 import {
   createPixelCanvas,
@@ -21,11 +27,19 @@ import {
   createCrt,
   createRuntime,
   makeSprite,
+  flipSprite,
+  frameIndex,
   drawSprite,
   drawTextCentered,
+  drawLogo,
+  drawBevel,
+  fillBands,
+  fillDither,
+  blink,
   drawScore,
   drawLives,
   hudText,
+  drawPanel,
   dimScene,
   BUTTON_KEY,
   SUNSET,
@@ -58,20 +72,97 @@ const juice = createJuice();
 const crt = createCrt();
 const runtime = createRuntime();
 
-// --- Sprites (PX = 2 logical px per cell) ------------------------------------
+// --- Sprites (authored at 1 logical px per cell — footprints unchanged) -------
 
-const PX = 2;
+const PX = 1;
 
-const playerSprite = makeSprite(
-  ['.##.', '.##.', '####', '.##.', '.##.', '#..#'],
-  { '#': PAL[7] },
-); // 4x6 cells → 8x12 px
-const coinSprite = makeSprite(['.#.', '###', '.#.'], { '#': PAL[6] }); // 6x6 px
-const spikeSprite = makeSprite(['#.#.', '#.#.', '####'], { '#': PAL[4] }); // 8x6 px
-const flagSprite = makeSprite(
-  ['##..', '###.', '####', '#...', '#...', '#...'],
-  { '#': PAL[5] },
-); // 8x12 px
+// Player: 8x12 cells. O = authored dark keyline, C = cream body, F = fold
+// shading, V = visor. Two frames (stride / passing) + a mirrored facing set.
+const PLAYER_MAP = { O: PAL[0], C: PAL[7], F: PAL[5], V: PAL[3] };
+const PLAYER_TOP = [
+  '..OOOO..',
+  '.OCCCCO.',
+  '.OCCVVO.',
+  '.OCCCCO.',
+  '..OCCO..',
+  'OCCCCCCO',
+  'OCFFFFCO',
+  'OCFFFFCO',
+  '.OFFFFO.',
+  '.OCCCCO.',
+];
+const playerRight = [
+  makeSprite([...PLAYER_TOP, '.OC..CO.', 'OCC..CCO'], PLAYER_MAP),
+  makeSprite([...PLAYER_TOP, '.OC..CO.', '.OC..CO.'], PLAYER_MAP),
+];
+const playerLeft = playerRight.map(flipSprite);
+
+// Coin: 6x6 cells, gold body with a cream glint and an orange rim. Two frames
+// spin the disc wide→narrow.
+const COIN_MAP = { d: PAL[4], G: PAL[6], H: PAL[7], O: PAL[0] };
+const coinFrames = [
+  makeSprite(
+    ['.GGGG.', 'dGHHGd', 'dGHGGd', 'dGGGGd', 'dGGGGd', '.dddd.'],
+    COIN_MAP,
+  ),
+  makeSprite(
+    ['..dd..', '.dGHd.', '.dGHd.', '.dGGd.', '.dGGd.', '..dd..'],
+    COIN_MAP,
+  ),
+];
+
+// Spikes: 8x6 cells — two teeth, bright tip, orange upper, dark-red lower,
+// authored black sides and base so the hazard never shares the slab's value.
+const spikeSprite = makeSprite(
+  [
+    '...LL...',
+    '..OWWO..',
+    '..WWWW..',
+    '.OWRRWO.',
+    '.RRRRRR.',
+    'ORRRRRRO',
+  ],
+  { L: PAL[6], W: PAL[4], R: PAL[3], O: PAL[0] },
+);
+
+// Flag: 8x12 cells — cream pole, peach pennant, 2-frame flutter.
+const FLAG_MAP = { P: PAL[7], F: PAL[5], D: PAL[3], O: PAL[0] };
+const flagFrames = [
+  makeSprite(
+    [
+      '.PO.....',
+      '.PFFFFO.',
+      '.PFFFFFO',
+      '.PFFFFO.',
+      '.PFFO...',
+      '.PO.....',
+      '.PO.....',
+      '.PO.....',
+      '.PO.....',
+      '.PO.....',
+      '.PO.....',
+      'DDDDO...',
+    ],
+    FLAG_MAP,
+  ),
+  makeSprite(
+    [
+      '.PO.....',
+      '.PFFO...',
+      '.PFFFFO.',
+      '.PFFFFFO',
+      '.PFFFFO.',
+      '.PFFO...',
+      '.PO.....',
+      '.PO.....',
+      '.PO.....',
+      '.PO.....',
+      '.PO.....',
+      'DDDDO...',
+    ],
+    FLAG_MAP,
+  ),
+];
 
 // --- Level -------------------------------------------------------------------
 
@@ -100,6 +191,18 @@ const coinSpots: Rect[] = [
 ];
 const goal: Rect = { x: 216, y: 60, w: 8, h: 12 };
 const START = { x: 12, y: 132 };
+const PIT = { x: 104, w: 32 };
+
+// Cave dressing — fixed geometry, no randomness (the capture is deterministic).
+const STALACTITES: Array<[number, number, number]> = [
+  [4, 11, 15], [24, 7, 9], [42, 13, 20], [68, 8, 11], [90, 15, 24],
+  [116, 9, 12], [136, 12, 17], [160, 7, 9], [178, 14, 21], [204, 8, 12],
+  [222, 11, 16],
+];
+const FAR_ROCKS: Array<[number, number, number]> = [
+  [-6, 44, 20], [50, 30, 13], [148, 46, 22], [198, 42, 15],
+];
+const SIDE_TEETH = [7, 4, 9, 5, 8, 4, 10, 6, 7, 5, 9, 4, 8, 6, 7, 5, 9, 4, 6, 8];
 
 // Platformer tuning — starting points from building-platformer-games.
 const GRAVITY = 900;
@@ -112,12 +215,13 @@ const JUMP_BUFFER = 0.12;
 
 const player = {
   x: START.x, y: START.y, w: 8, h: 12,
-  vx: 0, vy: 0, onGround: false, coyote: 0, buffer: 0,
+  vx: 0, vy: 0, onGround: false, coyote: 0, buffer: 0, facing: 1,
 };
 let coins: Rect[] = [];
 let score = 0;
 let lives = 3;
 let dying = false;
+let clock = 0; // animation clock — drives walk cycles, coin spin, flutter, blink
 
 function overlaps(a: Rect, b: Rect): boolean {
   return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
@@ -131,6 +235,7 @@ function respawn(): void {
   player.onGround = false;
   player.coyote = 0;
   player.buffer = 0;
+  player.facing = 1;
 }
 
 function resetWorld(): void {
@@ -169,6 +274,7 @@ function loseLife(): void {
 
 function updatePlayer(dt: number): void {
   player.vx = input.dir.x * MOVE_SPEED;
+  if (input.dir.x !== 0) player.facing = input.dir.x > 0 ? 1 : -1;
 
   if (input.pressed('A')) player.buffer = JUMP_BUFFER;
   else player.buffer = Math.max(0, player.buffer - dt);
@@ -247,6 +353,7 @@ function startPlaying(): void {
 }
 
 function update(dt: number): void {
+  clock += dt;
   juice.update(dt);
   particles.update(dt);
 
@@ -298,31 +405,121 @@ function update(dt: number): void {
 
 // --- Render ------------------------------------------------------------------
 
-function drawLevel(): void {
-  for (const s of solids) {
-    pc.ctx.fillStyle = PAL[2];
-    pc.ctx.fillRect(s.x, s.y, s.w, s.h);
-    pc.ctx.fillStyle = PAL[3];
-    pc.ctx.fillRect(s.x, s.y, s.w, 1);
+/** Downward-tapering silhouette (stalactite). */
+function drawSpike(x: number, w: number, h: number, color: string): void {
+  pc.ctx.fillStyle = color;
+  for (let r = 0; r < h; r++) {
+    const inset = Math.floor((r * (w / 2)) / h);
+    const rw = w - 2 * inset;
+    if (rw <= 0) break;
+    pc.ctx.fillRect(x + inset, r, rw, 1);
   }
+}
+
+/** Rounded rock hump rising from `base`. */
+function drawHump(x: number, w: number, h: number, base: number, color: string): void {
+  pc.ctx.fillStyle = color;
+  for (let r = 0; r < h; r++) {
+    const inset = Math.floor(((h - r) * (w / 2.6)) / h);
+    const rw = w - 2 * inset;
+    if (rw <= 0) continue;
+    pc.ctx.fillRect(x + inset, base - h + r, rw, 1);
+  }
+}
+
+/** Two-band cave depth + far rock humps + stalactite / side-wall silhouettes. */
+function drawCave(): void {
+  const ctx = pc.ctx;
+  fillBands(ctx, 0, 0, W, 104, [PAL[0], PAL[0]]);
+  // A short ladder low in the frame reads as the floor of the cave lifting
+  // toward the light; a tall one would read as stripes across the play area.
+  fillDither(ctx, 0, 104, W, 5, PAL[0], PAL[1], 'sparse');
+  fillDither(ctx, 0, 109, W, 5, PAL[0], PAL[1], 'checker');
+  fillDither(ctx, 0, 114, W, 5, PAL[1], PAL[0], 'sparse');
+  ctx.fillStyle = PAL[1];
+  ctx.fillRect(0, 119, W, H - 119);
+
+  for (const [x, w, h] of FAR_ROCKS) drawHump(x, w, h, 146, PAL[0]);
+  for (const [x, w, h] of STALACTITES) drawSpike(x, w, h, PAL[1]);
+
+  // Cave walls closing in from the sides.
+  for (let i = 0; i < SIDE_TEETH.length; i++) {
+    const y = i * 8;
+    const t = SIDE_TEETH[i];
+    ctx.fillStyle = y < 100 ? PAL[1] : PAL[0];
+    ctx.fillRect(0, y, t, 8);
+    ctx.fillRect(W - t, y, t, 8);
+  }
+}
+
+/** A beveled rock slab with a dithered face and a lit top lip. */
+function drawSlab(x: number, y: number, w: number, h: number): void {
+  drawBevel(pc.ctx, x, y, w, h, PAL[2], PAL[3], PAL[1]);
+  if (h > 3) fillDither(pc.ctx, x + 1, y + 3, w - 2, h - 4, PAL[2], PAL[1], 'sparse');
+  fillDither(pc.ctx, x + 1, y + 1, w - 2, 1, PAL[3], PAL[4], 'sparse');
+}
+
+function drawLevel(): void {
+  // The pit reads as depth, not a seam: a gradient falling away into black.
+  fillBands(pc.ctx, PIT.x, 132, PIT.w, H - 132, [PAL[1], PAL[0], '#000000']);
+  for (const s of solids) drawSlab(s.x, s.y, s.w, s.h);
+  const coinFrame = coinFrames[frameIndex(clock, 3, coinFrames.length)];
   for (const s of spikes) drawSprite(pc.ctx, spikeSprite, s.x, s.y, PX);
-  for (const c of coins) drawSprite(pc.ctx, coinSprite, c.x, c.y, PX);
-  drawSprite(pc.ctx, flagSprite, goal.x, goal.y, PX);
+  for (const c of coins) drawSprite(pc.ctx, coinFrame, c.x, c.y, PX);
+  drawSprite(pc.ctx, flagFrames[frameIndex(clock, 4, flagFrames.length)], goal.x, goal.y, PX);
+}
+
+function playerFrame(): number {
+  if (!player.onGround) return 1;
+  if (player.vx === 0) return 0;
+  return frameIndex(clock, 8, 2);
+}
+
+function drawPlayer(): void {
+  const set = player.facing < 0 ? playerLeft : playerRight;
+  drawSprite(pc.ctx, set[playerFrame()], Math.round(player.x), Math.round(player.y), PX);
+}
+
+function drawTerminal(headline: string, color: string): void {
+  drawLevel();
+  drawPlayer();
+  dimScene(pc, 0.6);
+  drawPanel(pc, 52, 38, 136, 62, { border: PAL[3] });
+  drawTextCentered(pc.ctx, headline, W, 48, { color, scale: 2 });
+  drawTextCentered(pc.ctx, `SCORE ${score}`, W, 72, { color: PAL[7] });
+  // Always visible, breathing between two palette tones — never a missing prompt.
+  drawTextCentered(pc.ctx, `${BUTTON_KEY.A.hint} RESTART`, W, 88, {
+    color: blink(clock, 1.0, 0.6) ? PAL[6] : PAL[5],
+  });
 }
 
 function render(): void {
   pc.clear(PAL[0]);
   juice.preRender(pc.ctx);
+  drawCave();
   particles.render(pc.ctx);
 
   switch (scenes.current) {
     case 'TITLE': {
-      drawTextCentered(pc.ctx, 'CAVE HOPPER', W, 40, { color: PAL[6], scale: 3 });
-      drawTextCentered(pc.ctx, 'REACH THE FLAG', W, 70, { color: PAL[5] });
-      controlHints(input).forEach((hint, i) => {
-        drawTextCentered(pc.ctx, hint, W, 92 + i * 10, { color: PAL[7] });
+      drawLogo(pc.ctx, 'CAVE HOPPER', W, 18, {
+        color: PAL[6], shade: PAL[5], shadow: PAL[1], scale: 3,
       });
-      drawTextCentered(pc.ctx, 'ARROWS/WASD MOVE', W, 92 + controlHints(input).length * 10, {
+      drawTextCentered(pc.ctx, 'HOP THE SPIKES  REACH THE FLAG', W, 42, { color: PAL[5] });
+
+      // The hero shot: the player big on a lit ledge, a coin waiting.
+      drawSlab(40, 104, 68, 10);
+      drawSprite(pc.ctx, playerRight[frameIndex(clock, 3, 2)], 52, 56, 4);
+      // The hero coin is a prop, not an actor — always the full disc.
+      drawSprite(pc.ctx, coinFrames[0], 122, 74, 3);
+
+      drawTextCentered(pc.ctx, `PRESS ${BUTTON_KEY.A.hint} TO START`, W, 118, {
+        color: blink(clock, 1.0, 0.6) ? PAL[7] : PAL[5],
+      });
+      const hints = controlHints(input);
+      hints.forEach((hint, i) => {
+        drawTextCentered(pc.ctx, hint, W, 130 + i * 8, { color: PAL[6] });
+      });
+      drawTextCentered(pc.ctx, 'ARROWS/WASD MOVE', W, 130 + hints.length * 8, {
         color: PAL[3],
       });
       break;
@@ -330,7 +527,7 @@ function render(): void {
     case 'PLAYING':
     case 'PAUSED': {
       drawLevel();
-      drawSprite(pc.ctx, playerSprite, Math.round(player.x), Math.round(player.y), PX);
+      drawPlayer();
       drawScore(pc, score);
       drawLives(pc, lives);
       if (scenes.is('PAUSED')) {
@@ -339,21 +536,11 @@ function render(): void {
       break;
     }
     case 'GAME_OVER': {
-      drawLevel();
-      drawSprite(pc.ctx, playerSprite, Math.round(player.x), Math.round(player.y), PX);
-      dimScene(pc, 0.6);
-      drawTextCentered(pc.ctx, 'GAME OVER', W, 48, { color: PAL[4], scale: 2 });
-      drawTextCentered(pc.ctx, `SCORE ${score}`, W, 72, { color: PAL[7] });
-      drawTextCentered(pc.ctx, `${BUTTON_KEY.A.hint} RESTART`, W, 88, { color: PAL[5] });
+      drawTerminal('GAME OVER', PAL[4]);
       break;
     }
     case 'WIN': {
-      drawLevel();
-      drawSprite(pc.ctx, playerSprite, Math.round(player.x), Math.round(player.y), PX);
-      dimScene(pc, 0.6);
-      drawTextCentered(pc.ctx, 'YOU WIN', W, 48, { color: PAL[6], scale: 2 });
-      drawTextCentered(pc.ctx, `SCORE ${score}`, W, 72, { color: PAL[7] });
-      drawTextCentered(pc.ctx, `${BUTTON_KEY.A.hint} RESTART`, W, 88, { color: PAL[5] });
+      drawTerminal('YOU WIN', PAL[6]);
       break;
     }
   }
