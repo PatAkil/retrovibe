@@ -2,7 +2,10 @@
 //
 // Magnitude floors (feedback must be unmissable — see improving-game-quality):
 //   shake: major events (death/explosion) >= 4-6 px amplitude, >= 0.4 s
-//   flash: full-screen death flash holds >= 0.3 s
+//   flash: hold-then-fall, not a plain fade — the overlay sits at its 0.65 peak
+//     (never a full-opacity wash) for the first 20 % of the duration so the
+//     death instant reads as a strike, then falls on a quadratic ease-out over
+//     the remaining 80 %. Give it >= 0.3 s so the hold covers the hit-stop.
 //   hit-stop: the frozen tableau must actually RENDER — stay in PLAYING while
 //     frozen (~0.15 s, burst/shake/flash visible over the frozen world) and
 //     transition to GAME_OVER only when the hit-stop expires. Transitioning in

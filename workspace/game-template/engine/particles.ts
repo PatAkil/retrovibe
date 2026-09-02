@@ -120,7 +120,11 @@ export function createParticles(opts: ParticleOptions): ParticleSystem {
 
   const FAR = 0.85;
   const NEAR = 1.1;
-  const SPARK = 1.45; // 'stars' bright sparks + ember flare cores — 1 px only
+  // 'stars' bright sparks + ember flare cores — 1 px only. Kept just above the
+  // NEAR layer rather than far above it: at 1.45x a spark landed brighter than
+  // the actor floor against the CRT-lifted ground and started reading as a
+  // collectible. Ambient must stay atmosphere, never compete with a pickup.
+  const SPARK = 1.2;
   const GLOSS = 1.3; // the 1 px specular dot on a near bubble
 
   /**
