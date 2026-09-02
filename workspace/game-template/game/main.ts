@@ -53,24 +53,25 @@ const runtime = createRuntime();
 // ARCADE SCALE is the point: 6-10 px actors read as minimal, not as a cabinet.
 const PX = 1;
 const HULL = PICO8[12]; // cool blue — the player's hue family
-// 16x12 fighter: nose, cockpit, swept wings lit from above, twin nozzles.
-const SHIP_ROWS = ['.......oo.......', '......o##o......', '......o##o......',
-  '.....o#ww#o.....', '.....o#ww#o.....', '....o##ww##o....', '....o#m##m#o....',
-  '..olm######mlo..', 'ol##m######m##lo', '..o#mm####mm#o..', '....o##..##o....'];
-const SHIP_MAP = { o: PICO8[1], '#': HULL, m: PICO8[13], l: PICO8[6], w: PICO8[7], e: PICO8[10] };
+const SHIP_ROWS = ['.......##.......', '......o##o......', '......o##o......',
+  '.....o#ll#o.....', '.....o#ww#o.....', '....o##ww##o....', '...ol######lo...',
+  '.ol##########lo.', 'ol############lo', 'o##oo######oo##o', '....o##oo##o....'];
+// 3 tones only: 6 rim-lights the swept leading edge, 12 is the hull, 1 doubles
+// as keyline AND under-wing shadow — lavender read as dirt, so it is gone.
+const SHIP_MAP = { o: PICO8[1], '#': HULL, l: PICO8[6], w: PICO8[7], e: PICO8[10] };
 /** Engine flicker: two 12th rows, alternated by frameIndex — a ship that is ON. */
 const shipFrames = [
   makeSprite([...SHIP_ROWS, '.....ee..ee.....'], SHIP_MAP),
   makeSprite([...SHIP_ROWS, '......e..e......'], { ...SHIP_MAP, e: PICO8[9] })];
-// PATTERN: a same-shape, brighter twin is the cheapest "I felt that" flash.
+// PATTERN: a brighter same-shape twin is the cheapest "I felt that" flash.
 const shipFlashSprite = makeSprite([...SHIP_ROWS, '.....ee..ee.....'],
-  { o: PICO8[12], '#': PICO8[7], m: PICO8[12], l: PICO8[7], w: PICO8[7], e: PICO8[7] });
-// The ship is visibly GONE during the death tableau: debris replaces it.
+  { o: PICO8[12], '#': PICO8[7], l: PICO8[7], w: PICO8[7], e: PICO8[7] });
+// The ship is visibly GONE in the death tableau: debris replaces it.
 const debrisSprite = makeSprite(['..d..........d..', '.d#d...d....d#..',
   '....d.....d.....', '..d...d#d.......', '.......d#d....d.', '...d#d.......d..',
   '..........d#d...', '.d....d.........', '.....d...d....d.', '..d#d.......d#d.',
   '.......d........', '....d.....d.....'], { '#': PICO8[6], d: PICO8[5] });
-// An 8x8 cut gem whose white glint MOVES between frames — that is the sparkle.
+// 8x8 cut gem whose white glint MOVES between frames — that is the sparkle.
 const GEM_A = ['...##...', '..w###..', '.w#####.', '#w#####d',
   '#####ddd', '.####dd.', '..##dd..', '...dd...'];
 const GEM_B = ['...##...', '..####..', '.######.', '##w####d',
@@ -82,10 +83,10 @@ const pickupHotFrames = [makeSprite(GEM_A, GEM_HOT), makeSprite(GEM_B, GEM_HOT)]
 // 10x10 barbed mine: dark core, lit rim, barbs on AXES then DIAGONALS = tumble.
 const MINE_MAP = { '#': PICO8[8], k: PICO8[2], h: PICO8[14] };
 const MINE_HOT = { '#': PICO8[14], k: PICO8[2], h: PICO8[7] };
-const MINE_A = ['....##....', '....##....', '..h#####..', '.#h######.', '####kk####',
-  '####kk####', '.########.', '..######..', '....##....', '....##....'];
-const MINE_B = ['.##....##.', '.##....##.', '..h#####..', '.#h######.', '.###kk###.',
-  '.###kk###.', '.########.', '..######..', '.##....##.', '.##....##.'];
+const MINE_A = ['....##....', '...####...', '..h#####..', '.#h######.', '####kk####',
+  '####kk####', '.########.', '..######..', '...####...', '....##....'];
+const MINE_B = ['##......##', '.##....##.', '..h#####..', '.#h######.', '.###kk###.',
+  '.###kk###.', '.########.', '..######..', '.##....##.', '##......##'];
 const hazardFrames = [makeSprite(MINE_A, MINE_MAP), makeSprite(MINE_B, MINE_MAP)];
 const hazardHotFrames = [makeSprite(MINE_A, MINE_HOT), makeSprite(MINE_B, MINE_HOT)];
 // FAR LAYER: a planet, terminator dithered by hand. ONE tone, PICO8[1] (1.57:1
@@ -295,7 +296,6 @@ function renderWorld(): void {
 function renderTerminal(headline: string, color: string): void {
   renderWorld();
   dimScene(pc, 0.6);
-  // A hairline bezel around the headline block turns a text card into a panel.
   drawFrame(pc.ctx, 44, 34, W - 88, 84, PICO8[5], 1);
   drawTextCentered(pc.ctx, headline, W, 44, { color, scale: 2 });
   drawTextCentered(pc.ctx, `SCORE ${score}`, W, 70, { color: PICO8[7] });

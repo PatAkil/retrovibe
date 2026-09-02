@@ -85,19 +85,21 @@ const PX = 1;
 // A 16x12 fighter: pointed nose, white cockpit, swept wings lit from above
 // (6 highlight on the leading edge, 12 hull, 13 shade), twin engine nozzles.
 const SHIP_ROWS = [
-  '.......oo.......',
+  '.......##.......',
   '......o##o......',
   '......o##o......',
-  '.....o#ww#o.....',
+  '.....o#ll#o.....',
   '.....o#ww#o.....',
   '....o##ww##o....',
-  '....o#m##m#o....',
-  '..olm######mlo..',
-  'ol##m######m##lo',
-  '..o#mm####mm#o..',
-  '....o##..##o....',
+  '...ol######lo...',
+  '.ol##########lo.',
+  'ol############lo',
+  'o##oo######oo##o',
+  '....o##oo##o....',
 ];
-const SHIP_MAP = { o: PICO8[1], '#': PICO8[12], m: PICO8[13], l: PICO8[6], w: PICO8[7], e: PICO8[10] };
+// 3 tones only: 6 rim-lights the swept leading edge, 12 is the hull, 1 doubles
+// as keyline AND under-wing shadow.
+const SHIP_MAP = { o: PICO8[1], '#': PICO8[12], l: PICO8[6], w: PICO8[7], e: PICO8[10] };
 // Two 12th rows = a 2-frame engine flicker (frameIndex): a ship that is ON.
 const shipFrames = [
   makeSprite([...SHIP_ROWS, '.....ee..ee.....'], SHIP_MAP),
@@ -116,10 +118,10 @@ const pickupFrames = [
 // on the DIAGONALS — alternating the two frames reads as a slow tumble.
 const MINE_MAP = { '#': PICO8[8], k: PICO8[2], h: PICO8[14] };
 const hazardFrames = [
-  makeSprite(['....##....', '....##....', '..h#####..', '.#h######.', '####kk####',
-    '####kk####', '.########.', '..######..', '....##....', '....##....'], MINE_MAP),
-  makeSprite(['.##....##.', '.##....##.', '..h#####..', '.#h######.', '.###kk###.',
-    '.###kk###.', '.########.', '..######..', '.##....##.', '.##....##.'], MINE_MAP),
+  makeSprite(['....##....', '...####...', '..h#####..', '.#h######.', '####kk####',
+    '####kk####', '.########.', '..######..', '...####...', '....##....'], MINE_MAP),
+  makeSprite(['##......##', '.##....##.', '..h#####..', '.#h######.', '.###kk###.',
+    '.###kk###.', '.########.', '..######..', '.##....##.', '##......##'], MINE_MAP),
 ];
 // FAR LAYER: a dark planet, terminator dithered by hand. One tone, PICO8[1]
 // (1.57:1 vs black — under the ambient band): depth that can never be mistaken
