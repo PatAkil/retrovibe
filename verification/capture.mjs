@@ -5,7 +5,8 @@
 //   node verification/capture.mjs                  capture every fixture → verification/out/
 //   node verification/capture.mjs --accept         promote verification/out/ frames to
 //                                                  verification/baseline/ (the approved look)
-//   node verification/capture.mjs --game <dir>     capture ONE arbitrary game folder (e.g. a
+//   node verification/capture.mjs --game <dir> [--label <tag>]
+//                                                  capture ONE arbitrary game folder (e.g. a
 //                                                  freshly generated workspace/<name>) with a
 //                                                  generic input script — shell / title / play /
 //                                                  paused always, plus best-effort score / impact
@@ -13,6 +14,11 @@
 //                                                  the sweep reaches them; no baseline. For
 //                                                  judging a change to generator GUIDANCE (a
 //                                                  skill), where the fixtures cannot see it.
+//                                                  Frames go to verification/out/game/<tag>/ and
+//                                                  survive fixture captures.
+//   node verification/capture.mjs --compare-games <tagA> <tagB>
+//                                                  side-by-side composite of two labelled game
+//                                                  captures (e.g. base vs candidate branch).
 //
 // What one fixture run does, per fixture under verification/<name>/:
 //   1. Replaces the fixture's engine/ with a fresh copy of
@@ -60,6 +66,7 @@ const OUT = resolve(VERIFY, 'out');
 const BASELINE = resolve(VERIFY, 'baseline');
 const STATUS = resolve(OUT, 'status.json');
 const FIRST_PORT = 5301;
+const GAME_PORT = 5399; // --game, well clear of the fixture range
 const MAX_FRAMES = 60 * 60; // 60 s of virtual time per run, hard stop
 const RING = 16; // frames of history kept for the impact (death tableau) shot
 
@@ -157,6 +164,9 @@ const FIXTURES = {
           // Park the paddle at the left wall; re-serve on a fixed cadence (a
           // press while the ball is live is ignored by the game) until the
           // third lost ball → GAME_OVER. Bricks are struck first → score.
+          // Assumes a parked paddle cannot return enough balls to clear all 32
+          // bricks: if this run ever ends in WIN, the ball physics moved —
+          // re-tune the cadence rather than suspect the instrument.
           ...hold('ArrowLeft', 200, 260),
           ...every('Space', 300, 3500, 45),
         ],
@@ -208,7 +218,18 @@ const INIT_SCRIPT = `(() => {
   window.cancelAnimationFrame = () => {};
   // Audio never "runs" here: the engine gates every sound on ctx.state === 'running',
   // so its noise synth (thousands of Math.random draws) can never touch the seed.
-  class SilentAudioContext { constructor() { this.state = 'suspended'; this.currentTime = 0; } resume() { return Promise.resolve(); } }
+  // The stub is complete enough that unlock() succeeds without throwing and the
+  // engine's own \`state === 'running'\` gate is what silences playback.
+  const inert = () => { const n = { gain: {}, frequency: {}, connect() { return n; }, disconnect() {}, start() {}, stop() {} }; for (const k of ['gain', 'frequency']) n[k] = { value: 0, setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {} }; return n; };
+  class SilentAudioContext {
+    constructor() { this.state = 'suspended'; this.currentTime = 0; this.sampleRate = 48000; this.destination = inert(); }
+    resume() { return Promise.resolve(); }
+    createGain() { return inert(); }
+    createOscillator() { return inert(); }
+    createBiquadFilter() { return inert(); }
+    createBufferSource() { const n = inert(); n.buffer = null; return n; }
+    createBuffer(ch, len) { return { getChannelData() { return new Float32Array(len); } }; }
+  }
   window.AudioContext = SilentAudioContext;
   window.webkitAudioContext = SilentAudioContext;
   window.__events = [];
@@ -384,22 +405,42 @@ async function captureRun(browser, label, port, run) {
   return shots;
 }
 
-async function buildCompare(browser) {
-  const img = (file) => (existsSync(file) ? `data:image/png;base64,${readFileSync(file).toString('base64')}` : null);
+// Declared moments per fixture — what a capture must produce; anything else in
+// baseline/ is stale and pruned by --accept rather than failing the run.
+function declaredMoments(name) {
+  const set = new Set();
+  for (const run of FIXTURES[name].runs) {
+    for (const m of Object.keys(run.fixed)) set.add(m);
+    for (const m of run.expects) set.add(m);
+    if (run.shell !== undefined) set.add('shell');
+  }
+  return set;
+}
+
+function fixtureRows() {
   const rows = [];
+  const baselineFiles = new Set(existsSync(BASELINE) ? readdirSync(BASELINE) : []);
   for (const name of FIXTURE_NAMES) {
+    const declared = declaredMoments(name);
     for (const moment of MOMENTS) {
       const file = `${name}-${moment}.png`;
-      const cand = img(resolve(OUT, file));
-      const base = img(resolve(BASELINE, file));
-      if (!cand && !base) continue;
-      rows.push({ name, moment, base, cand });
+      const candFile = resolve(OUT, file);
+      const baseFile = resolve(BASELINE, file);
+      const has = existsSync(candFile) || baselineFiles.has(file);
+      if (!has) continue;
+      rows.push({ name, moment, baseFile, candFile, declared: declared.has(moment) });
     }
   }
+  return rows;
+}
+
+async function buildCompare(browser, rowsIn = fixtureRows(), outFile = resolve(OUT, 'compare.png'), leftLabel = 'baseline (approved)', rightLabel = 'candidate (working tree)') {
+  const img = (file) => (existsSync(file) ? `data:image/png;base64,${readFileSync(file).toString('base64')}` : null);
+  const rows = rowsIn.map((r) => ({ ...r, base: img(r.baseFile), cand: img(r.candFile) }));
   const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
   await page.setContent(`<body style="margin:0;background:#101014;color:#ddd;font:13px system-ui">
     <div id="grid" style="display:grid;grid-template-columns:150px repeat(3,1fr);gap:6px;padding:8px;align-items:center">
-      <div></div><b style="text-align:center">baseline (approved)</b><b style="text-align:center">candidate (working tree)</b><b style="text-align:center">changed pixels (dim = subtle, bright = visible)</b>
+      <div></div><b style="text-align:center">${leftLabel}</b><b style="text-align:center">${rightLabel}</b><b style="text-align:center">changed pixels (dim = subtle, bright = visible)</b>
     </div></body>`);
   const stats = await page.evaluate(async (rows) => {
     const grid = document.getElementById('grid');
@@ -408,11 +449,11 @@ async function buildCompare(browser) {
     const note = (text) => Object.assign(document.createElement('div'), { textContent: text, style: 'text-align:center;color:#f66' });
     const out = [];
     for (const r of rows) {
-      grid.appendChild(Object.assign(document.createElement('div'), { textContent: `${r.name} · ${r.moment}` }));
+      grid.appendChild(Object.assign(document.createElement('div'), { textContent: r.moment ? `${r.name} · ${r.moment}` : r.name }));
       const cand = r.cand ? await load(r.cand) : null;
       const base = r.base ? await load(r.base) : null;
       grid.appendChild(base ? cell(r.base) : note('no baseline yet'));
-      grid.appendChild(cand ? cell(r.cand) : note('MISSING — the capture produced no frame for this moment'));
+      grid.appendChild(cand ? cell(r.cand) : note(r.declared === false ? 'stale baseline frame — no longer declared; --accept will prune it' : 'MISSING — the capture produced no frame for this moment'));
       const diff = document.createElement('canvas');
       const ref = cand || base;
       diff.width = ref.width; diff.height = ref.height;
@@ -441,13 +482,13 @@ async function buildCompare(browser) {
       diff.style.width = '100%';
       grid.appendChild(diff);
       const total = ref.width * ref.height;
-      out.push({ name: r.name, moment: r.moment, hasBase: !!base, hasCand: !!cand, pct: base && cand ? (100 * changed) / total : null, vis: base && cand ? (100 * visible) / total : null });
+      out.push({ name: r.name, moment: r.moment, declared: r.declared, hasBase: !!base, hasCand: !!cand, pct: base && cand ? (100 * changed) / total : null, vis: base && cand ? (100 * visible) / total : null });
     }
     return out;
   }, rows);
   const shot = await page.screenshot({ fullPage: true });
   await page.close();
-  writeFileSync(resolve(OUT, 'compare.png'), shot);
+  writeFileSync(outFile, shot);
   return stats;
 }
 
@@ -483,7 +524,7 @@ if (argv.includes('--accept')) {
   if (!status) { console.error('nothing to accept: run a capture first'); process.exit(1); }
   if (!status.ok) { console.error(`refusing to accept: the last capture FAILED (${status.failures.join('; ')})`); process.exit(1); }
   mkdirSync(BASELINE, { recursive: true });
-  const candidates = readdirSync(OUT).filter((f) => f.endsWith('.png') && f !== 'compare.png' && !f.startsWith('game-'));
+  const candidates = readdirSync(OUT).filter((f) => f.endsWith('.png') && !f.startsWith('compare') && !f.startsWith('game-compare'));
   let promoted = 0;
   for (const f of candidates) { copyFileSync(resolve(OUT, f), resolve(BASELINE, f)); promoted++; }
   let pruned = 0;
@@ -497,18 +538,24 @@ if (argv.includes('--accept')) {
 const gameFlag = argv.indexOf('--game');
 if (gameFlag !== -1) {
   const dir = resolve(ROOT, argv[gameFlag + 1] || '');
+  const allowed = [resolve(ROOT, 'workspace'), VERIFY];
+  if (!allowed.some((root) => dir.startsWith(root + '/'))) { console.error(`--game: ${dir} is outside workspace/ and verification/ — only game folders under those roots run here`); process.exit(1); }
   if (!existsSync(resolve(dir, 'game/main.ts'))) { console.error(`--game: ${dir} is not a game folder (no game/main.ts)`); process.exit(1); }
-  if (resolve(dir) === resolve(ROOT, 'workspace/game-template')) { console.error('--game: never run the template in place; clone it first'); process.exit(1); }
-  mkdirSync(OUT, { recursive: true });
-  const name = `game-${basename(dir)}`;
-  for (const f of readdirSync(OUT)) if (f.startsWith(name + '-')) unlinkSync(resolve(OUT, f));
+  if (dir === resolve(ROOT, 'workspace/game-template')) { console.error('--game: never run the template in place; clone it first'); process.exit(1); }
+  const labelFlag = argv.indexOf('--label');
+  const label = labelFlag !== -1 ? argv[labelFlag + 1] : 'default';
+  if (!/^[A-Za-z0-9_-]+$/.test(label || '')) { console.error('--label: letters, digits, - and _ only'); process.exit(1); }
+  const gameOut = resolve(OUT, 'game', label);
+  mkdirSync(gameOut, { recursive: true });
+  const name = basename(dir);
+  for (const f of readdirSync(gameOut)) if (f.startsWith(name + '-')) unlinkSync(resolve(gameOut, f));
   const browser = await chromium.launch();
-  const server = startDevServer(dir, FIRST_PORT + 9);
+  const server = startDevServer(dir, GAME_PORT);
   try {
     await server.ready;
-    const shots = await captureRun(browser, name, FIRST_PORT + 9, GENERIC_RUN);
-    for (const [moment, png] of Object.entries(shots)) writeFileSync(resolve(OUT, `${name}-${moment}.png`), dataUrlToBuffer(png));
-    console.log(`frames written to verification/out/${name}-*.png — view them against the rubric; there is no baseline for a generated game`);
+    const shots = await captureRun(browser, `game ${name}`, GAME_PORT, GENERIC_RUN);
+    for (const [moment, png] of Object.entries(shots)) writeFileSync(resolve(gameOut, `${name}-${moment}.png`), dataUrlToBuffer(png));
+    console.log(`frames written to verification/out/game/${label}/${name}-*.png — view them against the rubric; a generated game has no baseline (compare two labels with --compare-games)`);
   } catch (e) {
     console.error(`CAPTURE FAIL: ${e.message}`);
     process.exitCode = 1;
@@ -516,9 +563,25 @@ if (gameFlag !== -1) {
     server.stop();
     await browser.close();
   }
+} else if (argv.includes('--compare-games')) {
+  const i = argv.indexOf('--compare-games');
+  const [a, b] = [argv[i + 1], argv[i + 2]];
+  const dirA = resolve(OUT, 'game', a || ''), dirB = resolve(OUT, 'game', b || '');
+  if (!a || !b || !existsSync(dirA) || !existsSync(dirB)) { console.error('--compare-games <labelA> <labelB>: both labels must exist under verification/out/game/'); process.exit(1); }
+  const names = [...new Set([...readdirSync(dirA), ...readdirSync(dirB)].filter((f) => f.endsWith('.png')))].sort();
+  const browser = await chromium.launch();
+  try {
+    const stats = await buildCompare(browser, names.map((f) => ({ name: f.replace(/\.png$/, ''), moment: '', baseFile: resolve(dirA, f), candFile: resolve(dirB, f) })), resolve(OUT, `game-compare-${a}-vs-${b}.png`), a, b);
+    console.log(`\n${a} | ${b} — any change | visible change. Generated games differ run to run: judge the pattern by LOOKING at verification/out/game-compare-${a}-vs-${b}.png:`);
+    for (const st of stats) console.log(`  ${st.name.padEnd(30)} ${st.hasBase && st.hasCand ? st.pct.toFixed(2).padStart(6) + ' % | ' + st.vis.toFixed(2).padStart(6) + ' %' : st.hasBase ? `only in ${a}` : `only in ${b}`}`);
+  } finally {
+    await browser.close();
+  }
 } else {
-  rmSync(OUT, { recursive: true, force: true });
+  // Wipe the last fixture capture but keep out/game/ (labelled --game captures
+  // are meant to survive, so two branches' generations can be compared).
   mkdirSync(OUT, { recursive: true });
+  for (const f of readdirSync(OUT)) if (f !== 'game') rmSync(resolve(OUT, f), { recursive: true, force: true });
   const unknown = readdirSync(VERIFY, { withFileTypes: true })
     .filter((d) => d.isDirectory() && !['out', 'baseline'].includes(d.name) && !FIXTURES[d.name])
     .map((d) => d.name);
@@ -540,7 +603,8 @@ if (gameFlag !== -1) {
     console.log('\npixels vs baseline — any change | visible change (channel delta >= 24/255). Judge by LOOKING at verification/out/compare.png:');
     for (const s of stats) {
       let cell;
-      if (!s.hasCand) { cell = 'MISSING'; failures.push(`${s.name}-${s.moment} missing`); }
+      if (!s.hasCand && s.declared === false) cell = 'stale — --accept will prune';
+      else if (!s.hasCand) { cell = 'MISSING'; failures.push(`${s.name}-${s.moment} missing`); }
       else if (!s.hasBase) cell = 'no baseline';
       else cell = `${s.pct.toFixed(2).padStart(6)} % | ${s.vis.toFixed(2).padStart(6)} %`;
       console.log(`  ${s.name.padEnd(14)} ${s.moment.padEnd(8)} ${cell}`);

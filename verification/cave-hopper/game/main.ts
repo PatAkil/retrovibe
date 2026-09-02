@@ -339,6 +339,7 @@ function render(): void {
     }
     case 'GAME_OVER': {
       drawLevel();
+      drawSprite(pc.ctx, playerSprite, Math.round(player.x), Math.round(player.y), PX);
       drawTextCentered(pc.ctx, 'GAME OVER', W, 48, { color: PAL[4], scale: 2 });
       drawTextCentered(pc.ctx, `SCORE ${score}`, W, 72, { color: PAL[7] });
       drawTextCentered(pc.ctx, `${BUTTON_KEY.A.hint} RESTART`, W, 88, { color: PAL[5] });
@@ -346,6 +347,7 @@ function render(): void {
     }
     case 'WIN': {
       drawLevel();
+      drawSprite(pc.ctx, playerSprite, Math.round(player.x), Math.round(player.y), PX);
       drawTextCentered(pc.ctx, 'YOU WIN', W, 48, { color: PAL[6], scale: 2 });
       drawTextCentered(pc.ctx, `SCORE ${score}`, W, 72, { color: PAL[7] });
       drawTextCentered(pc.ctx, `${BUTTON_KEY.A.hint} RESTART`, W, 88, { color: PAL[5] });

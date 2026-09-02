@@ -21,9 +21,10 @@ verification/
 ├── cave-hopper/       # fixture: platformer on STATIC SURFACES, SUNSET, 'embers',
 │                      #   lives HUD, minor landing puff vs major death, a scripted
 │                      #   WIN run to the flag
-└── brick-bounce/      # fixture: fast small ball on a MID-NAVY ground (OCEAN[1] — the
+└── brick-bounce/      # fixture: fast small ball on a MID-NAVY ground (PICO8[1] — the
                        #   large mid-luminance field where scanline banding and
-                       #   vignette crush show), 'bubbles', color-only targets
+                       #   vignette crush show), four HUE-separated brick rows,
+                       #   'bubbles' retuned into the band for a non-black ground
 ```
 
 - Each fixture is a clone of the template (`game/`, `index.html`, `smoke.mjs`, configs) **without a committed `engine/`**: `capture.mjs` deletes and re-copies `workspace/game-template/engine` into every fixture before each run, so a fixture can never test a stale engine. The copies are gitignored.
@@ -68,7 +69,7 @@ lsof -ti:5301,5302,5303 | xargs -r kill
 node verification/capture.mjs
 ```
 
-Exit status is nonzero only for a fixture that fails to boot, throws, or misses a promised moment — those are hard failures. Pixel differences never fail the run; they are the *input* to step 4. Stdout ends with a table per fixture and moment with **two** percentages: pixels that changed *at all*, and pixels that changed *visibly* (largest channel delta ≥ 24/255).
+Exit status is nonzero only for a fixture that fails to boot, throws, misses a promised moment, ends in a terminal scene its script did not expect, or leaves a declared moment MISSING — those are hard failures. A baseline frame for a moment no fixture declares any more is reported as *stale* (not a failure) and removed by `--accept`. Pixel differences never fail the run; they are the *input* to step 4. Stdout ends with a table per fixture and moment with **two** percentages: pixels that changed *at all*, and pixels that changed *visibly* (largest channel delta ≥ 24/255).
 
 Read the table first, mechanically:
 - A change meant to be **invisible by default** (an opt-in feature, a refactor) must show **0.00 % | 0.00 % on every moment**. Anything else means the default path moved — a hard failure until explained. One known benign cause: an engine change that consumes a different number of `Math.random()` calls at start-up shifts every seeded ambient particle — the "any" column lights up on all moments while nothing looks different. Confirm that is the cause by reading the diff (only particles moved) and say so in the report; do not wave it through unexamined.
@@ -112,7 +113,7 @@ git add verification/baseline && git commit -m "verification: accept new baselin
 ### 7. Cleanup
 
 ```bash
-lsof -ti:5301,5302,5303 | xargs -r kill
+lsof -ti:5301,5302,5303,5399 | xargs -r kill
 ```
 
 `verification/out/` and the fixture `engine/` copies are gitignored; leave them.
@@ -121,14 +122,14 @@ lsof -ti:5301,5302,5303 | xargs -r kill
 
 When the diff is to a *skill* (what future game-writers are told to do), the fixtures show nothing. Verify by generating, then looking:
 
-1. Pick the fixed prompt set below and create each game with **creating-a-game** exactly as a user would (clone, develop with the edited guidance in force, gates green). Keep them small; they are throwaway. Do not commit them.
-   - "A top-down space game: move a ship, collect crystals, dodge a drifting mine; touching the mine ends the run."
-   - "A one-screen platformer in a cave: jump between ledges over spikes, grab three gems, reach the exit door."
-   - "A breakout game under water: paddle, ball, a wall of shells to clear; three balls then game over."
-2. Capture each: `node verification/capture.mjs --game workspace/<name>` writes `verification/out/game-<name>-{shell,title,play,paused}.png` with a generic input script (start, move, pause, then a 20-second sweep of the arena). The sweep also writes `score`, `impact` (a full-screen flash detected by a brightness jump) and `end` **when the unknown game happens to reach them** — absent files mean the sweep never got there, not that feedback is missing; judge R4 from whatever impact/score frames exist, and from the game's code when none do. There is no baseline; the frames are judged in absolute terms.
+1. Generate the fixed prompt set with **creating-a-game** exactly as a user would (clone, develop with the edited guidance in force, gates green), using these **folder names** so nothing collides with a user's game or a fixture: `vg-space`, `vg-cave`, `vg-brick`. Confirm each folder is absent first (`ls workspace/`); if creating-a-game's collision guard fires, you picked a name that exists — rename, never take the overwrite branch (it commits). The games are throwaway: do not commit them.
+   - `vg-space`: "A top-down space game: move a ship, collect crystals, dodge a drifting mine; touching the mine ends the run."
+   - `vg-cave`: "A one-screen platformer in a cave: jump between ledges over spikes, grab three gems, reach the exit door."
+   - `vg-brick`: "A breakout game under water: paddle, ball, a wall of shells to clear; three balls then game over."
+2. Capture each with a label: `node verification/capture.mjs --game workspace/vg-space --label cand` writes `verification/out/game/cand/vg-space-{shell,title,play,paused}.png` from a generic input script (start, move, pause, then a lawnmower sweep of the arena). The sweep also writes `score`, `impact` (a full-screen flash detected by a brightness jump) and `end` **when the unknown game happens to reach them** — absent files mean the sweep never got there, not that feedback is missing; judge R4 from whatever impact/score frames exist, and from the game's code when none do. Labelled game captures survive fixture captures. The `--game` server uses port 5399.
 3. View every frame at full size and score R1–R7 per game, in words, with regions. The three fixtures are the bar: a generated game that reads worse than its fixture counterpart on any criterion is evidence the guidance regressed.
-4. For a before/after, generate the same prompts on the base branch (`git stash` or a worktree) and compare — generation varies run to run, so judge the *pattern* across the three games, not one frame.
-5. Report as in step 5; delete the throwaway games afterwards (`rm -rf workspace/<name>` — never the template, never the fixtures).
+4. For a before/after, generate the same three prompts from the **base** branch in a separate git worktree (`git worktree add ../rv-base <base-branch>` — never `git stash`, which does not move untracked game folders), capture them there with `--label base`, then copy that worktree's `verification/out/game/base/` into this checkout's `verification/out/game/base/` and run `node verification/capture.mjs --compare-games base cand` for a side-by-side composite. Generation varies run to run, so judge the *pattern* across the three games, not one frame.
+5. Report as in step 5; afterwards `rm -rf workspace/vg-space workspace/vg-cave workspace/vg-brick` (never the template, never the fixtures), remove the base worktree, and `lsof -ti:5399 | xargs -r kill`.
 
 ## Reviewing at scale — blind and adversarial passes
 
@@ -141,7 +142,7 @@ Both report per criterion with frame coordinates or regions; the orchestrating s
 
 ## Adding a fixture
 
-Only when an existing fixture cannot exercise something the generator now does (a new ambient type, a new scene kind, a scrolling level). Clone the template into `verification/<name>` (`cp -r workspace/game-template verification/<name>`, then `rm -rf verification/<name>/engine`), write a small, plain game (≈200 lines, one style card, every scene reachable by a fixed key script), add its input script and promised moments to `FIXTURES` in `capture.mjs`, run the loop, get the user's approval, accept. Use ports beyond 5303 if you add more than three — `capture.mjs` allocates `5301 + index` in name order.
+Only when an existing fixture cannot exercise something the generator now does (a new ambient type, a new scene kind, a scrolling level). Clone the template into `verification/<name>` (`cp -r workspace/game-template verification/<name>`, then `rm -rf verification/<name>/engine`), write a small, plain game (≈200 lines, one style card, every scene reachable by a fixed key script), add its input script and promised moments to `FIXTURES` in `capture.mjs`, run the loop, get the user's approval, accept. `capture.mjs` allocates `5301 + index` in name order, so a fourth fixture takes 5304 — add it to the reclaim/cleanup lines here.
 
 ## Checklist
 
@@ -154,4 +155,4 @@ Only when an existing fixture cannot exercise something the generator now does (
 - [ ] Per-criterion (R1–R8), per-fixture verdicts written; regressions named with a region.
 - [ ] Composite and verdicts sent to the user; accept/fix/revert recommended.
 - [ ] Baseline accepted and committed only after user approval.
-- [ ] Ports 5301–5303 released.
+- [ ] Ports 5301–5303 (and 5399 after a `--game` run) released.

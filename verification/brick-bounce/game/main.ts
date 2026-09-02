@@ -1,19 +1,22 @@
 // VERIFICATION FIXTURE — brick-bounce. FROZEN: edit only under the fixture rule
 // in the verifying-graphics skill. Measures what the other fixtures cannot:
-// a small FAST-MOVING actor (the ball) over a MID-NAVY ground (OCEAN[1], not
-// the near-black OCEAN[0]) — the large mid-luminance field where scanline
-// banding and vignette crush actually show — a dense grid of same-shape
-// targets told apart by color alone, 'bubbles' ambient, frequent minor impacts
-// (bricks) beside a major one (lost ball), and a WIN on clear.
+// a small FAST-MOVING actor (the ball) over a MID-NAVY ground (PICO8[1] — the
+// large mid-luminance field where scanline banding and vignette crush show;
+// the exact ground the motivating regression banded), a dense grid of
+// same-shape targets told apart by HUE (four hue-separated rows), 'bubbles'
+// ambient retuned into the band for a non-black ground, frequent minor
+// impacts (bricks) beside a major one (lost ball), and a WIN on clear.
 //
-// STYLE CARD: palette OCEAN — bg 1 (mid navy), bricks 3/4/5/6 by row, paddle +
-// ball 7 (foam: the player's pair shares the one color no brick row uses) ·
-// ambient 'bubbles' · silhouettes: flat bar / square ball / brick slabs ·
-// juice: white lost-ball flash, brick-colored chip bursts, tiny paddle shake.
+// STYLE CARD: palette PICO8 — bg 1 (navy), bricks 8/9/10/11 by row (red,
+// orange, yellow, green), paddle 12 (blue), ball 7 (white) · ambient 'bubbles'
+// in 5 (dark grey, ≈2.0:1 vs navy) · silhouettes: flat bar / square ball /
+// brick slabs · juice: white lost-ball flash, brick-colored chip bursts, tiny
+// paddle shake. Diverges from space-dodge (same palette) on ground, ambient,
+// silhouettes and roles.
 // Contrast note: bricks are TARGETS consumed on contact, not static surfaces
 // the ball rests on, so the 3:1 actor-vs-surface floor applies to ball/paddle
-// vs the ground (foam vs OCEAN[1] ≈ 14:1) and bricks vs the ground (≥ 3:1),
-// not ball vs brick.
+// vs the ground (white/blue vs navy ≥ 5:1) and bricks vs the ground (all ≥
+// 3:1), not ball vs brick.
 
 import {
   createPixelCanvas,
@@ -33,7 +36,7 @@ import {
   drawLives,
   hudText,
   BUTTON_KEY,
-  OCEAN,
+  PICO8,
   SAFE_MARGIN,
 } from '../engine';
 
@@ -41,7 +44,7 @@ import {
 
 const W = 240;
 const H = 160;
-const PAL = OCEAN;
+const PAL = PICO8;
 
 const pc = createPixelCanvas({
   width: W,
@@ -59,7 +62,7 @@ const input = createInput(
   { onFirstKey: () => audio.unlock() },
 );
 const scenes = createScenes();
-const particles = createParticles({ width: W, height: H, ambient: 'bubbles' });
+const particles = createParticles({ width: W, height: H, ambient: 'bubbles', ambientColor: PAL[5] });
 const juice = createJuice();
 const crt = createCrt();
 const runtime = createRuntime();
@@ -67,7 +70,7 @@ const runtime = createRuntime();
 // --- Sprites (PX = 2 logical px per cell) ------------------------------------
 
 const PX = 2;
-const paddleSprite = makeSprite(['############', '############'], { '#': PAL[7] }); // 24x4 px — foam, never a brick color
+const paddleSprite = makeSprite(['############', '############'], { '#': PAL[12] }); // 24x4 px — blue, never a brick color
 const ballSprite = makeSprite(['.#.', '###', '.#.'], { '#': PAL[7] }); // 6x6 px
 
 // --- World -------------------------------------------------------------------
@@ -92,7 +95,7 @@ const BRICK_H = 6;
 const BRICK_GAP = 2;
 const BRICK_X0 = (W - (BRICK_COLS * (BRICK_W + BRICK_GAP) - BRICK_GAP)) / 2;
 const BRICK_Y0 = 28;
-const ROW_COLOR = [PAL[3], PAL[4], PAL[5], PAL[6]];
+const ROW_COLOR = [PAL[8], PAL[9], PAL[10], PAL[11]];
 
 const paddle: Rect = { x: W / 2 - 12, y: H - 16, w: 24, h: 4 };
 const ball = { x: 0, y: 0, w: 6, h: 6, vx: 0, vy: 0, served: false };
@@ -149,7 +152,7 @@ scenes.onEnter('WIN', () => {
 
 function loseBall(): void {
   audio.play('explosion');
-  particles.burst(ball.x + ball.w / 2, H - 4, { count: 10, color: PAL[4], speed: 140 });
+  particles.burst(ball.x + ball.w / 2, H - 4, { count: 10, color: PAL[12], speed: 140 });
   juice.shake(5, 0.45);
   juice.flash(PAL[7], 0.35);
   juice.hitStop(0.15);
@@ -212,7 +215,7 @@ function updateWorld(dt: number): void {
   }
 
   if (bricks.length === 0) {
-    juice.flash(PAL[6], 0.3);
+    juice.flash(PAL[11], 0.3);
     scenes.to('WIN');
     return;
   }
@@ -292,13 +295,13 @@ function render(): void {
 
   switch (scenes.current) {
     case 'TITLE': {
-      drawTextCentered(pc.ctx, 'BRICK BOUNCE', W, 40, { color: PAL[6], scale: 3 });
-      drawTextCentered(pc.ctx, 'CLEAR THE WALL', W, 70, { color: PAL[5] });
+      drawTextCentered(pc.ctx, 'BRICK BOUNCE', W, 40, { color: PAL[10], scale: 3 });
+      drawTextCentered(pc.ctx, 'CLEAR THE WALL', W, 70, { color: PAL[6] });
       controlHints(input).forEach((hint, i) => {
         drawTextCentered(pc.ctx, hint, W, 92 + i * 10, { color: PAL[7] });
       });
       drawTextCentered(pc.ctx, 'ARROWS/WASD MOVE', W, 92 + controlHints(input).length * 10, {
-        color: PAL[3],
+        color: PAL[13],
       });
       break;
     }
@@ -308,22 +311,22 @@ function render(): void {
       drawScore(pc, score);
       drawLives(pc, lives);
       if (scenes.is('PAUSED')) {
-        hudText(pc, 'PAUSED', 'center', 'middle', { color: PAL[6], scale: 2 });
+        hudText(pc, 'PAUSED', 'center', 'middle', { color: PAL[10], scale: 2 });
       }
       break;
     }
     case 'GAME_OVER': {
       drawWorld();
-      drawTextCentered(pc.ctx, 'GAME OVER', W, 76, { color: PAL[4], scale: 2 });
+      drawTextCentered(pc.ctx, 'GAME OVER', W, 76, { color: PAL[8], scale: 2 });
       drawTextCentered(pc.ctx, `SCORE ${score}`, W, 100, { color: PAL[7] });
-      drawTextCentered(pc.ctx, `${BUTTON_KEY.A.hint} RESTART`, W, 116, { color: PAL[5] });
+      drawTextCentered(pc.ctx, `${BUTTON_KEY.A.hint} RESTART`, W, 116, { color: PAL[6] });
       break;
     }
     case 'WIN': {
       drawWorld();
-      drawTextCentered(pc.ctx, 'YOU WIN', W, 76, { color: PAL[6], scale: 2 });
+      drawTextCentered(pc.ctx, 'YOU WIN', W, 76, { color: PAL[11], scale: 2 });
       drawTextCentered(pc.ctx, `SCORE ${score}`, W, 100, { color: PAL[7] });
-      drawTextCentered(pc.ctx, `${BUTTON_KEY.A.hint} RESTART`, W, 116, { color: PAL[5] });
+      drawTextCentered(pc.ctx, `${BUTTON_KEY.A.hint} RESTART`, W, 116, { color: PAL[6] });
       break;
     }
   }
