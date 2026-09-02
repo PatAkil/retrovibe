@@ -21,7 +21,7 @@ export interface Crt {
 }
 
 export interface CrtOptions {
-  /** Depth of the scanline modulation (default 0.18). 0 disables. */
+  /** Depth of the scanline modulation (default 0.12). 0 disables. */
   scanlineAlpha?: number;
   /** Strength of the edge vignette (default 0.35). */
   vignetteAlpha?: number;
@@ -33,34 +33,9 @@ export interface CrtOptions {
 const PHOSPHOR_LIFT = 'rgb(15,17,28)';
 /** Per-side halation alpha (two draws, so the total added bloom is 2x this). */
 const HALATION_ALPHA = 0.09;
-/** Aperture-grille depth: how far each device column is pulled off-white. */
-const APERTURE = 9;
-
-/**
- * A 3-device-px RGB triad, built once per process. At the default pixel scale
- * one triad lands on exactly one logical pixel, so the mask stays phase-locked
- * to the art and cannot beat against it into moiré.
- */
-let aperturePattern: CanvasPattern | null | undefined;
-function getAperture(ctx: CanvasRenderingContext2D): CanvasPattern | null {
-  if (aperturePattern !== undefined) return aperturePattern;
-  const tile = document.createElement('canvas');
-  tile.width = 3;
-  tile.height = 1;
-  const tctx = tile.getContext('2d');
-  if (!tctx) return (aperturePattern = null);
-  const lo = 255 - APERTURE;
-  tctx.fillStyle = `rgb(255,${lo},${lo})`;
-  tctx.fillRect(0, 0, 1, 1);
-  tctx.fillStyle = `rgb(${lo},255,${lo})`;
-  tctx.fillRect(1, 0, 1, 1);
-  tctx.fillStyle = `rgb(${lo},${lo},255)`;
-  tctx.fillRect(2, 0, 1, 1);
-  return (aperturePattern = ctx.createPattern(tile, 'repeat'));
-}
 
 export function createCrt(opts: CrtOptions = {}): Crt {
-  const scanlineAlpha = opts.scanlineAlpha ?? 0.18;
+  const scanlineAlpha = opts.scanlineAlpha ?? 0.12;
   const vignetteAlpha = opts.vignetteAlpha ?? 0.35;
   const flickerPeak = opts.flicker ?? 0.03;
 
@@ -103,10 +78,16 @@ export function createCrt(opts: CrtOptions = {}): Crt {
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
         ctx.globalAlpha = HALATION_ALPHA;
-        ctx.setTransform(1, 0, 0, 1, -1, 0);
-        ctx.drawImage(canvas, 0, 0);
-        ctx.setTransform(1, 0, 0, 1, 1, 0);
-        ctx.drawImage(canvas, 0, 0);
+        const dw = canvas.width;
+        const dh = canvas.height;
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        // Left-shifted copy, edge-clamped: the last column samples itself, so
+        // no device column is left with one copy instead of two (a 1-px seam).
+        ctx.drawImage(canvas, 1, 0, dw - 1, dh, 0, 0, dw - 1, dh);
+        ctx.drawImage(canvas, dw - 1, 0, 1, dh, dw - 1, 0, 1, dh);
+        // Right-shifted copy, edge-clamped at x = 0.
+        ctx.drawImage(canvas, 0, 0, dw - 1, dh, 1, 0, dw - 1, dh);
+        ctx.drawImage(canvas, 0, 0, 1, dh, 0, 0, 1, dh);
         ctx.restore();
       }
 
@@ -125,18 +106,6 @@ export function createCrt(opts: CrtOptions = {}): Crt {
         for (let y = 0; y < height; y += 2) {
           ctx.fillRect(0, y, width, 1);
         }
-        ctx.restore();
-      }
-
-      // 3b. Aperture grille — a per-device-column phosphor triad, in device
-      //     space so it is one physical pixel wide whatever the pixel scale.
-      const mask = getAperture(ctx);
-      if (mask) {
-        ctx.save();
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.globalCompositeOperation = 'multiply';
-        ctx.fillStyle = mask;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.restore();
       }
 
