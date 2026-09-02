@@ -53,8 +53,8 @@ An ad-hoc `'#ff00ff'` in game code is a visual bug: fix it by finding the neares
 
 ## 1b. Contrast floor + red-green safety — the floor is the gate
 
-- **Actor floor:** every gameplay-critical entity color must have `contrast(entity, surface) >= 3.0` (the `contrast()` helper is exported from the barrel) against **every static surface it can overlap** — the clear color AND drawn scenery/terrain. A role partition alone provably fails (PICO8 red vs dark-grey is 1.81:1 — "partition-legal" and invisible); compute the ratio.
-- **Ambient prominence band:** ambient particle colors sit **just above the background** — contrast vs the clear color between ~1.8:1 and ~2.5:1, tuned toward the top of the band, at 1–2 px sizes. The engine preset defaults are band-compliant vs a **black** clear color; a brighter background needs `ambientColor` (or `setAmbient(preset, color)`) retuned into the band. The floor is 1.8 because the CRT pass darkens everything — a 1.2:1 dot renders sub-perceptual.
+- **Actor floor:** every gameplay-critical entity color must have `contrast(entity, surface) >= 3.0` (the `contrast()` helper is exported from the barrel) against **every static surface it can overlap** — the clear color AND drawn scenery/terrain, measured **pre-CRT** (the ratio is on the game's own draw colors, not a post-filter screenshot). A role partition alone provably fails (PICO8 red vs dark-grey is 1.81:1 — "partition-legal" and invisible); compute the ratio. The CRT glass is not neutral once it's on top: the phosphor lift raises non-black grounds and the halation bloom lifts bright actors further, which compresses mid-tone ratios by roughly 0.5 — so for a saturated actor against a **non-black** ground, keep the pre-CRT ratio at **≥ 3.5:1**, not the bare 3.0 floor, to survive the lift.
+- **Ambient prominence band:** ambient particle colors sit **just above the background** — contrast vs the clear color between ~1.8:1 and ~2.5:1, tuned toward the top of the band, at 1–2 px sizes. The engine preset defaults are band-compliant vs a **black** clear color; a brighter background needs `ambientColor` (or `setAmbient(preset, color)`) retuned into the band. The 1.8 floor stands on black grounds: the far depth layer is dimmer than the mid layer by design, and the phosphor lift raises a dot on pure black only a little, not enough to push a correctly-tuned far-layer dot below perceptibility.
 - **Red-green safety:** a red-vs-green hue difference may never be the ONLY distinction between critical entity classes. Require two of: hue family (prefer blue/orange/yellow pairs), brightness, silhouette. Check: would the entities still be distinguishable in grayscale?
 - **Role-hue contract:** player, pickup, and hazard must come from three different hue families AND use three different silhouettes — never reuse the reference/fixture shapes (arrow-ship, `+`, `x`) across two roles in the same game, and never let two roles share a silhouette even if their palette indices differ. Pickups take the palette's brightest warm accent (PICO8 10/9 territory — yellow/orange); hazards are red-family or read as spiky/jagged regardless of hue (a round friendly-looking hazard fails even if it's red). **Actual-size check:** before committing to a sprite, render it at its actual `px × cell` size in your head (or on scrap paper) — silhouettes must still read as distinct shapes at 6–12 px, the size floor from §3; a design that only reads at preview zoom is too fussy for the arena.
 
@@ -151,7 +151,7 @@ Every game gets the CRT overlay (scanlines + vignette + flicker). Create it once
 ```ts
 import { createCrt } from '../engine';
 
-const crt = createCrt(); // defaults: scanlineAlpha 0.18, vignetteAlpha 0.35, flicker 0.03
+const crt = createCrt(); // defaults: scanlineAlpha 0.12, vignetteAlpha 0.35, flicker 0.03
 
 function render(): void {
   pc.clear(PICO8[0]);              // 1. clear (un-shaken)
@@ -164,7 +164,7 @@ function render(): void {
 
 Tune via `CrtOptions` only if the game demands it (e.g. a very dark game may want `vignetteAlpha` lowered); the defaults are calibrated. The full frame-order rule (clear before preRender, etc.) is owned by **improving-game-quality**.
 
-**The glass is not neutral.** A phosphor lift means pure-black art no longer renders as pure black — the CRT pass adds a faint lit-tube glow on top, so don't chase "true black" by darkening game colors further; the lift is deliberate and part of the calibrated look. `scanlineAlpha` (default 0.18) is a **multiply depth**, not an opacity over black — it scales each row toward its own hue rather than dragging it toward black, so raising it darkens proportionally without banding into hard stripes.
+**The glass is not neutral.** A phosphor lift means pure-black art no longer renders as pure black — the CRT pass adds a faint lit-tube glow on top, so don't chase "true black" by darkening game colors further; the lift is deliberate and part of the calibrated look; halation (default per-side alpha 0.09) additionally blooms bright sprites sideways. `scanlineAlpha` (default 0.12) is a **multiply depth**, not an opacity over black — it scales each row toward its own hue rather than dragging it toward black, so raising it darkens proportionally without banding into hard stripes.
 
 ## 6. Ambient particles — a preset that fits the scene
 
