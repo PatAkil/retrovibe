@@ -142,7 +142,8 @@ if (dying) {
 juice.shake(2, 0.2);            // solid hit
 // biggest events — death, boss kill — add:
 juice.shake(5, 0.45);           // >= 4-6 px, >= 0.4 s
-juice.flash(PICO8[8], 0.35);    // full-screen color flash, holds >= 0.3 s
+juice.flash(PICO8[8], 0.35);    // full-screen flash in a SATURATED palette accent — never white or
+                                //   near-white: a white flash bleaches the whole tableau
 juice.hitStop(0.15);            // freeze-frame emphasis
 ```
 

@@ -35,6 +35,7 @@ import {
   drawScore,
   drawLives,
   hudText,
+  dimScene,
   BUTTON_KEY,
   PICO8,
   SAFE_MARGIN,
@@ -154,7 +155,7 @@ function loseBall(): void {
   audio.play('explosion');
   particles.burst(ball.x + ball.w / 2, H - 4, { count: 10, color: PAL[12], speed: 140 });
   juice.shake(5, 0.45);
-  juice.flash(PAL[7], 0.35);
+  juice.flash(PAL[8], 0.35); // saturated accent, never white: a white flash bleaches the frame
   juice.hitStop(0.15);
   lives -= 1;
   dying = true;
@@ -317,6 +318,7 @@ function render(): void {
     }
     case 'GAME_OVER': {
       drawWorld();
+      dimScene(pc, 0.6);
       drawTextCentered(pc.ctx, 'GAME OVER', W, 76, { color: PAL[8], scale: 2 });
       drawTextCentered(pc.ctx, `SCORE ${score}`, W, 100, { color: PAL[7] });
       drawTextCentered(pc.ctx, `${BUTTON_KEY.A.hint} RESTART`, W, 116, { color: PAL[6] });
@@ -324,6 +326,7 @@ function render(): void {
     }
     case 'WIN': {
       drawWorld();
+      dimScene(pc, 0.6);
       drawTextCentered(pc.ctx, 'YOU WIN', W, 76, { color: PAL[11], scale: 2 });
       drawTextCentered(pc.ctx, `SCORE ${score}`, W, 100, { color: PAL[7] });
       drawTextCentered(pc.ctx, `${BUTTON_KEY.A.hint} RESTART`, W, 116, { color: PAL[6] });

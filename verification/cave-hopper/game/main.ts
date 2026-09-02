@@ -7,7 +7,7 @@
 // STYLE CARD: palette SUNSET — bg 0, tiles 2 with a 3 top edge, spikes 4,
 // flag 5, coins 6, player 7 · ambient 'embers' · silhouettes: tall runner /
 // diamond coin / picket spikes / pennant flag · juice: orange death flash,
-// hard freeze-frame, tiny landing puff.
+// hard freeze-frame, tiny landing puff; terminal screens dimScene the world.
 
 import {
   createPixelCanvas,
@@ -26,6 +26,7 @@ import {
   drawScore,
   drawLives,
   hudText,
+  dimScene,
   BUTTON_KEY,
   SUNSET,
 } from '../engine';
@@ -340,6 +341,7 @@ function render(): void {
     case 'GAME_OVER': {
       drawLevel();
       drawSprite(pc.ctx, playerSprite, Math.round(player.x), Math.round(player.y), PX);
+      dimScene(pc, 0.6);
       drawTextCentered(pc.ctx, 'GAME OVER', W, 48, { color: PAL[4], scale: 2 });
       drawTextCentered(pc.ctx, `SCORE ${score}`, W, 72, { color: PAL[7] });
       drawTextCentered(pc.ctx, `${BUTTON_KEY.A.hint} RESTART`, W, 88, { color: PAL[5] });
@@ -348,6 +350,7 @@ function render(): void {
     case 'WIN': {
       drawLevel();
       drawSprite(pc.ctx, playerSprite, Math.round(player.x), Math.round(player.y), PX);
+      dimScene(pc, 0.6);
       drawTextCentered(pc.ctx, 'YOU WIN', W, 48, { color: PAL[6], scale: 2 });
       drawTextCentered(pc.ctx, `SCORE ${score}`, W, 72, { color: PAL[7] });
       drawTextCentered(pc.ctx, `${BUTTON_KEY.A.hint} RESTART`, W, 88, { color: PAL[5] });
