@@ -17,6 +17,10 @@ export {
   drawText,
   drawTextCentered,
   textWidth,
+  blink,
+  pulse,
+  SHADOW_COLOR,
+  OUTLINE_COLOR,
 } from './draw';
 export type {
   PixelCanvas,
@@ -38,8 +42,8 @@ export type { Juice } from './juice';
 export { createAudio } from './audio';
 export type { Audio, Sfx } from './audio';
 
-export { SAFE_MARGIN, drawScore, drawLives, hudText } from './ui';
-export type { HudOptions, HAnchor, VAnchor } from './ui';
+export { SAFE_MARGIN, drawScore, drawLives, hudText, drawPanel, dimScene } from './ui';
+export type { HudOptions, PanelOptions, HAnchor, VAnchor } from './ui';
 
 export { createCrt } from './crt';
 export type { Crt, CrtOptions } from './crt';
