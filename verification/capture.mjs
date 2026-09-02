@@ -231,6 +231,9 @@ const INIT_SCRIPT = `(() => {
     for (let frame = 1; frame <= maxFrames; frame++) {
       while (ei < events.length && events[ei].at === frame) {
         const ev = events[ei++];
+        // Once a terminal scene is reached the player is hands-off: a scripted
+        // tap must not restart the game before the end/win frame is taken.
+        if (terminal && ev.type === 'down') continue;
         window.dispatchEvent(new KeyboardEvent(ev.type === 'down' ? 'keydown' : 'keyup', { code: ev.key, bubbles: true }));
       }
       window.__step();
