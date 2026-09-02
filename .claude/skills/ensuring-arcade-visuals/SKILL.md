@@ -7,6 +7,8 @@ description: Use when creating or editing a game's visual presentation, or when 
 
 This skill covers the game's **look** only. Readability and HUD margins (`SAFE_MARGIN`, whether text is legible and clear of edges) are *quality* concerns — they live in **improving-game-quality**, which owns the only quality checklist. Do not duplicate those checks here; defer to that skill.
 
+**Editing this skill, or any engine module it describes, changes how every future game looks — run **verifying-graphics** before calling such an edit done.** This skill itself is for one game's look.
+
 All engine imports come from the barrel: `import { ... } from '../engine';` (from `game/main.ts`). The reference implementation for everything below is `workspace/game-template/game/main.ts`. After every edit: `cd workspace/<game-name> && npm run check`.
 
 ## 0. Style card BEFORE code — forced divergence

@@ -74,6 +74,8 @@ retrovibe/
 
 ## Engine API (frozen — authoritative surface is `engine/index.ts`)
 
+Editing anything under `engine/` (or the template's `game/main.ts` / `index.html`) is a graphics-generator change: it is not done until the **verifying-graphics** loop has run and its frames have been viewed (see Conventions).
+
 Games import from `'../engine'`:
 
 | Module | Key exports | Purpose |

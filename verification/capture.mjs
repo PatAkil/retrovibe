@@ -22,7 +22,10 @@
 //      end = the terminal scene 0.5 s after it is entered (flash and burst gone).
 //   5. Writes verification/out/<fixture>-<moment>.png, and — when a baseline
 //      exists — verification/out/compare.png (baseline | candidate | diff per
-//      moment) with a changed-pixel percentage per moment printed to stdout.
+//      moment) and prints two percentages per moment: pixels that changed at
+//      all, and pixels that changed VISIBLY (largest channel delta >= 24/255).
+//      A global tonal tweak (vignette, scanline alpha) touches most pixels by
+//      a little — high "any", low "visible"; a real visual change moves both.
 //
 // Exit code is nonzero when a fixture fails to boot, throws, or misses a
 // moment its script promises — never for pixel differences: whether a change
@@ -257,7 +260,7 @@ async function buildCompare(browser, captured) {
   const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
   await page.setContent(`<body style="margin:0;background:#101014;color:#ddd;font:13px system-ui">
     <div id="grid" style="display:grid;grid-template-columns:150px repeat(3,1fr);gap:6px;padding:8px;align-items:center">
-      <div></div><b style="text-align:center">baseline (approved)</b><b style="text-align:center">candidate (working tree)</b><b style="text-align:center">changed pixels</b>
+      <div></div><b style="text-align:center">baseline (approved)</b><b style="text-align:center">candidate (working tree)</b><b style="text-align:center">changed pixels (dim = subtle, bright = visible)</b>
     </div></body>`);
   const stats = await page.evaluate(async (rows) => {
     const grid = document.getElementById('grid');
@@ -276,6 +279,7 @@ async function buildCompare(browser, captured) {
       diff.width = cand.width; diff.height = cand.height;
       const dctx = diff.getContext('2d');
       let changed = 0;
+      let visible = 0; // pixels whose largest channel delta is >= 24/255 — a change you can see
       if (base && base.width === cand.width && base.height === cand.height) {
         const c = document.createElement('canvas'); c.width = cand.width; c.height = cand.height;
         const x = c.getContext('2d');
@@ -283,9 +287,13 @@ async function buildCompare(browser, captured) {
         x.drawImage(cand, 0, 0); const b = x.getImageData(0, 0, c.width, c.height).data;
         const d = dctx.createImageData(c.width, c.height);
         for (let i = 0; i < a.length; i += 4) {
-          const same = a[i] === b[i] && a[i + 1] === b[i + 1] && a[i + 2] === b[i + 2];
+          const delta = Math.max(Math.abs(a[i] - b[i]), Math.abs(a[i + 1] - b[i + 1]), Math.abs(a[i + 2] - b[i + 2]));
+          const same = delta === 0;
           if (!same) changed++;
-          d.data[i] = same ? 20 : 255; d.data[i + 1] = same ? 20 : 60; d.data[i + 2] = same ? 24 : 60; d.data[i + 3] = 255;
+          const big = delta >= 24;
+          if (big) visible++;
+          // diff image: untouched = near-black, subtle = dim red, visible = bright red
+          d.data[i] = same ? 20 : big ? 255 : 110; d.data[i + 1] = same ? 20 : big ? 60 : 30; d.data[i + 2] = same ? 24 : big ? 60 : 30; d.data[i + 3] = 255;
         }
         dctx.putImageData(d, 0, 0);
       } else {
@@ -293,7 +301,8 @@ async function buildCompare(browser, captured) {
       }
       diff.style.width = '100%';
       grid.appendChild(diff);
-      out.push({ name: r.name, moment: r.moment, hasBase: !!base, pct: base ? (100 * changed) / (cand.width * cand.height) : null });
+      const total = cand.width * cand.height;
+      out.push({ name: r.name, moment: r.moment, hasBase: !!base, pct: base ? (100 * changed) / total : null, vis: base ? (100 * visible) / total : null });
     }
     return out;
   }, rows);
@@ -350,9 +359,9 @@ try {
     }
   }
   const stats = await buildCompare(browser, captured);
-  console.log('\nchanged pixels vs baseline (visual judgement still required — see verification/out/compare.png):');
+  console.log('\npixels vs baseline — any change | visible change (channel delta >= 24/255). Judge by LOOKING at verification/out/compare.png:');
   for (const s of stats) {
-    console.log(`  ${s.name.padEnd(14)} ${s.moment.padEnd(8)} ${s.hasBase ? s.pct.toFixed(2).padStart(6) + ' %' : 'no baseline'}`);
+    console.log(`  ${s.name.padEnd(14)} ${s.moment.padEnd(8)} ${s.hasBase ? s.pct.toFixed(2).padStart(6) + ' % | ' + s.vis.toFixed(2).padStart(6) + ' %' : 'no baseline'}`);
   }
 } finally {
   for (const s of servers) s.stop();

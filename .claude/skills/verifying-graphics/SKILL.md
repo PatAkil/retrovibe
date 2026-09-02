@@ -31,20 +31,31 @@ verification/
 
 ## The loop
 
-Run it from the repo root. Never run the template in place; the fixtures are the only things that run here.
+Run it from the repo root. Never run the template in place; the fixtures are the only things that run here. First confirm the instrument is present on your branch — `ls verification/capture.mjs verification/baseline` — if it is not, you are on a branch that predates it: stop and say so rather than improvising a check.
 
 ### 1. Trigger
 
 Any of: a diff under `workspace/game-template/` (engine, `game/main.ts`, `index.html`); an edit to `ensuring-arcade-visuals`, or to the visual items of `improving-game-quality`; a change to `verification/` itself. If none applies, this skill does not run.
 
-### 2. Functional gates on the fixtures
+### 2. Refresh the engine copies, then run the functional gates
+
+The fixtures carry no engine in git. Copy the template's engine into each one **first** — `capture.mjs` does this on its own, but `check`/`build` do not, so running them before a refresh checks a stale or missing copy:
 
 ```bash
-for g in space-dodge cave-hopper brick-bounce; do (cd verification/$g && npm run check && npm run build) || echo "GATE FAIL: $g"; done
-rm -rf verification/*/dist
+rm -rf verification/space-dodge/engine && cp -r workspace/game-template/engine verification/space-dodge/engine
+rm -rf verification/cave-hopper/engine && cp -r workspace/game-template/engine verification/cave-hopper/engine
+rm -rf verification/brick-bounce/engine && cp -r workspace/game-template/engine verification/brick-bounce/engine
 ```
 
-A fixture that no longer type-checks against the changed engine is an API break — fix the engine (or, with the user's OK, the fixture) before capturing. `capture.mjs` refreshes the engine copies itself, but run `check` only after a capture or after copying the engine by hand (`rm -rf verification/<g>/engine && cp -r workspace/game-template/engine verification/<g>/engine`) — otherwise you are checking against whatever copy was left by the last run.
+Then, one plain command per fixture (some sandboxes reject shell loops and subshells):
+
+```bash
+cd verification/space-dodge && npm run check && npm run build; cd ../..
+cd verification/cave-hopper && npm run check && npm run build; cd ../..
+cd verification/brick-bounce && npm run check && npm run build; cd ../..
+```
+
+A fixture that no longer type-checks against the changed engine is an API break — fix the engine (or, with the user's OK, the fixture) before capturing. `dist/` folders left by `build` are gitignored; `rm -rf verification/*/dist` if you want them gone.
 
 ### 3. Capture
 
@@ -53,11 +64,12 @@ lsof -ti:5301,5302,5303 | xargs -r kill
 node verification/capture.mjs
 ```
 
-Exit status is nonzero only for a fixture that fails to boot, throws, or misses a promised moment — those are hard failures. Pixel differences never fail the run; they are the *input* to step 4. Stdout ends with a table of changed-pixel percentages per fixture and moment.
+Exit status is nonzero only for a fixture that fails to boot, throws, or misses a promised moment — those are hard failures. Pixel differences never fail the run; they are the *input* to step 4. Stdout ends with a table per fixture and moment with **two** percentages: pixels that changed *at all*, and pixels that changed *visibly* (largest channel delta ≥ 24/255).
 
 Read the table first, mechanically:
-- A change meant to be **invisible by default** (an opt-in feature, a refactor) must show **0.00 % on every moment**. Anything else means the default path moved — a hard failure until explained.
-- A change meant to be **visible** must show non-zero on the moments it targets and 0.00 % on the rest. 0.00 % everywhere means the change is not wired into anything a game actually renders.
+- A change meant to be **invisible by default** (an opt-in feature, a refactor) must show **0.00 % | 0.00 % on every moment**. Anything else means the default path moved — a hard failure until explained. One known benign cause: an engine change that consumes a different number of `Math.random()` calls at start-up shifts every seeded ambient particle — the "any" column lights up on all moments while nothing looks different. Confirm that is the cause by reading the diff (only particles moved) and say so in the report; do not wave it through unexamined.
+- A change meant to be **visible** must show non-zero on the moments it targets. 0.00 % | 0.00 % everywhere means the change is not wired into anything a game actually renders.
+- A change to a **global default** (vignette, scanline alpha, flash curve, font) legitimately touches most pixels on most moments: expect a high "any" column with a low "visible" column for a subtle tonal tweak (a vignette softening measured ~63 % | 0.00 %). The percentages say *where* and *how much*; only step 4 says *whether it is better*.
 
 ### 4. Look — this step is not optional
 
@@ -82,7 +94,7 @@ A change whose *purpose* is visual improvement must be judged **better** on the 
 
 ### 5. Report — the user has the final say
 
-Send `verification/out/compare.png` to the user (SendUserFile) with the diff table and the per-criterion verdicts, fixture by fixture. Recommend accept / fix / revert. Claude judges; the user decides. Never describe a change as "verified" or "an upgrade" without having viewed the frames in this session — the verdict must cite what was seen.
+Share `verification/out/compare.png` with the user by whatever this environment offers (file attachment, artifact, or inline view), with the diff table and the per-criterion verdicts, fixture by fixture. Recommend accept / fix / revert. Claude judges; the user decides. Never describe a change as "verified" or "an upgrade" without having viewed the frames in this session — the verdict must cite what was seen.
 
 ### 6. Accept — only after the user approves
 
@@ -117,9 +129,9 @@ Only when an existing fixture cannot exercise something the generator now does (
 ## Checklist
 
 - [ ] Trigger applies (template/engine, visual skill, or `verification/` changed).
-- [ ] Functional gates green on all three fixtures against the *refreshed* engine.
+- [ ] Engine copies refreshed, then functional gates green on all three fixtures.
 - [ ] Capture ran with exit 0 (all promised moments produced).
-- [ ] Diff table read mechanically: invisible-by-default → all 0.00 %; visible → non-zero only where intended.
+- [ ] Diff table read mechanically: invisible-by-default → all 0.00 % | 0.00 %; targeted change → non-zero where intended; global default → high "any", judged by eye.
 - [ ] `compare.png` AND the full-size changed frames were viewed in this session.
 - [ ] Per-criterion (R1–R8), per-fixture verdicts written; regressions named with a region.
 - [ ] Composite and verdicts sent to the user; accept/fix/revert recommended.
