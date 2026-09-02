@@ -136,7 +136,7 @@ const spikeSprite = makeSprite(
     '.WWWWWW.',
     'ORRRRRRO',
   ],
-  { L: PAL[5], W: PAL[4], R: PAL[3], O: PAL[0] },
+  { L: PAL[6], W: PAL[5], R: PAL[3], O: PAL[0] }, // peach body (4.8:1 vs slab), gold tip; a fang, never a disc
 );
 
 // Flag: 8x12 cells — cream pole, peach pennant, 2-frame flutter.
@@ -447,9 +447,10 @@ function drawCave(): void {
   fillBands(ctx, 0, 0, W, 104, [PAL[0], PAL[0]]);
   // A short ladder low in the frame reads as the floor of the cave lifting
   // toward the light; a tall one would read as stripes across the play area.
-  fillDither(ctx, 0, 104, W, 5, PAL[0], PAL[1], 'sparse');
-  fillDither(ctx, 0, 109, W, 5, PAL[0], PAL[1], 'checker');
-  fillDither(ctx, 0, 114, W, 5, PAL[1], PAL[0], 'sparse');
+  // Horizon: a single solid step from the dark upper cave into the PAL[1] floor
+  // band — dithered ladders here were read as a dotted seam by every reviewer.
+  ctx.fillStyle = PAL[1];
+  ctx.fillRect(0, 112, W, 7);
   ctx.fillStyle = PAL[1];
   ctx.fillRect(0, 119, W, H - 119);
 

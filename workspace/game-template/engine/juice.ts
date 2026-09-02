@@ -2,8 +2,8 @@
 //
 // Magnitude floors (feedback must be unmissable — see improving-game-quality):
 //   shake: major events (death/explosion) >= 4-6 px amplitude, >= 0.4 s
-//   flash: hold-then-fall, not a plain fade — the overlay sits at its 0.65 peak
-//     (never a full-opacity wash) for the first 20 % of the duration so the
+//   flash: hold-then-fall, not a plain fade — the overlay sits at its 0.55 peak
+//     (never a full-opacity wash) for the first 12 % of the duration so the
 //     death instant reads as a strike, then falls on a quadratic ease-out over
 //     the remaining 80 %. Give it >= 0.3 s so the hold covers the hit-stop.
 //   hit-stop: the frozen tableau must actually RENDER — stay in PLAYING while
@@ -99,8 +99,8 @@ export function createJuice(): Juice {
         // well before GAME_OVER. Peak capped below full opacity so the
         // burst/shake/frozen tableau stays visible through the flash
         // instead of being washed out by it.
-        const PEAK = 0.65;
-        const HOLD = 0.2; // fraction of duration held at full peak before falling (a 3-4 frame strike at 0.35 s; ~0.4 alpha by the last hit-stop frame so the world reads through it)
+        const PEAK = 0.55;
+        const HOLD = 0.12; // fraction of duration held at full peak before falling (a 2-3 frame strike at 0.35 s; ~0.27 alpha by the last hit-stop frame so the tableau reads through it)
         let shape;
         if (t > 1 - HOLD) {
           shape = 1;

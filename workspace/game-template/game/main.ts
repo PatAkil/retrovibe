@@ -25,7 +25,7 @@ import {
   createPixelCanvas, createLoop, createInput, controlHints, createScenes,
   createParticles, createJuice, createAudio, createCrt, createRuntime,
   makeSprite, drawSprite, drawText, drawTextCentered, textWidth, frameIndex,
-  fillDither, drawFrame, drawLogo, drawScore, hudText, dimScene, blink, pulse,
+  drawFrame, drawLogo, drawScore, hudText, dimScene, blink, pulse,
   BUTTON_KEY, PICO8, SAFE_MARGIN,
 } from '../engine';
 
@@ -254,7 +254,6 @@ function renderBackdrop(): void {
   // three low-alpha PICO8[1] bands thicken downward — a dense dither slab reads
   // as a dotted mesh strip, this reads as air.
   pc.ctx.globalAlpha = 0.10;
-  fillDither(pc.ctx, 0, H - 34, W, 8, PICO8[0], PICO8[1], 'sparse');
   const haze = [0.10, 0.18, 0.28];
   for (let i = 0; i < haze.length; i++) {
     pc.ctx.globalAlpha = haze[i];

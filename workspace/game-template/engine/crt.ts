@@ -53,7 +53,7 @@ const PHOSPHOR_LIFT = 'rgb(15,17,28)';
 const HALATION_ALPHA = 0.09;
 
 export function createCrt(opts: CrtOptions = {}): Crt {
-  const scanlineAlpha = opts.scanlineAlpha ?? 0.12;
+  const scanlineAlpha = opts.scanlineAlpha ?? 0.09;
   const vignetteAlpha = opts.vignetteAlpha ?? 0.35;
   const flickerPeak = opts.flicker ?? 0.03;
   const halationAlpha = opts.halation ?? HALATION_ALPHA;

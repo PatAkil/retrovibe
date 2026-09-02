@@ -34,7 +34,6 @@ import {
   drawSprite,
   drawTextCentered,
   frameIndex,
-  fillDither,
   drawFrame,
   drawLogo,
   pulse,
@@ -303,7 +302,6 @@ function update(dt: number): void {
  *  planet and a hairline arena bezel. Static; all under the ambient band. */
 function renderBackdrop(): void {
   pc.ctx.globalAlpha = 0.10;
-  fillDither(pc.ctx, 0, H - 34, W, 8, PICO8[0], PICO8[1], 'sparse');
   const haze = [0.10, 0.18, 0.28];
   for (let i = 0; i < haze.length; i++) {
     pc.ctx.globalAlpha = haze[i];

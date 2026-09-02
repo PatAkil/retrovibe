@@ -349,7 +349,6 @@ function drawBackdrop(): void {
   // where it does depth work — one seam under the shell wall, and the seabed.
   ctx.fillStyle = PAL[1];
   ctx.fillRect(0, 0, W, SEABED_Y);
-  fillDither(ctx, 0, 62, W, 6, PAL[1], PAL[0], 'sparse');
 
   // The light shafts are GONE. Moved out of the HUD strip they still read as
   // dust on the glass rather than as light — a sparse dither column is dirt at

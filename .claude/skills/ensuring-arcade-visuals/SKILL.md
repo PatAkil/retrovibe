@@ -212,7 +212,7 @@ Every game gets the CRT overlay. The pass is five layers, in order: **halation**
 import { createCrt } from '../engine';
 
 const crt = createCrt(); // defaults: halation 0.09, lift 'rgb(15,17,28)',
-                         //   scanlineAlpha 0.12, vignetteAlpha 0.35, flicker 0.03
+                         //   scanlineAlpha 0.09, vignetteAlpha 0.35, flicker 0.03
 
 function render(): void {
   pc.clear(PICO8[0]);              // 1. clear (un-shaken)
@@ -225,7 +225,7 @@ function render(): void {
 
 Tune via `CrtOptions` only if the game demands it (e.g. a very dark game may want `vignetteAlpha` lowered); the defaults are calibrated. `halation` is the per-side bloom alpha (default 0.09) and **0 disables the layer entirely** — the escape hatch on a slow host, since halation is the one pass that snapshots the frame each frame. `lift` is the additive phosphor floor (default `'rgb(15,17,28)'`); `''` disables it, for a game on a bright ground with no black to lift. The full frame-order rule (clear before preRender, etc.) is owned by **improving-game-quality**.
 
-**The glass is not neutral.** A phosphor lift means pure-black art no longer renders as pure black — the CRT pass adds a faint lit-tube glow on top, so don't chase "true black" by darkening game colors further; the lift is deliberate and part of the calibrated look; halation (default per-side alpha 0.09) additionally blooms bright sprites sideways. `scanlineAlpha` (default 0.12) is a **multiply depth**, not an opacity over black — it scales each row toward its own hue rather than dragging it toward black, so raising it darkens proportionally without banding into hard stripes.
+**The glass is not neutral.** A phosphor lift means pure-black art no longer renders as pure black — the CRT pass adds a faint lit-tube glow on top, so don't chase "true black" by darkening game colors further; the lift is deliberate and part of the calibrated look; halation (default per-side alpha 0.09) additionally blooms bright sprites sideways. `scanlineAlpha` (default 0.09) is a **multiply depth**, not an opacity over black — it scales each row toward its own hue rather than dragging it toward black, so raising it darkens proportionally without banding into hard stripes.
 
 ## 6. Ambient particles — a preset that fits the scene
 
@@ -261,7 +261,7 @@ The single loudest "this is a demo" tell is not the sprites: it is a **flat clea
 1. **A far band or horizon** — `fillBands(ctx, 0, 0, W, h, [c1, c2, c3])` for sky/water/cave depth, or a short `fillDither` ladder between the palette's **two darkest** tones for a smooth seam (`fillDither(ctx, x, y, w, h, colorA, colorB, 'sparse' | 'checker')` — two palette colors mixed into a third without leaving the palette).
 2. **Silhouettes that frame the arena** — stalactites, coral, a planet, a city line, side walls closing in — drawn in the **darkest** tones.
 
-**A far band must never cross the middle of the play field.** Bands live as a *horizon*: in the top or bottom quarter of the frame, at most 1.3:1 against the clear color, with a dithered (soft) top edge feathering it into the ground. A flat block of a second tone across mid-field is not depth — it reads as a wall the player expects to collide with, and it steals the scene from the actors crossing it.
+**A far band must never cross the middle of the play field, and a horizon is a SOLID step.** Bands live as a *horizon*: in the top or bottom quarter of the frame, at most 1.3:1 against the clear color, drawn with `fillBands` or a plain rect as a hard step between two adjacent dark tones. Never a dithered ladder or dithered seam across the field — three separate blind reviews read every dithered horizon as a "dotted band artifact"; `fillDither` belongs on slab faces, seabeds and other small surfaces. A flat block across mid-field reads as a wall and steals the scene.
 
 Both planes must sit **at or below the ambient band vs the clear color** (§1b): scenery may never compete with an actor. The engine ambient layer renders *on top* of them (`particles.render` after the backdrop, before the world). Keep the play field itself **calm** — **keep dither to seams and edges, and never tile the play field under fast actors**: the pattern beats against their motion and the whole arena reads as texture rather than as a place. Two or three dither seams low in the frame read as depth; a tall dither ladder — or a full-field crosshatch — across the play area reads as stripes. A flat palette field with one seam is the default; texture is the exception you justify.
 
