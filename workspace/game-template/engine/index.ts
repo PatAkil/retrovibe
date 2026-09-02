@@ -13,12 +13,19 @@ export type { SceneMachine, Scene } from './scenes';
 export {
   createPixelCanvas,
   makeSprite,
+  flipSprite,
+  frameIndex,
   drawSprite,
   drawText,
   drawTextCentered,
   textWidth,
   blink,
   pulse,
+  fillBands,
+  fillDither,
+  drawBevel,
+  drawFrame,
+  drawLogo,
   SHADOW_COLOR,
   OUTLINE_COLOR,
 } from './draw';
@@ -27,7 +34,10 @@ export type {
   CreatePixelCanvasOptions,
   Sprite,
   SpriteMap,
+  MakeSpriteOptions,
   TextOptions,
+  DitherPattern,
+  LogoOptions,
 } from './draw';
 
 export { PICO8, GAMEBOY, DUSK, NEON, SUNSET, OCEAN, PALETTES, swapPalette, contrast } from './palette';
