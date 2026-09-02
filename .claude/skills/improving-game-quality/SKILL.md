@@ -238,6 +238,12 @@ Movement (arrows/WASD) is implicit and not in `controlHints` — add a static li
 
 **Check:** Would a screenshot of this game be mistaken for the reference game or another game currently in the workspace? If yes, the visual pass failed — apply **ensuring-arcade-visuals**' style-card divergence rule (§0 there): differ on sprite silhouettes AND at least one other axis (palette scheme, ambient preset, or burst colors).
 
+## 11b. Art direction — not a demo
+
+**Check:** (owned by **ensuring-arcade-visuals** §3b/§7, re-verified here — this is the item that catches a game that builds, plays and still looks like a placeholder.) All five must hold: gameplay sprites are **multi-tone (2–3 palette tones) and outlined**, authored at `px = 1` at their full rendered size (not a one-color blob scaled up with `px`); the background has **at least two depth planes** (a far band/ramp plus dark silhouettes), both at or below the ambient band; platforms/bricks/panels are **beveled slabs**, not flat rectangles, and pits/edges read as depth; the title screen uses a **drawn logo** plus a large hero prop, not text alone; and everything alive has a **2-frame animation**.
+
+**Fix:** The engine art helpers, all from `'../engine'` and all cheap: `makeSprite(rows, map, { outline })` / an authored keyline char + `flipSprite` + `frameIndex(clock, fps, count)` for sprites; `fillBands` / `fillDither` for background planes; `drawBevel` for surfaces and `drawFrame` for arena walls; `drawLogo(ctx, text, W, y, { color, shade, shadow })` for the title; `dimScene` + `drawPanel`/`drawBevel` for terminal screens. Worked examples to read (never run or modify): `verification/cave-hopper/game/main.ts` and `verification/brick-bounce/game/main.ts`.
+
 ## Sign-off
 
-The pass is done when all fourteen items hold (1, 1b, 2, 3, 3b, 4, 4b, 5, 6, 7, 8, 9, 10, 11), `npm run check` and `npm run build` pass in the game folder, and the smoke check via **playing-the-game** is green. The user remains the real playtester — report what was verified, never "playtested".
+The pass is done when all fifteen items hold (1, 1b, 2, 3, 3b, 4, 4b, 5, 6, 7, 8, 9, 10, 11, 11b), `npm run check` and `npm run build` pass in the game folder, and the smoke check via **playing-the-game** is green. The user remains the real playtester — report what was verified, never "playtested".
