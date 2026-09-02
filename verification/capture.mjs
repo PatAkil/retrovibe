@@ -65,8 +65,8 @@ const TEMPLATE_ENGINE = resolve(ROOT, 'workspace/game-template/engine');
 const OUT = resolve(VERIFY, 'out');
 const BASELINE = resolve(VERIFY, 'baseline');
 const STATUS = resolve(OUT, 'status.json');
-const FIRST_PORT = 5301;
-const GAME_PORT = 5399; // --game, well clear of the fixture range
+const FIRST_PORT = Number(process.env.VG_PORT_BASE) || 5301; // VG_PORT_BASE lets parallel worktrees capture side by side
+const GAME_PORT = FIRST_PORT + 98; // --game, well clear of the fixture range (5399 by default)
 const MAX_FRAMES = 60 * 60; // 60 s of virtual time per run, hard stop
 const RING = 16; // frames of history kept for the impact (death tableau) shot
 
