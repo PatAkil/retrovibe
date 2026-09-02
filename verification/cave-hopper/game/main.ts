@@ -10,10 +10,13 @@
 // face and a lit top lip; the pit is a 1→0→black gradient, not a seam.
 // Actors carry authored dark outlines and 2-frame animation: player cream 7
 // with a 5 fold and a 3 visor (walk/idle + facing flip), coin gold 6 with a 7
-// glint (wide/narrow spin), spikes hostile 4/3 with a 6 tip, flag a 5 pennant
+// glint (wide/narrow spin), spikes a 4 body under a 6 tip with 3 only as the
+// 1-px base shadow (4.72:1 vs the floor, 3.17:1 vs the slab), flag a 5 pennant
 // on a 7 pole (flutter) · ambient 'embers' · juice: orange death flash, hard
-// freeze-frame, tiny landing puff; terminal screens dimScene the world behind
-// a beveled panel. TITLE: drawLogo + the player large (px 4) on a ledge.
+// freeze-frame, tiny landing puff; terminal screens dimScene the world behind a
+// HOLLOW drawFrame bezel (dim OR plate, never both). TITLE: drawLogo + the
+// player as a prop at px 2 on a ledge — the authored keyline scales with px, so
+// a bigger prop needs a bigger sprite, not a bigger cell.
 
 import {
   createPixelCanvas,
@@ -33,13 +36,13 @@ import {
   drawTextCentered,
   drawLogo,
   drawBevel,
+  drawFrame,
   fillBands,
   fillDither,
   blink,
   drawScore,
   drawLives,
   hudText,
-  drawPanel,
   dimScene,
   BUTTON_KEY,
   SUNSET,
@@ -111,15 +114,18 @@ const coinFrames = [
   ),
 ];
 
-// Spikes: 8x6 cells — two teeth, bright tip, orange upper, dark-red lower,
-// authored black sides and base so the hazard never shares the slab's value.
+// Spikes: 8x6 cells — a bright 6 tip over a 4 body, with 3 used ONLY as the
+// 1-px base shadow. The old form put 3 across the lower half, the same tone as
+// the slab's light lip, so the hazard read as a bump in the terrain.
+// contrast(): body 4 vs cave floor 1 = 4.72:1, vs slab 2 = 3.17:1; tip 6 is
+// 10.4:1 / 6.98:1. Authored black sides keep the silhouette off the rock.
 const spikeSprite = makeSprite(
   [
     '...LL...',
     '..OWWO..',
     '..WWWW..',
-    '.OWRRWO.',
-    '.RRRRRR.',
+    '.OWWWWO.',
+    '.WWWWWW.',
     'ORRRRRRO',
   ],
   { L: PAL[6], W: PAL[4], R: PAL[3], O: PAL[0] },
@@ -454,14 +460,17 @@ function drawCave(): void {
 
 /** A beveled rock slab with a dithered face and a lit top lip. */
 function drawSlab(x: number, y: number, w: number, h: number): void {
-  drawBevel(pc.ctx, x, y, w, h, PAL[2], PAL[3], PAL[1]);
+  // The lit lip is a single dithered 2/4 row and the bevel light is 2, NOT 3:
+  // 3 is the spike body's neighbour tone, and a slab lip in 3 made the hazards
+  // read as part of the terrain they stand on.
+  drawBevel(pc.ctx, x, y, w, h, PAL[2], PAL[2], PAL[1]);
   if (h > 3) fillDither(pc.ctx, x + 1, y + 3, w - 2, h - 4, PAL[2], PAL[1], 'sparse');
-  fillDither(pc.ctx, x + 1, y + 1, w - 2, 1, PAL[3], PAL[4], 'sparse');
+  fillDither(pc.ctx, x + 1, y + 1, w - 2, 1, PAL[2], PAL[4], 'sparse');
 }
 
 function drawLevel(): void {
   // The pit reads as depth, not a seam: a gradient falling away into black.
-  fillBands(pc.ctx, PIT.x, 132, PIT.w, H - 132, [PAL[1], PAL[0], '#000000']);
+  fillBands(pc.ctx, PIT.x, 132, PIT.w, H - 132, [PAL[1], PAL[0], PAL[0]]);
   for (const s of solids) drawSlab(s.x, s.y, s.w, s.h);
   const coinFrame = coinFrames[frameIndex(clock, 3, coinFrames.length)];
   for (const s of spikes) drawSprite(pc.ctx, spikeSprite, s.x, s.y, PX);
@@ -483,13 +492,16 @@ function drawPlayer(): void {
 function drawTerminal(headline: string, color: string): void {
   drawLevel();
   drawPlayer();
+  // Dim OR plate, never both: the dim IS the backing, so the bezel is HOLLOW
+  // and the world stays visible inside it (the reference game's treatment).
   dimScene(pc, 0.6);
-  drawPanel(pc, 52, 38, 136, 62, { border: PAL[3] });
+  drawFrame(pc.ctx, 52, 38, 136, 62, PAL[3], 1);
   drawTextCentered(pc.ctx, headline, W, 48, { color, scale: 2 });
-  drawTextCentered(pc.ctx, `SCORE ${score}`, W, 72, { color: PAL[7] });
+  drawTextCentered(pc.ctx, `SCORE ${score}`, W, 72, { color: PAL[7], shadow: true });
   // Always visible, breathing between two palette tones — never a missing prompt.
   drawTextCentered(pc.ctx, `${BUTTON_KEY.A.hint} RESTART`, W, 88, {
     color: blink(clock, 1.0, 0.6) ? PAL[6] : PAL[5],
+    shadow: true,
   });
 }
 
@@ -508,19 +520,25 @@ function render(): void {
 
       // The hero shot: the player big on a lit ledge, a coin waiting.
       drawSlab(40, 104, 68, 10);
-      drawSprite(pc.ctx, playerRight[frameIndex(clock, 3, 2)], 52, 56, 4);
+      // px 2, not 4: the keyline is AUTHORED INTO THE ROWS, so it scales with
+      // px — at 4 the 1-cell outline became 4-px black bands and the runner
+      // read as a striped blob. At 2 the sprite still reads as a figure.
+      drawSprite(pc.ctx, playerRight[frameIndex(clock, 3, 2)], 62, 80, 2);
       // The hero coin is a prop, not an actor — always the full disc.
-      drawSprite(pc.ctx, coinFrames[0], 122, 74, 3);
+      drawSprite(pc.ctx, coinFrames[0], 124, 92, 2);
 
+      // Hint text sits at scale 1 over the dither ladder: it carries a shadow.
       drawTextCentered(pc.ctx, `PRESS ${BUTTON_KEY.A.hint} TO START`, W, 118, {
         color: blink(clock, 1.0, 0.6) ? PAL[7] : PAL[5],
+        shadow: true,
       });
       const hints = controlHints(input);
       hints.forEach((hint, i) => {
-        drawTextCentered(pc.ctx, hint, W, 130 + i * 8, { color: PAL[6] });
+        drawTextCentered(pc.ctx, hint, W, 130 + i * 8, { color: PAL[6], shadow: true });
       });
       drawTextCentered(pc.ctx, 'ARROWS/WASD MOVE', W, 130 + hints.length * 8, {
         color: PAL[3],
+        shadow: true,
       });
       break;
     }

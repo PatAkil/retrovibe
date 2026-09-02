@@ -161,6 +161,9 @@ export function flipSprite(sprite: Sprite): Sprite {
  */
 export function frameIndex(time: number, fps: number, count: number): number {
   if (count <= 1 || fps <= 0) return 0;
+  // A NaN/Infinity clock (an uninitialised timer, a division by zero upstream)
+  // would make Math.floor return NaN and index the frame array with undefined.
+  if (!Number.isFinite(time)) return 0;
   const i = Math.floor(time * fps) % count;
   return i < 0 ? i + count : i;
 }
@@ -212,7 +215,7 @@ const FONT: Record<string, string[]> = {
   T: ['###', '.#.', '.#.', '.#.', '.#.'],
   U: ['#.#', '#.#', '#.#', '#.#', '###'],
   V: ['#.#', '#.#', '#.#', '#.#', '.#.'],
-  W: ['#.#', '#.#', '###', '###', '#.#'],
+  W: ['#.#', '#.#', '###', '###', '.#.'], // bottom-heavy pointed W: the old form ('#.#','#.#','###','###','#.#') was one pixel from H and 'YOU WIN' read as 'YOU HIN'; the point separates it from H, the filled lower rows from V, and the fill sitting LOW (M's sits high) from M
   X: ['#.#', '#.#', '.#.', '#.#', '#.#'],
   Y: ['#.#', '#.#', '.#.', '.#.', '.#.'],
   Z: ['###', '..#', '.#.', '#..', '###'],
@@ -447,11 +450,30 @@ export function fillBands(
 export type DitherPattern = 'checker' | 'sparse';
 
 /**
- * 2x2 dither tiles, built once per (colorA, colorB, pattern) and cached — a
- * CanvasPattern is immutable, so reusing it is free and the hot path allocates
- * nothing. The cache is tiny by construction (a game has a handful of pairs).
+ * 4x4 ordered (Bayer) dither tiles, built once per (colorA, colorB, pattern)
+ * and cached — a CanvasPattern is immutable, so reusing it is free and the hot
+ * path allocates nothing. The cache is tiny by construction (a game has a
+ * handful of pairs).
+ *
+ * WHY 4x4 and not 2x2: a 2x2 checker has CONSTANT parity per row, and the CRT
+ * scanline pass runs on a 2-logical-px pitch — the two lock together and the
+ * dither resolves into 2-px bands instead of averaging into a third tone. A 4x4
+ * ordered cell breaks that phase lock: no row repeats at the scanline period,
+ * so alternating rows are never uniformly lit or uniformly dimmed.
+ *
+ * Keyed per CONTEXT in a WeakMap: a CanvasPattern belongs to the context that
+ * created it, so a second canvas must never be handed the first one's pattern.
+ * The WeakMap lets a dead context and its patterns be collected together.
  */
-const DITHER_CACHE = new Map<string, CanvasPattern>();
+const DITHER_CACHE = new WeakMap<CanvasRenderingContext2D, Map<string, CanvasPattern>>();
+
+/** Classic 4x4 Bayer thresholds, 0..15. */
+const BAYER_4: ReadonlyArray<number> = [
+  0, 8, 2, 10,
+  12, 4, 14, 6,
+  3, 11, 1, 9,
+  15, 7, 13, 5,
+];
 
 function ditherPattern(
   ctx: CanvasRenderingContext2D,
@@ -459,34 +481,43 @@ function ditherPattern(
   colorB: string,
   pattern: DitherPattern,
 ): CanvasPattern | null {
+  let perCtx = DITHER_CACHE.get(ctx);
+  if (!perCtx) {
+    perCtx = new Map<string, CanvasPattern>();
+    DITHER_CACHE.set(ctx, perCtx);
+  }
   const key = `${colorA}|${colorB}|${pattern}`;
-  const hit = DITHER_CACHE.get(key);
+  const hit = perCtx.get(key);
   if (hit) return hit;
   const tile = document.createElement('canvas');
-  tile.width = 2;
-  tile.height = 2;
+  tile.width = 4;
+  tile.height = 4;
   const tctx = tile.getContext('2d');
   if (!tctx) return null;
   tctx.fillStyle = colorA;
-  tctx.fillRect(0, 0, 2, 2);
+  tctx.fillRect(0, 0, 4, 4);
   tctx.fillStyle = colorB;
-  if (pattern === 'sparse') {
-    tctx.fillRect(0, 0, 1, 1);
-  } else {
-    tctx.fillRect(0, 0, 1, 1);
-    tctx.fillRect(1, 1, 1, 1);
+  // 'checker' = 50 % coverage (thresholds 0-7), 'sparse' = 25 % (0-3).
+  const cutoff = pattern === 'sparse' ? 4 : 8;
+  for (let ty = 0; ty < 4; ty++) {
+    for (let tx = 0; tx < 4; tx++) {
+      if (BAYER_4[ty * 4 + tx] < cutoff) tctx.fillRect(tx, ty, 1, 1);
+    }
   }
   const made = ctx.createPattern(tile, 'repeat');
   if (!made) return null;
-  DITHER_CACHE.set(key, made);
+  perCtx.set(key, made);
   return made;
 }
 
 /**
  * WHY: two palette colors dithered together give a THIRD tone without leaving
  * the palette — the classic way to get a gradient or a ground texture on 16
- * colors. The 2x2 tile is anchored to the logical pixel grid (the pattern lives
- * in the canvas's baked logical space), so it never shimmers or moirés.
+ * colors. The 4x4 ordered tile is anchored to the logical pixel grid (the
+ * pattern lives in the canvas's baked logical space) and its rows do not repeat
+ * at the CRT's 2-px scanline pitch, so a static field averages instead of
+ * banding. It is still a PATTERN, not a solid: keep it to seams, edges and
+ * out-of-play strips — tiled under fast actors it beats against their motion.
  *   fillDither(ctx, 0, 96, W, H - 96, PAL[3], PAL[11], 'sparse');
  */
 export function fillDither(
@@ -510,8 +541,12 @@ export function fillDither(
     ctx.fillRect(x0, y0, wi, hi);
     return;
   }
+  // save/restore so the pattern never leaks into the caller's next fill — a
+  // CanvasPattern left in fillStyle silently textures whatever is drawn next.
+  ctx.save();
   ctx.fillStyle = pat;
   ctx.fillRect(x0, y0, wi, hi);
+  ctx.restore();
 }
 
 /**
@@ -578,11 +613,15 @@ export function drawFrame(
 // --- Title treatment --------------------------------------------------------
 
 export interface LogoOptions {
-  /** Lit color for the TOP 3 of the 5 font rows (default '#FFF1E8'). */
-  color?: string;
-  /** Body color for the whole word — the shaded lower half (default PICO8 orange-ish). */
+  /**
+   * Lit color for the TOP 3 of the 5 font rows. REQUIRED, and taken from the
+   * game's palette — a hard-coded default would be the one place a title screen
+   * leaves the palette.
+   */
+  color: string;
+  /** Body color for the whole word — the shaded lower half (defaults to `color`). */
   shade?: string;
-  /** Offset shadow color under the word (default SHADOW_COLOR). */
+  /** Offset shadow color under the word (default OUTLINE_COLOR, opaque black). */
   shadow?: string;
   /** Font pixel size in logical px (default 3). */
   scale?: number;
@@ -598,6 +637,11 @@ export interface LogoOptions {
  * the top 3 of the 5 font rows re-drawn in `color` behind a single clip, so the
  * letters read as metal catching the light. One save/restore per call; the
  * per-glyph outline is off inside (the logo carries its own shadow).
+ *
+ * `color` is REQUIRED; `shade` defaults to `color` (a flat but on-palette
+ * wordmark) and `shadow` to OUTLINE_COLOR. There are no palette-specific
+ * literals here — a PICO8 default would put an off-palette hue on every
+ * SUNSET/OCEAN/GAMEBOY title screen.
  *   drawLogo(ctx, 'STAR DRIFT', W, 34, { color: PAL[10], shade: PAL[9] });
  */
 export function drawLogo(
@@ -605,13 +649,18 @@ export function drawLogo(
   text: string,
   centerWidth: number,
   y: number,
-  opts: LogoOptions = {},
+  opts: LogoOptions,
 ): void {
+  if (!opts || !opts.color) {
+    throw new Error(
+      'drawLogo: opts.color is required and must come from the game palette, e.g. { color: PAL[10], shade: PAL[9] }',
+    );
+  }
   const scale = opts.scale ?? 3;
   const spacing = opts.spacing ?? 1;
-  const color = opts.color ?? '#FFF1E8';
-  const shade = opts.shade ?? '#FFA300';
-  const shadow = opts.shadow ?? SHADOW_COLOR;
+  const color = opts.color;
+  const shade = opts.shade ?? color;
+  const shadow = opts.shadow ?? OUTLINE_COLOR;
   const off = opts.shadowOffset ?? 1;
   const w = textWidth(text, scale, spacing);
   const x = Math.round((centerWidth - w) / 2);

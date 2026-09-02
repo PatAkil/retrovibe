@@ -78,7 +78,14 @@ export function createJuice(): Juice {
       if (shakeTime > 0 && shakeDur > 0) {
         const falloff = shakeTime / shakeDur;
         const mag = shakeAmp * falloff;
-        ctx.translate((Math.random() * 2 - 1) * mag, (Math.random() * 2 - 1) * mag);
+        // Rounded to WHOLE logical pixels: a fractional translate resamples the
+        // frame, so dither fields crawl and 1-px sprite keylines smear into two
+        // half-lit rows for the length of the shake. Integer offsets keep every
+        // pixel a pixel; at these amplitudes the shake reads the same.
+        ctx.translate(
+          Math.round((Math.random() * 2 - 1) * mag),
+          Math.round((Math.random() * 2 - 1) * mag),
+        );
       }
     },
     postRender(ctx, width, height) {
