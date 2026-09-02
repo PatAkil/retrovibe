@@ -97,8 +97,10 @@ Sprites are ASCII-art rows colored from the palette, readable at a glance — a 
 
 **Size floors (relative to logical height, so they transfer across the 160–320-wide range):**
 
-- player character ≥ **1/16 of logical height** in its larger rendered dimension (≈10 px at 160-high);
-- other gameplay-critical entities (hazards, pickups, projectiles) ≥ **1/26 of logical height** (≈6 px at 160).
+- player character ≥ **1/12 of logical height** in its larger rendered dimension (≈14 px at 160-high; 16×12 is the comfortable arcade target — the reference ship);
+- other gameplay-critical entities (hazards, pickups, projectiles) ≥ **1/20 of logical height** (≈8 px at 160).
+
+These floors were raised after the art-direction pass: at 6–10 px an actor is a blob that no amount of shading rescues, and a 240×160 field with three 8-px actors reads as a test harness. (The older fixtures under `verification/` — cave-hopper's 8×12 runner, brick-bounce's 6-px pearl — predate this floor and stay frozen as instruments; do not copy their sizes.)
 
 Two levers, both legitimate: a bigger ASCII sprite map, or `drawSprite`'s `px` cell-size parameter (a 6-row sprite at `px: 2` renders 12 px — the reference game renders everything at `PX = 2`).
 
@@ -319,7 +321,7 @@ controlHints(input).forEach((h, i) => drawTextCentered(pc.ctx, h, W, 130 + i * 8
 - [ ] Every gameplay-critical entity color clears `contrast() >= 3.0` vs the clear color and any scenery it overlaps; ambient color in the 1.8–2.5:1 band; entities distinguishable in grayscale (§1b).
 - [ ] Player, pickup, hazard use three different hue families AND three different silhouettes (never the reference/fixture shapes reused across roles); pickup is the palette's brightest warm accent; hazard is red-family or spiky (§1b role-hue contract).
 - [ ] Logical resolution low (reference: 240×160, scale 3); all drawing in logical units.
-- [ ] Sprites are `makeSprite` ASCII art, distinct silhouettes + colors per entity type; size floors met (player ≥ H/16, other critical entities ≥ H/26) and hitboxes within ~1 px of rendered size (§3); silhouettes checked at their actual rendered px size, not preview zoom.
+- [ ] Sprites are `makeSprite` ASCII art, distinct silhouettes + colors per entity type; size floors met (player ≥ H/12, other critical entities ≥ H/20) and hitboxes within ~1 px of rendered size (§3); silhouettes checked at their actual rendered px size, not preview zoom.
 - [ ] Sprites authored at `px = 1` at full rendered size, 2–3 palette tones each, with a dark keyline (authored into the rows, or `makeSprite {outline}` with the hitbox on the inner size); every living thing has a 2-frame `frameIndex` animation and facing via `flipSprite` mirrored at setup (§3b).
 - [ ] Background has ≥2 depth planes (a `fillBands`/`fillDither` far band plus dark silhouettes), both at or below the ambient band, with the play field kept calm; ambient renders on top (§7).
 - [ ] Every platform/brick/panel is a `drawBevel` slab with at most one texture strip; pits/edges fall away via `fillBands` into black; `drawFrame` bezel where the fiction has walls (§7).
