@@ -60,6 +60,8 @@ const COLOR_TEXT = PAL[7];       // white
 
 Why indices, not hex: a single indexed palette keeps every sprite, particle, and text color harmonious, and it makes palette-swap easter eggs (`swapPalette`, `PALETTES` — owned by **adding-easter-egg**) work for free. PICO8 roles (documented in `palette.ts`): background 0/1/2/5, scenery 3/4/6/13/15, actor 7/8/9/10/11/12/14. Roles guide selection; the contrast floor below decides legality.
 
+**Choosing between them is an art decision, not a mood pick.** For a game with **several target/brick rows, or more than two actor roles**, prefer a **multi-hue** palette — `PICO8`, `NEON`, `SUNSET`. The single-ramp palettes (`OCEAN`, `GAMEBOY`, `DUSK`) are one hue at eight values, so every row and every role comes out the same color at a different brightness — the same failure as the original monochrome pass, which cleared every contrast ratio and still looked worse. If a single-ramp palette is genuinely right for the fiction, then rows must differ by **value AND edge treatment** (bevel tones, lip, dither) — not value alone — and the player (or ball) must take the ramp's **brightest** tone so it is never confused with scenery.
+
 An ad-hoc `'#ff00ff'` in game code is a visual bug: fix it by finding the nearest palette index.
 
 ## 1b. Contrast floor + red-green safety — the floor is the gate
@@ -102,7 +104,7 @@ Sprites are ASCII-art rows colored from the palette, readable at a glance — a 
 
 These floors were raised after the art-direction pass: at 6–10 px an actor is a blob that no amount of shading rescues, and a 240×160 field with three 8-px actors reads as a test harness. (The older fixtures under `verification/` — cave-hopper's 8×12 runner, brick-bounce's 6-px pearl — predate this floor and stay frozen as instruments; do not copy their sizes.)
 
-Two levers, both legitimate: a bigger ASCII sprite map, or `drawSprite`'s `px` cell-size parameter (a 6-row sprite at `px: 2` renders 12 px — the reference game renders everything at `PX = 2`).
+Two levers, both legitimate: a bigger ASCII sprite map, or `drawSprite`'s `px` cell-size parameter (a 6-row sprite at `px: 2` renders 12 px — but the reference authors every gameplay sprite at `PX = 1` at full rendered size: a 16×12 ship, an 8×8 gem, a 10×10 mine).
 
 **Hitboxes must follow the visuals:** every entity's `{w, h}` — and everything derived from it (collision, clamps, bounce margins, spawn offsets, burst anchors) — within ~1 logical px of the **rendered** size (`px × cell count`). Scaling only the sprite gives a big-looking ship with a tiny hitbox: visibly-touching hazards don't kill, visibly-touched pickups don't collect.
 
@@ -142,7 +144,7 @@ Rules: `.` and space are transparent (as is any char missing from the map); dist
 - **Author at `px = 1`, at the sprite's full rendered size.** A 10×8-px ship is a **10×8-cell** ASCII map drawn at `px: 1` — not a 5×4 map at `px: 2`. Cells are your resolution: at `px: 2` you cannot draw a keyline, a shade or an eye, only 2×2 chunks. The size floors and the hitbox rule from §3 are unchanged (rendered size = `px × cells`; here `px` is 1, so the map size *is* the hitbox size). `px >= 2` stays legitimate for **title-screen props** (§7) and for coarse background dressing, not for gameplay actors.
 - **2–3 palette tones per sprite:** a body tone, a shade for the lower/away side, and (optionally) a highlight where the light hits. Same palette, same indices as everything else (§1) — three chars in the `SpriteMap`, no extra cost.
 - **Plus a dark keyline.** Either author the outline **into the rows** (an `O` char mapped to the darkest palette index — cave-hopper does this, and the sprite's `w`/`h` stay exactly as written), or pass `makeSprite(rows, map, { outline: PAL[0] })`, which bakes an 8-neighbour keyline and **grows the sprite by one cell on every side** — a hitbox derived from it must use the inner size. Authoring it in is preferred precisely because the footprint stays honest.
-  - **A keyline authored into the rows scales with `px`.** At `px: 4` that 1-cell outline is a 4-px black band and the sprite reads as a striped blob, not a character. Above `px: 2`, draw a **dedicated larger sprite** whose keyline is still one cell — never blow up a gameplay sprite to poster size (§7's hero prop is the place this bites).
+  - **A keyline authored into the rows scales with `px`.** At `px: 4` that 1-cell outline becomes a 4-px band and the sprite reads as a striped blob, not a character. The condition is a contrast one: **a row-authored keyline may be scaled past `px: 2` only when the keyline tone reads ≤ 2:1 against the ground behind it** — the reference ship's `PICO8[1]` keyline on black is 1.52:1, so its `px: 4` title prop still reads as one silhouette. Otherwise (a keyline that clears the ground, as any dark line on a lit surface does) author a **dedicated poster sprite** whose keyline is one cell at that size — never blow up a gameplay sprite to poster size (§7's hero prop is the place this bites).
   - **A critical entity that overlaps a textured surface carries a 1-px keyline that clears 3:1 against BOTH the entity and the surface.** A keyline in the same tone as the surface's own lip or texture is not separation — it is camouflage; compute both ratios with `contrast()`.
 - **Silhouette first, still.** All of the above is on top of §1b's role-hue contract: the shape must read in one flat color before any tone is added. Tones make it look built; they never rescue a mushy outline.
 - **Anything alive gets a 2-frame animation**, picked from the game clock with `frameIndex(clock, fps, count)`: an engine flame flicker, a coin spin (wide→narrow disc), a walk cycle, a flag flutter, an idle bob. Two frames is enough — 3–8 fps. Build the frames once at module scope (§10 of improving-game-quality); `frameIndex` is the only per-frame cost.
@@ -248,12 +250,14 @@ Call `particles.update(dt)` in the update tick and `particles.render(pc.ctx)` in
 
 ## 7. Art direction — backgrounds, surfaces, title
 
-The single loudest "this is a demo" tell is not the sprites: it is a **flat clear color behind a flat rectangle under a text-only title**. Every game gets a background with depth, surfaces with a light source, and a drawn title. All four helpers below are cheap and setup-free (`fillBands`, `fillDither`, `drawBevel`, `drawFrame`, `drawLogo` — all from `'../engine'`). Worked examples: cave-hopper (cave depth, rock slabs, pit) and brick-bounce (underwater ramp, light shafts, arena bezel, beveled shells).
+The single loudest "this is a demo" tell is not the sprites: it is a **flat clear color behind a flat rectangle under a text-only title**. Every game gets a background with depth, surfaces with a light source, and a drawn title. All four helpers below are cheap and setup-free (`fillBands`, `fillDither`, `drawBevel`, `drawFrame`, `drawLogo` — all from `'../engine'`). Worked examples: cave-hopper (cave depth, rock slabs, pit) and brick-bounce (underwater ramp, arena bezel, beveled shells).
 
 ### Backgrounds — at least two depth planes
 
 1. **A far band or horizon** — `fillBands(ctx, 0, 0, W, h, [c1, c2, c3])` for sky/water/cave depth, or a short `fillDither` ladder between the palette's **two darkest** tones for a smooth seam (`fillDither(ctx, x, y, w, h, colorA, colorB, 'sparse' | 'checker')` — two palette colors mixed into a third without leaving the palette).
 2. **Silhouettes that frame the arena** — stalactites, coral, a planet, a city line, side walls closing in — drawn in the **darkest** tones.
+
+**A far band must never cross the middle of the play field.** Bands live as a *horizon*: in the top or bottom quarter of the frame, at most 1.3:1 against the clear color, with a dithered (soft) top edge feathering it into the ground. A flat block of a second tone across mid-field is not depth — it reads as a wall the player expects to collide with, and it steals the scene from the actors crossing it.
 
 Both planes must sit **at or below the ambient band vs the clear color** (§1b): scenery may never compete with an actor. The engine ambient layer renders *on top* of them (`particles.render` after the backdrop, before the world). Keep the play field itself **calm** — **keep dither to seams and edges, and never tile the play field under fast actors**: the pattern beats against their motion and the whole arena reads as texture rather than as a place. Two or three dither seams low in the frame read as depth; a tall dither ladder — or a full-field crosshatch — across the play area reads as stripes. A flat palette field with one seam is the default; texture is the exception you justify.
 
@@ -274,18 +278,18 @@ function drawBackdrop(): void {
 
 ### Surfaces — every slab is beveled, edges read as depth
 
-- Every platform, brick, paddle and panel is `drawBevel(ctx, x, y, w, h, fill, light, dark)` — a 1-px lit top/left and dark bottom/right edge turns a rectangle into an object. Take `fill`/`light`/`dark` from three neighbouring palette indices.
+- Every platform, brick, paddle and panel is `drawBevel(ctx, x, y, w, h, fill, light, dark)` — a 1-px lit top/left and dark bottom/right edge turns a rectangle into an object. Take `fill`/`light`/`dark` from neighbouring palette indices — and check the lit edge and lip against the **hazard** tones before settling: cave-hopper's slab is `PAL[2] / PAL[2] / PAL[1]` with a `PAL[2]/PAL[5]` dithered lip precisely because a lip in `PAL[3]`/`PAL[4]` wore the spikes' own tones and the hazards read as terrain.
 - **At most one texture strip** per surface (a `fillDither` face, or a lit top lip) — more and the surface competes with the actors standing on it.
-- **Pits and edges are depth, not seams:** `fillBands(ctx, pit.x, y, pit.w, h, [PAL[1], PAL[0], '#000000'])` falls away into black. (The literal black here is the one legitimate non-palette color — it is the absence of surface, not an art color.)
+- **Pits and edges are depth, not seams:** `fillBands(ctx, pit.x, y, pit.w, h, [PAL[1], PAL[0], PAL[0]])` falls away into the palette's darkest tone. Stay in the palette here too: on SUNSET, `PAL[0]` is a deep plum, deliberately *not* black, and a `'#000000'` band under it reads as a hole punched in the art rather than as depth.
 - **An arena frame where the fiction has walls:** `drawFrame(ctx, x, y, w, h, color, thickness)`, optionally twice (a thick dark bezel plus a 1-px light keyline) so the walls the actor bounces off are visibly the walls.
 
 ```ts
 import { drawBevel, fillDither, drawFrame } from '../engine';
 
 function drawSlab(x: number, y: number, w: number, h: number): void {
-  drawBevel(pc.ctx, x, y, w, h, PAL[2], PAL[3], PAL[1]);            // fill / light / dark
+  drawBevel(pc.ctx, x, y, w, h, PAL[2], PAL[2], PAL[1]);            // fill / light / dark
   if (h > 3) fillDither(pc.ctx, x + 1, y + 3, w - 2, h - 4, PAL[2], PAL[1], 'sparse');
-  fillDither(pc.ctx, x + 1, y + 1, w - 2, 1, PAL[3], PAL[4], 'sparse'); // lit top lip
+  fillDither(pc.ctx, x + 1, y + 1, w - 2, 1, PAL[2], PAL[5], 'sparse'); // lit top lip
 }
 drawFrame(pc.ctx, 4, 12, W - 8, 164, PAL[0], 4);   // bezel
 drawFrame(pc.ctx, 7, 15, W - 14, 158, PAL[5], 1);  // keyline on the bounce walls
@@ -297,7 +301,7 @@ A title made of `drawTextCentered` at scale 3 is a placeholder. The title screen
 
 1. **`drawLogo(ctx, text, W, y, { color, shade, shadow, scale })`** — a two-tone lit-from-above wordmark with an offset shadow, in one call (`color` lights the top 3 font rows, `shade` is the body, `shadow` the offset). Take all three from the palette.
 2. **A one-line hook** at scale 1 — what the player does, in six words ("HOP THE SPIKES  REACH THE FLAG").
-3. **The hero as a prop** — the player sprite drawn **larger than in play** on a beveled ledge, with a pickup beside it. This is the one place `px > 1` is right: it is a poster, not a hitbox. But an outline authored into the rows scales with `px` (§3b), so `px: 2` is the ceiling for a gameplay sprite — go bigger with a **dedicated poster sprite** whose keyline is one cell at that size. Props show the still frame (`frames[0]`) or a slow `frameIndex`; they never animate at gameplay speed.
+3. **The hero as a prop** — the player sprite drawn **larger than in play** on a beveled ledge, with a pickup beside it. This is the one place `px > 1` is right: it is a poster, not a hitbox. But an outline authored into the rows scales with `px` (§3b): **a row-authored keyline may be scaled past `px: 2` only when the keyline tone reads ≤ 2:1 against the ground behind it** — the reference ship's `PICO8[1]` keyline on black is 1.52:1, which is why its `px: 4` prop holds together. When the keyline clears the ground by more than that, go bigger with a **dedicated poster sprite** whose keyline is one cell at that size. Props show the still frame (`frames[0]`) or a slow `frameIndex`; they never animate at gameplay speed.
 4. **A pulsing prompt + control hints** — `blink`/`pulse` per improving-game-quality §1b, then `controlHints(input)`. **Hint text at scale 1 over a textured backdrop passes `{ shadow: true }`** — `drawText`/`drawTextCentered` back small text with nothing by default, and a 3x5 glyph over a dither field loses its stems.
 
 Terminal screens (GAME_OVER / WIN) keep the world visible: `dimScene(pc, 0.6)` **then a HOLLOW `drawFrame` bezel** around the headline block — the dim IS the backing, so an opaque `drawBevel`/`drawPanel` plate on top of it is the "dim **or** plate, never both" violation, and it throws away the world context the dim was there to keep. Use an opaque plaque only where there is no dim.
@@ -321,15 +325,15 @@ controlHints(input).forEach((h, i) =>
 ## Visual pass checklist (look only)
 
 - [ ] Style card comment atop `main.ts`, recording the art decisions (sprite tones, background planes, surface treatment, logo colors) as well as palette/ambient/juice; differs from the reference game, both fixtures, AND every other game in `workspace/` per the divergence rule (§0).
-- [ ] One named palette (`PICO8` / `GAMEBOY` / `DUSK` / `NEON` / `SUNSET` / `OCEAN`); zero ad-hoc hex strings in `game/`.
+- [ ] One named palette (`PICO8` / `GAMEBOY` / `DUSK` / `NEON` / `SUNSET` / `OCEAN`); multi-hue (PICO8/NEON/SUNSET) whenever there are several target rows or >2 actor roles, and a single-ramp choice separates rows by value AND edge treatment with the player on the brightest tone (§1); zero ad-hoc hex strings in `game/`.
 - [ ] Every gameplay-critical entity color clears `contrast() >= 3.0` vs the clear color and any scenery it overlaps; ambient color in the 1.8–2.5:1 band; entities distinguishable in grayscale (§1b).
 - [ ] Player, pickup, hazard use three different hue families AND three different silhouettes (never the reference/fixture shapes reused across roles); pickup is the palette's brightest warm accent; hazard is red-family or spiky (§1b role-hue contract).
 - [ ] Logical resolution low (reference: 240×160, scale 3); all drawing in logical units.
 - [ ] Sprites are `makeSprite` ASCII art, distinct silhouettes + colors per entity type; size floors met (player ≥ H/12, other critical entities ≥ H/20) and hitboxes within ~1 px of rendered size (§3); silhouettes checked at their actual rendered px size, not preview zoom.
 - [ ] Sprites authored at `px = 1` at full rendered size, 2–3 palette tones each, with a dark keyline (authored into the rows, or `makeSprite {outline}` with the hitbox on the inner size) that clears 3:1 against both the entity and any textured surface it overlaps; every living thing has a 2-frame `frameIndex` animation and facing via `flipSprite` mirrored at setup (§3b).
-- [ ] Background has ≥2 depth planes (a `fillBands`/`fillDither` far band plus dark silhouettes), both at or below the ambient band; dither is confined to seams and edges and the play field under fast actors is a calm flat field; ambient renders on top (§7).
-- [ ] Every platform/brick/panel is a `drawBevel` slab with at most one texture strip; pits/edges fall away via `fillBands` into black; `drawFrame` bezel where the fiction has walls (§7).
-- [ ] Title is `drawLogo` + a one-line hook + the hero prop drawn large (`px` ≤ 2 for a row-outlined sprite, else a dedicated poster sprite) + a pulsing prompt + control hints, with scale-1 hint text over texture passing `{ shadow: true }`; terminal screens use `dimScene` plus a HOLLOW `drawFrame` bezel (dim OR plate, never both) (§7).
+- [ ] Background has ≥2 depth planes (a `fillBands`/`fillDither` far band plus dark silhouettes), both at or below the ambient band; no far band crosses mid-field — bands sit in the top or bottom quarter, ≤1.3:1 vs the clear color, with a dithered top edge; dither is confined to seams and edges and the play field under fast actors is a calm flat field; ambient renders on top (§7).
+- [ ] Every platform/brick/panel is a `drawBevel` slab with at most one texture strip; pits/edges fall away via `fillBands` into the palette's darkest tone (stay in the palette — `PAL[0]`, not `'#000000'`); `drawFrame` bezel where the fiction has walls (§7).
+- [ ] Title is `drawLogo` + a one-line hook + the hero prop drawn large (a row-authored keyline scales past `px: 2` only when that keyline tone reads ≤ 2:1 against the ground behind it; else a dedicated poster sprite) + a pulsing prompt + control hints, with scale-1 hint text over texture passing `{ shadow: true }`; terminal screens use `dimScene` plus a HOLLOW `drawFrame` bezel (dim OR plate, never both) (§7).
 - [ ] All text via `drawText` / `drawTextCentered`; hierarchy from `scale` + palette index; headline text keeps the default outline at scale >= 2 (rendered as a keyline from scale >= 3, as a drop shadow at scale 2), HUD text the default shadow, unless already on a plate/dimmed background (§4).
 - [ ] `crt.render` is the last call of every frame, after `juice.postRender`.
 - [ ] Ambient preset fits the fiction; bursts use the game's own palette colors, never the engine default.

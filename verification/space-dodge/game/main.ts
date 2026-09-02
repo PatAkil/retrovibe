@@ -12,8 +12,8 @@
 //
 // STYLE CARD (this combination is RESERVED for the reference game — every
 // generated game must diverge, see ensuring-arcade-visuals):
-//   palette PICO8 — bg 0 (black), ship 16x12 (12 hull / 13 shade / 6 highlight
-//   / 7 cockpit), pickup 8x8 gem (10), hazard 10x10 barbed mine (8/2/14) ·
+//   palette PICO8 — bg 0 (black), ship 16x12 (12 hull / 1 shade+keyline /
+//   6 highlight / 7 cockpit), pickup 8x8 gem (10), hazard 10x10 barbed mine (8/2/14) ·
 //   ambient 'stars' · far layer: soft horizon haze + a dark corner planet
 //   · juice: red death flash, hard freeze-frame · attract-screen title (logo +
 //   hero ship at px 4). ART: PX=1 arcade-scale sprites (hitbox == sprite),
@@ -124,7 +124,7 @@ const hazardFrames = [
     '.###kk###.', '.########.', '..######..', '.##....##.', '##......##'], MINE_MAP),
 ];
 // FAR LAYER: a dark planet, terminator dithered by hand. One tone, PICO8[1]
-// (1.57:1 vs black — under the ambient band): depth that can never be mistaken
+// (1.52:1 vs black — under the ambient band): depth that can never be mistaken
 // for something the player can touch.
 const planetSprite = makeSprite(
   ['....pppp....', '..pppppppp..', '.ppppppppp..', '.pppppppp.p.',
@@ -338,11 +338,13 @@ function render(): void {
       });
       // Control hints rendered FROM the action declarations — never hand-written.
       const hints = controlHints(input);
+      // Scale-1 hints sit over the haze band: shadow: true keeps their stems.
       hints.forEach((hint, i) => {
-        drawTextCentered(pc.ctx, hint, W, 116 + i * 9, { color: PICO8[6] });
+        drawTextCentered(pc.ctx, hint, W, 116 + i * 9, { color: PICO8[6], shadow: true });
       });
       drawTextCentered(pc.ctx, 'ARROWS/WASD MOVE', W, 116 + hints.length * 9, {
-        color: PICO8[5],
+        color: PICO8[6],
+        shadow: true,
       });
       break;
     }

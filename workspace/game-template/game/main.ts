@@ -14,7 +14,7 @@
 //
 // STYLE CARD (this whole COMBINATION is RESERVED for the reference game — every
 // generated game must diverge, see ensuring-arcade-visuals): palette PICO8 —
-// bg 0, ship 16x12 (12 hull / 13 shade / 6 highlight / 7 cockpit / keyline 1),
+// bg 0, ship 16x12 (12 hull / 1 shade+keyline / 6 highlight / 7 cockpit),
 // pickup 8x8 gem 10/9/7 (travelling glint), hazard 10x10 barbed mine 8/2/14 ·
 // ambient 'stars' over a FAR LAYER of soft horizon haze + a PICO8[1] planet ·
 // silhouettes arrow-ship / cut gem / barbed mine · juice: red death flash,
@@ -89,7 +89,7 @@ const MINE_B = ['##......##', '.##....##.', '..h#####..', '.#h######.', '.###kk#
   '.###kk###.', '.########.', '..######..', '.##....##.', '##......##'];
 const hazardFrames = [makeSprite(MINE_A, MINE_MAP), makeSprite(MINE_B, MINE_MAP)];
 const hazardHotFrames = [makeSprite(MINE_A, MINE_HOT), makeSprite(MINE_B, MINE_HOT)];
-// FAR LAYER: a planet, terminator dithered by hand. ONE tone, PICO8[1] (1.57:1
+// FAR LAYER: a planet, terminator dithered by hand. ONE tone, PICO8[1] (1.52:1
 // vs black) — BELOW the ambient band, so it is depth you can never touch.
 const planetSprite = makeSprite(['....pppp....', '..pppppppp..', '.ppppppppp..',
   '.pppppppp.p.', 'ppppppppp.p.', 'pppppppp.p..', 'ppppppppp.p.', 'pppppppp.p..',
@@ -323,8 +323,10 @@ function renderTitle(): void {
   });
   // Control hints rendered FROM the action declarations — never hand-written.
   const hints = controlHints(input);
-  hints.forEach((hint, i) => drawTextCentered(pc.ctx, hint, W, 116 + i * 9, { color: PICO8[6] }));
-  drawTextCentered(pc.ctx, 'ARROWS/WASD MOVE', W, 116 + hints.length * 9, { color: PICO8[5] });
+  // Scale-1 hints sit over the haze band: shadow: true keeps their stems.
+  const hintOpts = { color: PICO8[6], shadow: true };
+  hints.forEach((h, i) => drawTextCentered(pc.ctx, h, W, 116 + i * 9, hintOpts));
+  drawTextCentered(pc.ctx, 'ARROWS/WASD MOVE', W, 116 + hints.length * 9, hintOpts);
 }
 
 function render(): void {
