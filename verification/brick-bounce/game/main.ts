@@ -7,11 +7,12 @@
 // ambient retuned into the band for a non-black ground, frequent minor
 // impacts (bricks) beside a major one (lost ball), and a WIN on clear.
 //
-// STYLE CARD: palette PICO8 — UNDERWATER. Ground is a depth ramp: navy 1 in
-// the lit shallows, dithered (1/0) through a mid seam, black 0 in the deep,
-// plus a dithered 0/2 seabed strip with coral silhouettes (2) below the paddle
-// line, a black arena bezel (0) with a grey 5 keyline on the walls the ball
-// bounces off, and three sparse light shafts (5 over 1) in the shallows.
+// STYLE CARD: palette PICO8 — UNDERWATER. The play field is a CALM flat navy 1
+// field (no texture under the fast ball); depth comes from one dithered 1/0
+// seam under the shell wall, a dithered 0/1 seabed strip with coral
+// silhouettes (2) below the paddle line, a black arena bezel (0) with a grey 5
+// keyline on the walls the ball bounces off, and two sparse light shafts
+// (5 over 1) hanging below the HUD strip and tapering out before mid-field.
 // Bricks are BEVELED SHELLS: fill 8/9/10/11 by row (red, orange, yellow,
 // green), each with its own lighter/darker PICO8 pair for the 1-px light and
 // dark edges (14/2, 15/4, 7/9, 7/3). Paddle 12 (blue) beveled with a white
@@ -24,10 +25,12 @@
 // space-dodge (same palette) on ground, ambient, silhouettes and roles.
 // Contrast note: bricks are TARGETS consumed on contact, not static surfaces
 // the ball rests on, so the 4.5:1 actor-vs-ground floor applies to ball/paddle
-// vs the ground (white/blue vs navy AND vs black, both >= 5:1) and bricks vs
-// the ground (all >= 3:1), not ball vs brick. Every added scenery tone (0, 2,
-// 5, and the dithered mixes) sits at or below the ambient band against its own
-// ground, so nothing new competes with an actor.
+// vs the ground (white 12.5:1, blue 5.6:1 vs navy) and bricks vs the ground
+// (red 3.5:1, orange 6.9:1, yellow 11.4:1, green 8.0:1), not ball vs brick.
+// With the deep black band gone the ONE ground an actor crosses is navy 1, so
+// the ambient 5 sits at 1.95:1 against it — inside the 1.8-2.5 band everywhere
+// instead of only in the shallows. Every scenery tone (0, 2, 5 and the two
+// remaining dithered mixes) stays at or below that band.
 
 import {
   createPixelCanvas,
@@ -44,7 +47,6 @@ import {
   drawSprite,
   drawTextCentered,
   drawLogo,
-  fillBands,
   fillDither,
   drawBevel,
   drawFrame,
@@ -341,18 +343,18 @@ function update(dt: number): void {
 /** Depth ramp, light shafts, arena bezel and seabed — everything static. */
 function drawBackdrop(): void {
   const ctx = pc.ctx;
-  // Lit shallows -> deep water, in three bands with dithered seams so the big
-  // navy field is never one uniform surface for the scanlines to band.
-  fillBands(ctx, 0, 0, W, 126, [PAL[1], PAL[1], PAL[0]]);
-  fillDither(ctx, 0, 64, W, 12, PAL[1], PAL[0], 'sparse');
-  fillDither(ctx, 0, 76, W, 14, PAL[1], PAL[0], 'checker');
-  fillDither(ctx, 0, 90, W, 16, PAL[0], PAL[1], 'sparse');
-  fillDither(ctx, 0, 106, W, SEABED_Y - 106, PAL[0], PAL[1], 'sparse');
+  // The play field is a FLAT navy field. Tiling it with dither crosshatched the
+  // whole arena under a 6-px ball travelling 120 px/s: the pattern beat against
+  // the ball and the frame read as texture, not as water. Dither survives only
+  // where it does depth work — one seam under the shell wall, and the seabed.
+  ctx.fillStyle = PAL[1];
+  ctx.fillRect(0, 0, W, SEABED_Y);
+  fillDither(ctx, 0, 62, W, 6, PAL[1], PAL[0], 'sparse');
 
-  // Light shafts: sparse grey over navy, only in the shallows where they make
-  // sense, and thinning out before the mid seam — atmosphere, never a stripe.
+  // Light shafts: sparse grey over navy, starting BELOW the HUD strip (which
+  // they used to dot with grey) and tapering out well before mid-field.
   for (const sx of [40, 168]) {
-    for (let s = 0; s < 4; s++) fillDither(ctx, sx + s * 2, s * 12, 7 - s, 12, PAL[1], PAL[5], 'sparse');
+    for (let s = 0; s < 4; s++) fillDither(ctx, sx + s * 2, 20 + s * 10, 7 - s, 10, PAL[1], PAL[5], 'sparse');
   }
 
   // Seabed: out of play, below the paddle line. Near-black sand so the strip
@@ -401,8 +403,12 @@ function drawPreview(): void {
   drawPaddle(W / 2 - paddle.w / 2, 100);
 }
 
+/**
+ * Dim OR plate, never both: dimScene already backs the headline, so the card is
+ * a HOLLOW bezel that frames the text and leaves the world readable inside it.
+ */
 function drawCard(top: number, height: number): void {
-  drawBevel(pc.ctx, 52, top, W - 104, height, PAL[0], PAL[5], PAL[0]);
+  drawFrame(pc.ctx, 52, top, W - 104, height, PAL[5], 1);
 }
 
 function render(): void {
@@ -414,15 +420,15 @@ function render(): void {
   switch (scenes.current) {
     case 'TITLE': {
       drawLogo(pc.ctx, 'BRICK BOUNCE', W, 26, { color: PAL[10], shade: PAL[9], shadow: PAL[1] });
-      drawTextCentered(pc.ctx, 'ONE PADDLE. THIRTY-TWO SHELLS.', W, 48, { color: PAL[6] });
+      drawTextCentered(pc.ctx, 'ONE PADDLE. THIRTY-TWO SHELLS.', W, 48, { color: PAL[6], shadow: true });
       drawPreview();
       pc.ctx.save();
       pc.ctx.globalAlpha = 0.45 + 0.55 * pulse(clock);
-      drawTextCentered(pc.ctx, `${BUTTON_KEY.A.hint} TO LAUNCH`, W, 114, { color: PAL[10] });
+      drawTextCentered(pc.ctx, `${BUTTON_KEY.A.hint} TO LAUNCH`, W, 114, { color: PAL[10], shadow: true });
       pc.ctx.restore();
       const hints = controlHints(input);
-      drawTextCentered(pc.ctx, hints[hints.length - 1], W, 128, { color: PAL[13] });
-      drawTextCentered(pc.ctx, 'ARROWS/WASD MOVE', W, 138, { color: PAL[13] });
+      drawTextCentered(pc.ctx, hints[hints.length - 1], W, 128, { color: PAL[13], shadow: true });
+      drawTextCentered(pc.ctx, 'ARROWS/WASD MOVE', W, 138, { color: PAL[13], shadow: true });
       break;
     }
     case 'PLAYING':
@@ -440,8 +446,8 @@ function render(): void {
       dimScene(pc, 0.6);
       drawCard(64, 60);
       drawTextCentered(pc.ctx, 'GAME OVER', W, 76, { color: PAL[8], scale: 2 });
-      drawTextCentered(pc.ctx, `SCORE ${score}`, W, 100, { color: PAL[7] });
-      drawTextCentered(pc.ctx, `${BUTTON_KEY.A.hint} RESTART`, W, 114, { color: PAL[6] });
+      drawTextCentered(pc.ctx, `SCORE ${score}`, W, 100, { color: PAL[7], shadow: true });
+      drawTextCentered(pc.ctx, `${BUTTON_KEY.A.hint} RESTART`, W, 114, { color: PAL[6], shadow: true });
       break;
     }
     case 'WIN': {
@@ -449,8 +455,8 @@ function render(): void {
       dimScene(pc, 0.6);
       drawCard(64, 60);
       drawTextCentered(pc.ctx, 'YOU WIN', W, 76, { color: PAL[11], scale: 2 });
-      drawTextCentered(pc.ctx, `SCORE ${score}`, W, 100, { color: PAL[7] });
-      drawTextCentered(pc.ctx, `${BUTTON_KEY.A.hint} RESTART`, W, 114, { color: PAL[6] });
+      drawTextCentered(pc.ctx, `SCORE ${score}`, W, 100, { color: PAL[7], shadow: true });
+      drawTextCentered(pc.ctx, `${BUTTON_KEY.A.hint} RESTART`, W, 114, { color: PAL[6], shadow: true });
       break;
     }
   }
