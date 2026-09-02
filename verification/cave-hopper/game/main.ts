@@ -10,9 +10,12 @@
 // face and a lit top lip; the pit is a 1→0→black gradient, not a seam.
 // Actors carry authored dark outlines and 2-frame animation: player cream 7
 // with a 5 fold and a 3 visor (walk/idle + facing flip), coin gold 6 with a 7
-// glint (wide/narrow spin), spikes a 4 body under a 6 tip with 3 only as the
-// 1-px base shadow (4.72:1 vs the floor, 3.17:1 vs the slab), flag a 5 pennant
-// on a 7 pole (flutter) · ambient 'embers' · juice: orange death flash, hard
+// glint (wide/narrow spin), spikes a 4 body under a CREAM 7 tip with 3 only as
+// the 1-px base shadow (body 4.72:1 vs the floor, 3.17:1 vs the slab; tip 7 is
+// 13.4:1 / 8.98:1 — hazard and pickup differ in hue AND tip value), flag a 5
+// pennant
+// on a 7 pole (flutter) · ambient 'embers' at ambientCount 28 (the default 48
+// read as dirt on the cave wall) · juice: orange death flash, hard
 // freeze-frame, tiny landing puff; terminal screens dimScene the world behind a
 // HOLLOW drawFrame bezel (dim OR plate, never both). TITLE: drawLogo + the
 // player as a prop at px 2 on a ledge — the authored keyline scales with px, so
@@ -70,7 +73,7 @@ const input = createInput(
   { onFirstKey: () => audio.unlock() },
 );
 const scenes = createScenes();
-const particles = createParticles({ width: W, height: H, ambient: 'embers' });
+const particles = createParticles({ width: W, height: H, ambient: 'embers', ambientCount: 28 });
 const juice = createJuice();
 const crt = createCrt();
 const runtime = createRuntime();
@@ -114,11 +117,14 @@ const coinFrames = [
   ),
 ];
 
-// Spikes: 8x6 cells — a bright 6 tip over a 4 body, with 3 used ONLY as the
+// Spikes: 8x6 cells — a CREAM 7 tip over a 4 body, with 3 used ONLY as the
 // 1-px base shadow. The old form put 3 across the lower half, the same tone as
-// the slab's light lip, so the hazard read as a bump in the terrain.
-// contrast(): body 4 vs cave floor 1 = 4.72:1, vs slab 2 = 3.17:1; tip 6 is
-// 10.4:1 / 6.98:1. Authored black sides keep the silhouette off the rock.
+// the slab's light lip, so the hazard read as a bump in the terrain; and its
+// tip was gold 6, the coin's own body colour, so hazard and pickup shared a
+// hue. Cream 7 separates them in BOTH hue and tip value (the coin's 7 is a
+// 2-cell glint inside a gold disc; the spike's is the whole point).
+// contrast(): body 4 vs cave floor 1 = 4.72:1, vs slab 2 = 3.17:1; tip 7 is
+// 13.4:1 / 8.98:1. Authored black sides keep the silhouette off the rock.
 const spikeSprite = makeSprite(
   [
     '...LL...',
@@ -128,7 +134,7 @@ const spikeSprite = makeSprite(
     '.WWWWWW.',
     'ORRRRRRO',
   ],
-  { L: PAL[6], W: PAL[4], R: PAL[3], O: PAL[0] },
+  { L: PAL[7], W: PAL[4], R: PAL[3], O: PAL[0] },
 );
 
 // Flag: 8x12 cells — cream pole, peach pennant, 2-frame flutter.
