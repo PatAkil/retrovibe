@@ -1,4 +1,5 @@
-// draw.ts — pixel-scaled rendering, ASCII-art sprite maps, and retro bitmap text.
+// draw.ts — pixel-scaled rendering, ASCII-art sprite maps, and retro bitmap text
+// (a 3x5 font with 5-wide M/W).
 //
 // createPixelCanvas() owns the <canvas>: it sizes the backing store to
 // logical*scale, disables smoothing, and bakes a scale transform so ALL drawing
@@ -186,12 +187,26 @@ export function drawSprite(
   }
 }
 
-// --- Bitmap text (3x5 font) -------------------------------------------------
+// --- Bitmap text (3x5 font, with 5-wide M/W) --------------------------------
+//
+// The font is MOSTLY fixed-width: every glyph is 3 font-px wide except M and W,
+// which are 5. In a 3-wide cell M and W cannot be drawn unambiguously — the
+// diagonals collapse and readers see 'YOU YIN', 'ARROVS', 'GAHE OVER'. So the
+// text routines advance PER GLYPH (glyph width + spacing) instead of by a fixed
+// 3, which makes the font proportional in general; only strings containing M or
+// W measure any differently than before.
 
 const GLYPH_W = 3;
 const GLYPH_H = 5;
 
-// Each glyph is 5 rows of 3 chars; '#' = on. Missing chars render blank.
+/** Width of one glyph in font px (its row length); GLYPH_W for unknown chars. */
+function glyphWidth(glyph: string[] | undefined): number {
+  return glyph ? glyph[0].length : GLYPH_W;
+}
+
+// Each glyph is 5 rows of '#' = on / '.' = off. Rows within a glyph must all be
+// the same length; that length is the glyph's width. Missing chars render blank
+// (advancing GLYPH_W).
 const FONT: Record<string, string[]> = {
   A: ['###', '#.#', '###', '#.#', '#.#'],
   B: ['##.', '#.#', '##.', '#.#', '##.'],
@@ -205,7 +220,7 @@ const FONT: Record<string, string[]> = {
   J: ['..#', '..#', '..#', '#.#', '###'],
   K: ['#.#', '#.#', '##.', '#.#', '#.#'],
   L: ['#..', '#..', '#..', '#..', '###'],
-  M: ['#.#', '###', '###', '#.#', '#.#'],
+  M: ['#...#', '##.##', '#.#.#', '#...#', '#...#'], // 5 wide: a 3-wide M is indistinguishable from H/N
   N: ['###', '#.#', '#.#', '#.#', '#.#'], // flat-top N: distinct from M (filled middle rows), H (bar) and the old zigzag that read as K/X
   O: ['###', '#.#', '#.#', '#.#', '###'],
   P: ['###', '#.#', '###', '#..', '#..'],
@@ -215,7 +230,7 @@ const FONT: Record<string, string[]> = {
   T: ['###', '.#.', '.#.', '.#.', '.#.'],
   U: ['#.#', '#.#', '#.#', '#.#', '###'],
   V: ['#.#', '#.#', '#.#', '#.#', '.#.'],
-  W: ['#.#', '#.#', '###', '###', '.#.'], // bottom-heavy pointed W: the old form ('#.#','#.#','###','###','#.#') was one pixel from H and 'YOU WIN' read as 'YOU HIN'; the point separates it from H, the filled lower rows from V, and the fill sitting LOW (M's sits high) from M
+  W: ['#...#', '#...#', '#.#.#', '##.##', '#...#'], // 5 wide: the inverted M; a 3-wide W read as H or V
   X: ['#.#', '#.#', '.#.', '#.#', '#.#'],
   Y: ['#.#', '#.#', '.#.', '.#.', '.#.'],
   Z: ['###', '..#', '.#.', '#..', '###'],
@@ -306,8 +321,11 @@ export const OUTLINE_COLOR = '#000000';
 
 /** Width in logical px that drawText would occupy for `text`. */
 export function textWidth(text: string, scale = 1, spacing = 1): number {
-  if (text.length === 0) return 0;
-  return text.length * (GLYPH_W + spacing) * scale - spacing * scale;
+  const upper = text.toUpperCase();
+  if (upper.length === 0) return 0;
+  let w = 0;
+  for (const raw of upper) w += (glyphWidth(FONT[raw]) + spacing) * scale;
+  return w - spacing * scale;
 }
 
 /** Draw retro bitmap text at logical (x,y) = top-left. Uppercases input. */
@@ -321,7 +339,6 @@ export function drawText(
   const color = opts.color ?? '#FFF1E8';
   const scale = opts.scale ?? 1;
   const spacing = opts.spacing ?? 1;
-  const advance = (GLYPH_W + spacing) * scale;
   const upper = text.toUpperCase();
 
   // Backing pass: an outline (keyline all round) if asked for, otherwise a
@@ -346,15 +363,16 @@ export function drawText(
       let sc = x + ox;
       for (const raw of upper) {
         const glyph = FONT[raw];
+        const gw = glyphWidth(glyph);
         if (glyph) {
           for (let gy = 0; gy < GLYPH_H; gy++) {
             const row = glyph[gy];
-            for (let gx = 0; gx < GLYPH_W; gx++) {
+            for (let gx = 0; gx < gw; gx++) {
               if (row[gx] === '#') ctx.fillRect(sc + gx * scale, y + oy + gy * scale, scale, scale);
             }
           }
         }
-        sc += advance;
+        sc += (gw + spacing) * scale;
       }
     }
   }
@@ -363,17 +381,18 @@ export function drawText(
   let cursor = x;
   for (const raw of upper) {
     const glyph = FONT[raw];
+    const gw = glyphWidth(glyph);
     if (glyph) {
       for (let gy = 0; gy < GLYPH_H; gy++) {
         const row = glyph[gy];
-        for (let gx = 0; gx < GLYPH_W; gx++) {
+        for (let gx = 0; gx < gw; gx++) {
           if (row[gx] === '#') {
             ctx.fillRect(cursor + gx * scale, y + gy * scale, scale, scale);
           }
         }
       }
     }
-    cursor += advance;
+    cursor += (gw + spacing) * scale;
   }
 }
 

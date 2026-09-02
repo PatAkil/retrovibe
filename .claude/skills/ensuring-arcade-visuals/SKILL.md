@@ -176,9 +176,9 @@ const set = player.facing < 0 ? heroLeft : heroRight;
 drawSprite(pc.ctx, set[frameIndex(clock, 8, 2)], Math.round(player.x), Math.round(player.y), 1);
 ```
 
-## 4. Retro text — the built-in 3×5 bitmap font
+## 4. Retro text — the built-in 3×5 bitmap font (5-wide M/W)
 
-All text goes through `drawText` / `drawTextCentered` (never canvas `fillText` — a system font instantly breaks the retro look). The engine font is 3×5 pixels per glyph and **uppercases input automatically**; it covers A–Z, 0–9, and common punctuation. Write strings in uppercase anyway so what you read in code is what renders.
+All text goes through `drawText` / `drawTextCentered` (never canvas `fillText` — a system font instantly breaks the retro look). The engine font is 3×5 pixels per glyph — except **M and W, which are 5 wide**, because a 3-wide cell cannot draw those two unambiguously (readers see 'YOU YIN', 'ARROVS', 'GAHE OVER'). The font is therefore proportional: `textWidth` and the draw routines advance per glyph, so **always measure with `textWidth`, never `len * 4 * scale`** — a string containing M or W is wider than it used to be. It **uppercases input automatically**; it covers A–Z, 0–9, and common punctuation. Write strings in uppercase anyway so what you read in code is what renders.
 
 ```ts
 import { drawText, drawTextCentered, textWidth, PICO8 } from '../engine';
