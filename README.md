@@ -36,10 +36,11 @@ from git history).
   a plain `cp -r` clone carrying its own copy of `engine/` (11 modules), the
   arcade-shell `index.html`, a reference game, and a headless smoke gate
   (`smoke.mjs`, real Chromium via Playwright).
-- `.claude/skills/` — eleven skills that carry all game-making knowledge and
+- `.claude/skills/` — twelve skills that carry all game-making knowledge and
   all commands. Start at `creating-a-game` (the orchestrator).
 - `CLAUDE.md` — repo conventions (defined once) and the frozen engine API.
 - `harness/` — parent-frame harness proving the `postMessage` host contract.
+- `verification/` — graphics verification: three frozen fixture games, a deterministic frame-capture driver, and the approved baseline frames (see the `verifying-graphics` skill).
 
 What "done" means for any game: typecheck + production build green, **and**
 a headless browser boots it with a live canvas and zero uncaught errors. The

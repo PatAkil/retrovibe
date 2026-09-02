@@ -19,8 +19,11 @@ retrovibe/
 │   │   ├── vite.config.ts    # base:'./', port 5173 strictPort, external cacheDir
 │   │   └── index.html        # arcade shell; game mounts into #screen
 │   └── <game-name>/          # user games — clones of game-template
-├── .claude/skills/           # eleven skills, commands baked in
-└── harness/                  # parent-frame postMessage verification harness
+├── .claude/skills/           # twelve skills, commands baked in
+├── harness/                  # parent-frame postMessage verification harness
+└── verification/             # graphics verification: 3 FROZEN fixture games (clones of the
+                              #   template, engine copies gitignored + refreshed per run),
+                              #   capture.mjs (harness code), baseline/ = the approved look
 ```
 
 ## Conventions (single definition — skills rely on these)
@@ -60,6 +63,14 @@ retrovibe/
   `npm run smoke` green before handing off. A green build alone is never
   "done" — and the user, not Claude, is the playtester. Claude reports
   "builds, boots clean, ready to play at <URL>", never "playtested".
+- **Graphics changes are verified by looking, not only by building.** Any
+  change under `workspace/game-template/` (engine, reference game, shell) or
+  to a skill that directs visual choices is not done until the
+  **verifying-graphics** loop has run: fixtures captured, `compare.png` and
+  the full-size frames viewed, per-criterion verdicts reported, and the user
+  has approved the new baseline. Ratios and byte-identity are gates, not
+  quality; a monochrome palette passes every ratio and still looks worse.
+  Not triggered by creating or iterating a user game.
 
 ## Engine API (frozen — authoritative surface is `engine/index.ts`)
 
@@ -105,4 +116,4 @@ Two repo agents in `.claude/agents/` make the tiering mechanical:
 
 The routing list lives **once**, in the orchestrator:
 [`.claude/skills/creating-a-game/SKILL.md`](.claude/skills/creating-a-game/SKILL.md).
-Start there for any game request; it routes to the other ten skills.
+Start there for any game request; it routes to the other eleven skills.

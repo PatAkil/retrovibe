@@ -13,7 +13,7 @@ Turn a user's game description into a playable game folder under `workspace/<gam
 
 ## Skill routing — single source of truth
 
-This is the canonical routing list for all eleven Retrovibe skills. CLAUDE.md links here; do not duplicate this list elsewhere.
+This is the canonical routing list for all twelve Retrovibe skills. CLAUDE.md links here; do not duplicate this list elsewhere.
 
 | Skill | Route here when |
 |---|---|
@@ -27,6 +27,7 @@ This is the canonical routing list for all eleven Retrovibe skills. CLAUDE.md li
 | messaging-game-over | Posting state/score transitions to the host via the engine runtime. |
 | adding-easter-egg | Palette-swap toggles or secret input sequences. |
 | playing-the-game | Starting/stopping the dev server, the smoke check, handing the URL to the user — owns the whole dev-server lifecycle. |
+| verifying-graphics | A change to the engine, the template's reference game/shell, or a visual skill — anything that alters how EVERY game looks. Runs the fixture capture + visual judgement loop before the change is called done. Never for creating or iterating one game. |
 | resetting-the-workspace | The request targets the workspace **as a whole** ("reset", "wipe everything", "start over from scratch") — zero-question wipe with an automatic safety commit. A request about one specific game ("this one's boring, start over") routes to iterating-on-a-game / creating-a-game instead, and "clean up" alone never routes here. |
 
 ## Step 1 — Elicit (gate)
