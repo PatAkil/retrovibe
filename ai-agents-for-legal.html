@@ -146,6 +146,8 @@
   .node.hot{stroke:var(--accent); stroke-width:2.5}
   .node.solid{fill:var(--accent-dim); stroke:var(--accent); stroke-width:2.5}
   .edge{fill:none; stroke:var(--faint); stroke-width:3}
+  .axis{fill:none; stroke:var(--line); stroke-width:2.5}
+  .curve{fill:none; stroke:var(--accent); stroke-width:5; stroke-linecap:round; stroke-linejoin:round}
   .edge.hot{stroke:var(--accent)}
   .dash{fill:none; stroke:var(--line); stroke-width:2.5; stroke-dasharray:9 9}
 
@@ -485,9 +487,87 @@
   </div>
 </section>
 
-<!-- 14 ─ Story 1 ────────────────────────────────────────────────────── -->
+<!-- 14 ─ Where this is going ────────────────────────────────────────── -->
 <section class="slide">
-  <p class="kicker rise">Story one</p>
+  <p class="kicker rise">Where this is going</p>
+  <h2 class="rise d1">Loop engineering</h2>
+  <svg class="fig rise d2" viewBox="0 0 1400 520" role="img" aria-label="Three nested rings: prompt inside context inside loop. First prompt engineering, then context engineering, now loop engineering.">
+    <rect x="120" y="50" width="620" height="420" rx="26" fill="none" stroke="#f0b429" stroke-width="3"/>
+    <text class="elabel hot" x="430" y="96">loop</text>
+
+    <rect x="190" y="130" width="480" height="290" rx="20" fill="none" stroke="#5a6779" stroke-width="2.5"/>
+    <text class="elabel" x="430" y="174">context</text>
+
+    <rect x="260" y="208" width="340" height="140" rx="16" fill="var(--panel)" stroke="#212b39" stroke-width="2.5"/>
+    <text class="nlabel" x="430" y="278">prompt</text>
+
+    <text x="850" y="132" fill="#5a6779" font-size="22" style="letter-spacing:.14em">FIRST</text>
+    <text x="850" y="178" fill="#eef2f7" font-size="34" font-weight="600">prompt engineering</text>
+    <text x="850" y="216" fill="#8d9aad" font-size="25">write a better instruction</text>
+
+    <text x="850" y="278" fill="#5a6779" font-size="22" style="letter-spacing:.14em">THEN</text>
+    <text x="850" y="324" fill="#eef2f7" font-size="34" font-weight="600">context engineering</text>
+    <text x="850" y="362" fill="#8d9aad" font-size="25">give it the right material</text>
+
+    <text x="850" y="424" fill="#f0b429" font-size="22" style="letter-spacing:.14em">NOW</text>
+    <text x="850" y="470" fill="#f0b429" font-size="34" font-weight="700">loop engineering</text>
+    <text x="850" y="508" fill="#8d9aad" font-size="25">design what it does, checks and repeats</text>
+  </svg>
+</section>
+
+<!-- 15 ─ The loop, engineered ───────────────────────────────────────── -->
+<section class="slide">
+  <h2 class="rise">What you engineer is the check</h2>
+  <svg class="fig rise d1" viewBox="0 0 1400 660" role="img" aria-label="The loop with a fourth station: think, call a tool, observe, verify, and only then done">
+    <path class="edge hot" d="M700,116 L700,54" marker-end="url(#arh)"/>
+    <text class="elabel hot" x="700" y="32">Done</text>
+
+    <rect class="node hot" x="570" y="120" width="260" height="92" rx="14"/>
+    <text class="nlabel" x="700" y="166">Think</text>
+
+    <path class="edge" d="M836,198 Q1010,230 1090,326" marker-end="url(#ar)"/>
+    <rect class="node" x="980" y="330" width="260" height="92" rx="14"/>
+    <text class="nlabel" x="1110" y="376">Call a tool</text>
+
+    <path class="edge" d="M1090,426 Q1010,522 836,554" marker-end="url(#ar)"/>
+    <rect class="node" x="570" y="540" width="260" height="92" rx="14"/>
+    <text class="nlabel" x="700" y="586">Observe</text>
+
+    <path class="edge" d="M564,554 Q390,522 310,426" marker-end="url(#ar)"/>
+    <rect class="node solid" x="160" y="330" width="260" height="92" rx="14"/>
+    <text class="nlabel" x="290" y="364">Verify</text>
+    <text class="nsub" x="290" y="396">tests · review · policy</text>
+
+    <path class="edge hot" d="M310,326 Q390,230 564,198" marker-end="url(#arh)"/>
+  </svg>
+  <p class="takeaway rise d2">Trust comes from the checks you <b>build into the loop</b>.</p>
+</section>
+
+<!-- 16 ─ Trust and the number of agents ─────────────────────────────── -->
+<section class="slide">
+  <h2 class="rise">Trust sets the ceiling</h2>
+  <svg class="fig rise d1" viewBox="0 0 1300 560" role="img" aria-label="Illustrative curve: the number of agents stays near one until trust reaches a baseline, then rises steeply">
+    <text x="96" y="26" fill="#8d9aad" font-size="24">number of agents</text>
+    <path class="axis" d="M120,470 L120,44" marker-end="url(#ar)"/>
+    <path class="axis" d="M120,470 L1250,470" marker-end="url(#ar)"/>
+    <text x="1250" y="508" fill="#8d9aad" font-size="24" text-anchor="end">trust</text>
+
+    <rect x="121" y="46" width="439" height="423" fill="rgba(141,154,173,.05)"/>
+    <path class="dash" d="M560,470 L560,60"/>
+    <text class="elabel hot" x="560" y="504">a solid baseline first</text>
+
+    <path class="curve" d="M120,463 L390,459 Q515,454 570,440 C690,412 790,368 862,300 C934,232 985,142 1012,50"/>
+
+    <text class="nsub" x="336" y="240" style="fill:#5a6779"><tspan x="336" dy="0">without it,</tspan><tspan x="336" dy="34">one agent — closely watched</tspan></text>
+    <text class="nsub" x="900" y="416" style="fill:#f0b429"><tspan x="900" dy="0">with it, many agents</tspan><tspan x="900" dy="34">running in parallel</tspan></text>
+    <text class="tiny" x="1180" y="546" style="text-anchor:end">illustrative</text>
+  </svg>
+  <p class="takeaway rise d2">Raise the trust and the number of agents can grow. <b>Not before.</b></p>
+</section>
+
+<!-- 17 ─ Use case one ──────────────────────────────────────────────── -->
+<section class="slide">
+  <p class="kicker rise">Use case one</p>
   <h2 class="rise d1">A verification pipeline</h2>
   <svg class="fig short rise d2" viewBox="0 0 1520 340" role="img" aria-label="Agent writes, a second agent reviews, tests run, a human approves, the change is merged">
     <rect class="node" x="0" y="90" width="252" height="140" rx="14"/>
@@ -514,10 +594,10 @@
   </svg>
 </section>
 
-<!-- 15 ─ Story 2 ────────────────────────────────────────────────────── -->
+<!-- 18 ─ Use case two ──────────────────────────────────────────────── -->
 <section class="slide">
-  <p class="kicker rise">Story two</p>
-  <h2 class="rise d1">Incident remediation</h2>
+  <p class="kicker rise">Use case two</p>
+  <h2 class="rise d1">An agent in operations</h2>
   <svg class="fig short rise d2" viewBox="0 0 1520 340" role="img" aria-label="An alert arrives, the agent gathers logs and proposes a fix, a human decides, the incident is resolved">
     <rect class="node" x="0" y="90" width="252" height="140" rx="14"/>
     <text class="nlabel" x="126" y="160">alert</text>
@@ -541,9 +621,40 @@
     <rect class="node" x="1248" y="90" width="252" height="140" rx="14"/>
     <text class="nlabel" x="1374" y="160">resolved</text>
   </svg>
+  <p class="takeaway rise d3">The goal is one number: <b>mean time to recover.</b></p>
 </section>
 
-<!-- 16 ─ Risks ──────────────────────────────────────────────────────── -->
+<!-- 19 ─ Use case three ────────────────────────────────────────────── -->
+<section class="slide">
+  <p class="kicker rise">Use case three</p>
+  <h2 class="rise d1">Hermes, embedded in a team</h2>
+  <svg class="fig rise d2" viewBox="0 0 1400 540" role="img" aria-label="Hermes sits with a team and takes on admin, oversight, follow-ups and reporting">
+    <rect class="node" x="30" y="212" width="240" height="116" rx="14"/>
+    <text class="nlabel" x="150" y="270">the team</text>
+    <path class="edge hot" d="M276,270 L352,270" marker-end="url(#arh)" marker-start="url(#arh)"/>
+
+    <rect class="node solid" x="362" y="200" width="290" height="140" rx="16"/>
+    <text class="nlabel" x="507" y="252" style="font-size:36px">Hermes</text>
+    <text class="nsub" x="507" y="292">sits in the team</text>
+
+    <path class="edge" d="M658,250 Q718,246 748,110" marker-end="url(#ar)"/>
+    <path class="edge" d="M658,262 Q718,258 748,222" marker-end="url(#ar)"/>
+    <path class="edge" d="M658,278 Q718,282 748,334" marker-end="url(#ar)"/>
+    <path class="edge" d="M658,290 Q718,294 748,446" marker-end="url(#ar)"/>
+
+    <rect class="node" x="754" y="72" width="580" height="76" rx="12"/>
+    <text class="nlabel" x="1044" y="110" style="font-size:27px">the admin nobody wants</text>
+    <rect class="node" x="754" y="184" width="580" height="76" rx="12"/>
+    <text class="nlabel" x="1044" y="222" style="font-size:27px">oversight — what slipped through</text>
+    <rect class="node" x="754" y="296" width="580" height="76" rx="12"/>
+    <text class="nlabel" x="1044" y="334" style="font-size:27px">follow-ups and reminders</text>
+    <rect class="node" x="754" y="408" width="580" height="76" rx="12"/>
+    <text class="nlabel" x="1044" y="446" style="font-size:27px">status, written up honestly</text>
+  </svg>
+  <p class="takeaway rise d3">It works <b>inside</b> the team. A person signs anything that leaves it.</p>
+</section>
+
+<!-- 20 ─ Risks ─────────────────────────────────────────────────────── -->
 <section class="slide">
   <h2 class="rise">A few risks</h2>
   <ol class="list tight cascade">
@@ -555,7 +666,7 @@
   </ol>
 </section>
 
-<!-- 17 ─ Prompt injection ───────────────────────────────────────────── -->
+<!-- 21 ─ Prompt injection ──────────────────────────────────────────── -->
 <section class="slide">
   <h2 class="rise">Prompt injection, in one picture</h2>
   <svg class="fig short rise d1" viewBox="0 0 1400 500" role="img" aria-label="A document contains a hidden instruction; the agent reads it and does what the document says">
@@ -585,7 +696,49 @@
   <p class="takeaway rise d2">It cannot tell <b>your</b> instructions from the document’s.</p>
 </section>
 
-<!-- 18 ─ Where we need your help ────────────────────────────────────── -->
+<!-- 22 ─ The conclusion ────────────────────────────────────────────── -->
+<section class="slide">
+  <h2 class="rise">More output needs more assessment</h2>
+  <svg class="fig short rise d1" viewBox="0 0 1400 470" role="img" aria-label="Each new agent passes through an assessment gate before it reaches production">
+    <text class="tiny" x="180" y="42">more agents</text>
+    <rect class="node" x="40" y="72" width="280" height="80" rx="12"/>
+    <text class="nlabel" x="180" y="112" style="font-size:26px">a new use case</text>
+    <rect class="node" x="40" y="192" width="280" height="80" rx="12"/>
+    <text class="nlabel" x="180" y="232" style="font-size:26px">a new tool</text>
+    <rect class="node" x="40" y="312" width="280" height="80" rx="12"/>
+    <text class="nlabel" x="180" y="352" style="font-size:26px">a wider reach</text>
+
+    <path class="edge hot" d="M330,112 Q420,112 470,190" marker-end="url(#arh)"/>
+    <path class="edge hot" d="M330,232 L470,232" marker-end="url(#arh)"/>
+    <path class="edge hot" d="M330,352 Q420,352 470,274" marker-end="url(#arh)"/>
+
+    <rect class="node solid" x="480" y="60" width="330" height="350" rx="18"/>
+    <text class="nlabel" x="645" y="212" style="font-size:36px">assessment</text>
+    <text class="nsub" x="645" y="256">what it may do</text>
+    <text class="nsub" x="645" y="288">what it may touch</text>
+    <text class="nsub" x="645" y="320">who signs for it</text>
+
+    <path class="edge hot" d="M820,232 L960,232" marker-end="url(#arh)"/>
+    <rect class="node" x="970" y="152" width="380" height="160" rx="14"/>
+    <text class="nlabel" x="1160" y="212">in production</text>
+    <text class="nsub" x="1160" y="252">and on the record</text>
+  </svg>
+  <p class="takeaway rise d2">Output grows only as fast as <b>assessment</b> does.</p>
+</section>
+
+<!-- 23 ─ The use cases ─────────────────────────────────────────────── -->
+<section class="slide">
+  <h2 class="rise">The use cases we want to walk through</h2>
+  <ol class="list tight cascade">
+    <li><span class="term">Verification pipeline</span><span class="gloss">Agents write, agents review, a human approves.</span></li>
+    <li><span class="term">Operations</span><span class="gloss">Triage and remediation, to cut time to recover.</span></li>
+    <li><span class="term">Hermes</span><span class="gloss">Embedded in a team: admin, oversight, follow-up.</span></li>
+    <li><span class="term">Documentation</span><span class="gloss">Keeping internal docs true to the system.</span></li>
+    <li><span class="term">Dependency watch</span><span class="gloss">What changed, and under which licence.</span></li>
+  </ol>
+</section>
+
+<!-- 24 ─ Where we need your help ───────────────────────────────────── -->
 <section class="slide">
   <h2 class="rise">Where we need your help</h2>
   <p class="lead rise d1">Approval of DevAI use cases.</p>
@@ -610,7 +763,7 @@
   </svg>
 </section>
 
-<!-- 19 ─ Close ──────────────────────────────────────────────────────── -->
+<!-- 25 ─ Close ─────────────────────────────────────────────────────── -->
 <section class="slide center">
   <h1 class="rise">Questions.</h1>
   <div class="rule rise d1"></div>
