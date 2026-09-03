@@ -13,7 +13,7 @@ Turn a user's game description into a playable game folder under `workspace/<gam
 
 ## Skill routing — single source of truth
 
-This is the canonical routing list for all eleven Retrovibe skills. CLAUDE.md links here; do not duplicate this list elsewhere.
+This is the canonical routing list for all twelve Retrovibe skills. CLAUDE.md links here; do not duplicate this list elsewhere.
 
 | Skill | Route here when |
 |---|---|
@@ -27,6 +27,7 @@ This is the canonical routing list for all eleven Retrovibe skills. CLAUDE.md li
 | messaging-game-over | Posting state/score transitions to the host via the engine runtime. |
 | adding-easter-egg | Palette-swap toggles or secret input sequences. |
 | playing-the-game | Starting/stopping the dev server, the smoke check, handing the URL to the user — owns the whole dev-server lifecycle. |
+| verifying-graphics | A change to the engine, the template's reference game/shell, or a visual skill — anything that alters how EVERY game looks. Runs the fixture capture + visual judgement loop before the change is called done. Never for creating or iterating one game. |
 | resetting-the-workspace | The request targets the workspace **as a whole** ("reset", "wipe everything", "start over from scratch") — zero-question wipe with an automatic safety commit. A request about one specific game ("this one's boring, start over") routes to iterating-on-a-game / creating-a-game instead, and "clean up" alone never routes here. |
 
 ## Step 1 — Elicit (gate)
@@ -77,7 +78,9 @@ No dependency install is needed — devDeps live once at the repo root and games
 
 Start by launching the dev server in the background for this game (steps 1–2 of **playing-the-game** — port discipline as written). It hot-reloads every save, so runtime feedback is continuous and the final gate pays no startup cost.
 
-Read budget: the engine API table in CLAUDE.md plus the cloned `workspace/<game-name>/game/main.ts` (the reference game) suffice to start; the API barrel is `workspace/<game-name>/engine/index.ts` — frozen, import only from there. Open a companion skill only when its domain is touched: **building-platformer-games** (platformers), **handling-user-input** (changing what buttons do), **ensuring-arcade-visuals**, **messaging-game-over**, **adding-easter-egg**. Run **improving-game-quality**'s checklist once before Step 5's full gate.
+Read budget: the engine API table in CLAUDE.md plus the cloned `workspace/<game-name>/game/main.ts` (the reference game) suffice to start; the API barrel is `workspace/<game-name>/engine/index.ts` — frozen, import only from there. The reference game now demonstrates the presentation patterns (score pops, idle-actor breathing, death-tableau debris, a GET READY beat, BEST tracking, prompts that pulse instead of blinking off) inline, each marked `PATTERN` in a comment — its header PATTERN paragraph is the short version; copy from the code itself rather than re-deriving these from the skills. **The art rules are not optional reading.** A game that is legible and builds green still hands off as a demo unless its sprites, background, surfaces and title get the art pass — those rules live in **ensuring-arcade-visuals** §3b (sprite craft: full-size `px`-1 sprites, 2–3 tones, keylines, 2-frame animation) and §7 (backgrounds, beveled surfaces, `drawLogo` titles), and **improving-game-quality** item 11b gates them. Beyond the reference game, the two art-passed fixtures under `verification/` — `verification/cave-hopper/game/main.ts` and `verification/brick-bounce/game/main.ts` — are worked examples a writer **may read** for their STYLE CARD format and their sprite/terrain/backdrop/title code. Fixtures are frozen: read only, **never run, never modify, never clone**, and never copy their look (both combinations are reserved by the divergence rule).
+
+Open a companion skill only when its domain is touched: **building-platformer-games** (platformers), **handling-user-input** (changing what buttons do), **ensuring-arcade-visuals**, **messaging-game-over**, **adding-easter-egg**. Run **improving-game-quality**'s checklist once before Step 5's full gate.
 
 **Style card before code:** before the first milestone save, derive 2–3 distinct visual directions from the game's fiction, pick one, and record it as a comment block atop `main.ts` — it must diverge from the reference game and from every game currently in `workspace/` (the rule and comparison set live in **ensuring-arcade-visuals** §0).
 

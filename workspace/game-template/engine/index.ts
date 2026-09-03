@@ -13,17 +13,31 @@ export type { SceneMachine, Scene } from './scenes';
 export {
   createPixelCanvas,
   makeSprite,
+  flipSprite,
+  frameIndex,
   drawSprite,
   drawText,
   drawTextCentered,
   textWidth,
+  blink,
+  pulse,
+  fillBands,
+  fillDither,
+  drawBevel,
+  drawFrame,
+  drawLogo,
+  SHADOW_COLOR,
+  OUTLINE_COLOR,
 } from './draw';
 export type {
   PixelCanvas,
   CreatePixelCanvasOptions,
   Sprite,
   SpriteMap,
+  MakeSpriteOptions,
   TextOptions,
+  DitherPattern,
+  LogoOptions,
 } from './draw';
 
 export { PICO8, GAMEBOY, DUSK, NEON, SUNSET, OCEAN, PALETTES, swapPalette, contrast } from './palette';
@@ -38,8 +52,8 @@ export type { Juice } from './juice';
 export { createAudio } from './audio';
 export type { Audio, Sfx } from './audio';
 
-export { SAFE_MARGIN, drawScore, drawLives, hudText } from './ui';
-export type { HudOptions, HAnchor, VAnchor } from './ui';
+export { SAFE_MARGIN, drawScore, drawLives, hudText, drawPanel, dimScene } from './ui';
+export type { HudOptions, PanelOptions, HAnchor, VAnchor } from './ui';
 
 export { createCrt } from './crt';
 export type { Crt, CrtOptions } from './crt';

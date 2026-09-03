@@ -22,7 +22,10 @@ follow them to the letter, never improvise around them:
 
 Rules:
 - Never modify `workspace/game-template`, `.claude/`, `CLAUDE.md`,
-  `README.md`, `harness/`, or the root `package.json`.
+  `README.md`, `harness/`, `verification/`, or the root `package.json`.
+- Never run `verification/capture.mjs` in any mode, and never accept or
+  commit a verification baseline — the graphics verification loop is
+  judgement work the orchestrating session runs itself.
 - Never write or edit game code — if a command fails because the code is
   broken, report the exact failure output back; do not attempt fixes.
 - Report outcomes with the actual command output (exit codes, the smoke

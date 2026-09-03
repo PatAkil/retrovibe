@@ -19,8 +19,11 @@ retrovibe/
 │   │   ├── vite.config.ts    # base:'./', port 5173 strictPort, external cacheDir
 │   │   └── index.html        # arcade shell; game mounts into #screen
 │   └── <game-name>/          # user games — clones of game-template
-├── .claude/skills/           # eleven skills, commands baked in
-└── harness/                  # parent-frame postMessage verification harness
+├── .claude/skills/           # twelve skills, commands baked in
+├── harness/                  # parent-frame postMessage verification harness
+└── verification/             # graphics verification: 3 FROZEN fixture games (clones of the
+                              #   template, engine copies gitignored + refreshed per run),
+                              #   capture.mjs (harness code), baseline/ = the approved look
 ```
 
 ## Conventions (single definition — skills rely on these)
@@ -47,8 +50,9 @@ retrovibe/
   Restore: `git checkout -- workspace/game-template && git clean -fd workspace/game-template`.
 - **No commits during the create/iterate loop.** Git is touched only at
   deletion moments — resetting-the-workspace's safety commit and
-  creating-a-game's overwrite branch — or on an explicit "commit/save my
-  game" request. Every commit is pathspec-scoped
+  creating-a-game's overwrite branch — on an explicit "commit/save my
+  game" request, or when a verification baseline is accepted
+  (verifying-graphics step 6, pathspec-scoped to `verification/baseline`). Every commit is pathspec-scoped
   (`git add workspace/<name> && git commit ... -- workspace/<name>`), never
   `git add -A`; deleted games stay recoverable via the reported
   `git checkout <hash> -- workspace/<name>`.
@@ -60,8 +64,18 @@ retrovibe/
   `npm run smoke` green before handing off. A green build alone is never
   "done" — and the user, not Claude, is the playtester. Claude reports
   "builds, boots clean, ready to play at <URL>", never "playtested".
+- **Graphics changes are verified by looking, not only by building.** Any
+  change under `workspace/game-template/` (engine, reference game, shell) or
+  to a skill that directs visual choices is not done until the
+  **verifying-graphics** loop has run: fixtures captured, `compare.png` and
+  the full-size frames viewed, per-criterion verdicts reported, and the user
+  has approved the new baseline. Ratios and byte-identity are gates, not
+  quality; a monochrome palette passes every ratio and still looks worse.
+  Not triggered by creating or iterating a user game.
 
 ## Engine API (frozen — authoritative surface is `engine/index.ts`)
+
+Editing anything under `engine/` (or the template's `game/main.ts` / `index.html`) is a graphics-generator change: it is not done until the **verifying-graphics** loop has run and its frames have been viewed (see Conventions).
 
 Games import from `'../engine'`:
 
@@ -70,13 +84,13 @@ Games import from `'../engine'`:
 | loop.ts | `createLoop({update, render})` → `.start()/.stop()` | Fixed-timestep (60 Hz) accumulator loop; frame-delta clamp (250 ms) + clock reset on focus; auto-pause on blur |
 | input.ts | `createInput(actions, {onFirstKey})`, `controlHints(input)`, `BUTTON_KEY` | Arrows/WASD → `input.dir`; buttons A = Space/Z, B = X/C, PAUSE = P/Esc (dedicated, aliased — down while ≥1 alias down); `pressed/held/released`, `endFrame()` per tick; labels declared in code |
 | scenes.ts | `createScenes()` → `.current/.is/.to/.onEnter` | Enforced machine `TITLE → PLAYING ⇄ PAUSED → (GAME_OVER | WIN) → restart` |
-| draw.ts | `createPixelCanvas`, `makeSprite`, `drawSprite`, `drawText`, `drawTextCentered`, `textWidth` | Pixel-scaled canvas, ASCII-art sprites, 3×5 bitmap font |
-| palette.ts | `PICO8`, `GAMEBOY`, `DUSK`, `NEON`, `SUNSET`, `OCEAN`, `PALETTES`, `swapPalette`, `contrast` | Curated retro palettes (roles documented per index) + swap support + `contrast(a,b)` legality check (actors ≥3:1 vs static surfaces; ambient 1.8–2.5:1 band) |
-| particles.ts | `createParticles({width, height, ambient, ambientColor})` → `.update/.render/.burst/.setAmbient` | Ambient presets (stars/rain/snow/embers/bubbles; band-compliant default colors, overridable) + 2–3 px impact bursts |
-| juice.ts | `createJuice()` → `.shake/.flash/.hitStop/.frozen/.update/.preRender/.postRender` | Screen shake, flash, hit-stop. Order: clear → `preRender` → world → `postRender` → CRT |
+| draw.ts | `createPixelCanvas`, `makeSprite`, `flipSprite`, `drawSprite`, `frameIndex`, `drawText`, `drawTextCentered`, `textWidth`, `blink`, `pulse`, `drawLogo`, `fillBands`, `fillDither`, `drawBevel`, `drawFrame` | Pixel-scaled canvas, ASCII-art sprites, 3×5 bitmap font with 5-wide M/W (those two glyphs are 5 font-px wide — a 3-wide cell cannot draw them unambiguously; `FONT` entries may be any width with equal-length rows, and `textWidth`/`drawText`/`drawTextCentered`/`drawLogo` advance per glyph, so only strings containing M or W measure differently). `TextOptions.shadow`/`.outline` (bool or color string, default `SHADOW_COLOR`/`OUTLINE_COLOR`) add a 1-px drop shadow or all-round keyline — off by default in `drawText`, on by default in `drawTextCentered` at `scale >= 2` and in every `ui.ts` HUD helper (shadow); the two are mutually exclusive per call. The full keyline is applied only at `scale >= 3`: at scale 2 a 1-px keyline pressing in from both sides closes the 1-font-px counters (A/O/0/8/B/D/P/R turn into blobs), so a requested `outline` silently degrades to the drop shadow there. Font glyph fixes (N, S no longer collide with M/H/5) are legibility fixes, not API. Art helpers (all opt-in, setup-time or cheap): `makeSprite(rows, map, {outline, flipX})` bakes a 1-cell keyline (sprite grows by 1 cell per side — use the inner size for hitboxes, or author the outline into the rows) or a mirrored copy; `flipSprite(sprite)`; `frameIndex(time, fps, count)` picks an animation frame from the game clock; `drawLogo(ctx, text, W, y, {color, shade, shadow, scale})` draws a two-tone lit-from-above arcade logo with an offset shadow (`color` is REQUIRED and comes from the game's palette — it throws without one; `shade` defaults to `color`, `shadow` to `OUTLINE_COLOR`, and there are no palette-specific literals left in the engine); `fillBands` (horizontal gradient bands), `fillDither` (pixel-aligned **4×4 ordered/Bayer** checker (50 %) / sparse (25 %) dither — a 2×2 tile phase-locks to the CRT's 2-px scanline pitch and bands instead of averaging; patterns cached per context in a `WeakMap` and `fillStyle` restored after the fill), `drawBevel` (slab with light top/left and dark bottom/right edges), `drawFrame` (hollow border). `blink(time, period=0.9, onRatio=0.6)` and `pulse(time, period=1.2)` are clock-driven 0..1 helpers for breathing prompts/highlights — not new API surface for game logic, just exported timing utilities |
+| palette.ts | `PICO8`, `GAMEBOY`, `DUSK`, `NEON`, `SUNSET`, `OCEAN`, `PALETTES`, `swapPalette`, `contrast` | Curated retro palettes (roles documented per index) + swap support + `contrast(a,b)` legality check (actors ≥3:1 vs static surfaces, ≥4.5:1 authored on any non-black ground — the CRT lift eats ~1.4× of the measured ratio; ambient 1.8–2.5:1 band) |
+| particles.ts | `createParticles({width, height, ambient, ambientColor})` → `.update/.render/.burst/.setAmbient` | Ambient presets (stars/rain/snow/embers/bubbles; band-compliant default colors, overridable) + 2–3 px impact bursts. API unchanged; defaults now build ambient as 2–3 depth layers (far dim/slow, mid, near brighter/faster, plus a rare bright spark for stars/embers), each particle twinkles on a deterministic per-particle clock, and most presets (rain excepted) cluster into clumps/streams instead of an even sprinkle — all automatic, nothing new to call |
+| juice.ts | `createJuice()` → `.shake/.flash/.hitStop/.frozen/.update/.preRender/.postRender` | Screen shake, flash, hit-stop. Order: clear → `preRender` → world → `postRender` → CRT. The shake translate is rounded to whole logical pixels, so dither fields and 1-px keylines never resample sub-pixel mid-shake. `flash(color, duration, origin?)`'s overlay holds its peak for the first 12% of the duration, then fades on a quadratic ease-out over the rest, so the burst/shake/frozen tableau underneath stays visible through the flash. Without `origin` it is the uniform full-screen overlay, peaking at 0.55 alpha (never a full-opacity wash). With an `origin` (`{x, y}` in LOGICAL px — the space the world draws in; `postRender` runs after `ctx.restore()`, so the flash sits in un-shaken screen space over the shaken tableau) it is a RADIAL flash centred on the impact point: a cached radial gradient (rebuilt only when origin/colour/frame size change, never per frame) peaking at 0.75 alpha at the centre and reaching full transparency at 0.55 x the larger frame dimension, so the death point glows in the flash colour with its burst readable inside it while the HUD, the far background and the opposite side of the frame keep their own colours. Pass the origin on DEATH flashes; WIN/pickup flashes stay uniform |
 | audio.ts | `createAudio()` → `.unlock/.play/.ready` | WebAudio chiptune sfx (`jump/pickup/explosion/hit/blip`); `unlock()` inside the first user gesture |
-| ui.ts | `SAFE_MARGIN`, `drawScore`, `drawLives`, `hudText` | HUD helpers, enforced edge margin |
-| crt.ts | `createCrt()` → `.render(ctx, w, h, dt)` | Scanlines + vignette + flicker; draw LAST |
+| ui.ts | `SAFE_MARGIN`, `drawScore`, `drawLives`, `hudText`, `drawPanel`, `dimScene` | HUD helpers, enforced edge margin. `drawScore`/`drawLives`/`hudText` carry a 1-px drop shadow by default (`{shadow: false}` to opt out); `hudText` also adds a translucent dark plate behind large centered text (`h:'center', v:'middle', scale>=2` — e.g. PAUSED) by default (`{plate: false}` to opt out). `drawPanel(pc, x, y, w, h, {color, border})` draws that plate directly, clamped inside `SAFE_MARGIN`. `dimScene(pc, alpha=0.55)` darkens the whole frame behind a terminal-screen overlay (GAME_OVER/WIN/PAUSED) while keeping the world visible as context — its fill overscans the viewport by 16 logical px so a screen shake can't expose an undimmed strip at the edges. Dim OR plate, never both |
+| crt.ts | `createCrt()` → `.render(ctx, w, h, dt)` | Draw LAST. Four layered passes over the finished frame: halation (a cached one-shot SNAPSHOT of the frame re-drawn at -1 and +1 device px via `'lighter'`, edge-clamped so columns 0 and w-1 behave like interior columns — snapshotting is what keeps the two sides symmetric instead of double-ghosted), a phosphor lift (additive blue-grey so pure-black art reads as a lit tube, not pure black anymore), scanlines (`'multiply'` toward mid-grey, not opaque black bars — `scanlineAlpha`, default 0.09, is this multiply depth, 0 disables), then vignette + flicker. `CrtOptions`: `scanlineAlpha`, `vignetteAlpha` (0.35), `flicker` (0.03), plus `halation` (per-side alpha, default 0.09, 0 skips the layer) and `lift` (phosphor tint, default `'rgb(15,17,28)'`, `''` skips it). `render` leaves the context state as it found it |
 | runtime.ts | `createRuntime()` → `.gameOver/.scoreChanged/.stateChanged/.embedded/.send` | Host contract, pinned wire format `{source:'retrovibe', type, payload}` |
 
 ## Models & orchestration (revisit as models change — roles, not benchmarks)
@@ -105,4 +119,4 @@ Two repo agents in `.claude/agents/` make the tiering mechanical:
 
 The routing list lives **once**, in the orchestrator:
 [`.claude/skills/creating-a-game/SKILL.md`](.claude/skills/creating-a-game/SKILL.md).
-Start there for any game request; it routes to the other ten skills.
+Start there for any game request; it routes to the other eleven skills.
