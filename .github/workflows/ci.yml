@@ -37,6 +37,14 @@ jobs:
           npx playwright install --with-deps chromium || echo "::notice title=Browser::Playwright has no Chromium for this runner image; npm run setup extracts one instead"
           npm run setup
           node -e 'const m = JSON.parse(require("fs").readFileSync("/tmp/retrovibe-eyes.json", "utf8")); console.log(m.reason); process.exit(m.ready === true ? 0 : 1)'
+      - name: Fixture engine copies (gitignored, refreshed from the template)
+        run: |
+          for dir in verification/*/; do
+            dir=${dir%/}
+            [ -f "$dir/game/main.ts" ] && [ -f "$dir/package.json" ] || continue
+            rm -rf "$dir/engine"
+            cp -r workspace/game-template/engine "$dir/engine"
+          done
       - name: npm run lint:full
         id: lint
         run: npm run lint:full 2>&1 | tee /tmp/lint-full.log
@@ -48,7 +56,7 @@ jobs:
           cp -r workspace/game-template workspace/_ci
           cd workspace/_ci
           npm run verify -- --full 2>&1 | tee /tmp/verify.log
-      - name: Fixtures check + build (engine copies refreshed)
+      - name: Fixtures check + build
         id: fixtures
         if: ${{ !cancelled() }}
         run: |
@@ -57,8 +65,6 @@ jobs:
           for dir in verification/*/; do
             dir=${dir%/}
             [ -f "$dir/game/main.ts" ] && [ -f "$dir/package.json" ] || continue
-            rm -rf "$dir/engine"
-            cp -r workspace/game-template/engine "$dir/engine"
             for script in check build; do
               if (cd "$dir" && npm run "$script" >> /tmp/fixtures.log 2>&1); then
                 echo "PASS  ${dir#verification/} $script" | tee -a /tmp/fixtures.log
