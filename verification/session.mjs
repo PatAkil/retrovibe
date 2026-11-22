@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { cpSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { stripVTControlCharacters } from 'node:util';
 import { FIXTURES, runMoments } from './fixtures.mjs';
 import { INIT_SCRIPT } from './page-runner.mjs';
 
@@ -30,7 +31,7 @@ function readiness(child, dir, port) {
     }, READY_TIMEOUT_MS);
     const onData = (chunk) => {
       output += chunk.toString();
-      if (output.includes(`http://localhost:${port}/`)) {
+      if (stripVTControlCharacters(output).includes(`http://localhost:${port}/`)) {
         clearTimeout(timer);
         res();
       }
