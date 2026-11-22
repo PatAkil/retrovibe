@@ -1,34 +1,27 @@
-// scenes.ts — enforced scene state machine.
-//   TITLE → PLAYING ⇄ PAUSED → (GAME_OVER | WIN) → restart
-// Level advance is a PLAYING→PLAYING re-entry. Invalid transitions are rejected
-// (warned, not applied — and console.warn stays below the smoke gate's error
-// threshold) so a mis-wired transition surfaces without crashing the game.
-//
-// The "always playable, a lose state always reachable" invariant is a design
-// rule enforced by the improving-game-quality skill, not encoded here.
-
 export type Scene = 'TITLE' | 'PLAYING' | 'PAUSED' | 'GAME_OVER' | 'WIN';
 
-const ALLOWED: Readonly<Record<Scene, ReadonlyArray<Scene>>> = {
+const ALLOWED: Readonly<Record<Scene, readonly Scene[]>> = {
   TITLE: ['PLAYING'],
-  PLAYING: ['PAUSED', 'GAME_OVER', 'WIN', 'PLAYING'], // PLAYING→PLAYING = next level
+  PLAYING: ['PAUSED', 'GAME_OVER', 'WIN', 'PLAYING'],
   PAUSED: ['PLAYING', 'TITLE'],
-  GAME_OVER: ['TITLE', 'PLAYING'], // restart
-  WIN: ['TITLE', 'PLAYING'], // restart / next
+  GAME_OVER: ['TITLE', 'PLAYING'],
+  WIN: ['TITLE', 'PLAYING'],
 };
 
 export interface SceneMachine {
   readonly current: Scene;
   is(s: Scene): boolean;
-  /** Attempt a transition. Returns true if applied; warns + ignores if invalid. */
   to(s: Scene): boolean;
-  /** Register a callback fired whenever a given scene is entered. */
   onEnter(s: Scene, fn: () => void): void;
 }
 
-export function createScenes(initial: Scene = 'TITLE'): SceneMachine {
+export interface SceneOptions {
+  onIllegal?(from: Scene, to: Scene): void;
+}
+
+export function createScenes(initial: Scene = 'TITLE', opts: SceneOptions = {}): SceneMachine {
   let current = initial;
-  const enterHandlers = new Map<Scene, Array<() => void>>();
+  const enterHandlers = new Map<Scene, (() => void)[]>();
 
   return {
     get current() {
@@ -42,18 +35,18 @@ export function createScenes(initial: Scene = 'TITLE'): SceneMachine {
         return false;
       }
       if (!ALLOWED[current].includes(s)) {
-        console.warn(`[scenes] illegal transition ${current} -> ${s} ignored`);
+        opts.onIllegal?.(current, s);
         return false;
       }
       current = s;
       const handlers = enterHandlers.get(s);
-      if (handlers) for (const fn of handlers) fn();
+      if (handlers) {for (const fn of handlers) {fn();}}
       return true;
     },
     onEnter(s, fn) {
       const list = enterHandlers.get(s);
-      if (list) list.push(fn);
-      else enterHandlers.set(s, [fn]);
+      if (list) {list.push(fn);}
+      else {enterHandlers.set(s, [fn]);}
     },
   };
 }

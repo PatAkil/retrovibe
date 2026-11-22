@@ -3,10 +3,25 @@
   "version": "0.1.0",
   "private": true,
   "description": "Describe a retro game in Claude, and skills turn it into a playable, high-quality game.",
+  "scripts": {
+    "prepare": "node harness/install-git-hooks.mjs",
+    "gate": "node harness/agent-feedback.mjs gate",
+    "setup": "node harness/setup-eyes.mjs",
+    "lint": "eslint .",
+    "lint:full": "npm run lint && knip && jscpd workspace/game-template/game workspace/game-template/engine && depcruise workspace/game-template/game workspace/game-template/engine --config .dependency-cruiser.cjs"
+  },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@sparticuz/chromium": "^153.0.0",
     "@types/node": "^22.20.1",
+    "dependency-cruiser": "^18.9.0",
+    "esbuild": "^0.25.12",
+    "eslint": "^10.15.0",
+    "jscpd": "^5.4.3",
+    "knip": "^5.88.1",
     "playwright": "1.56.1",
     "typescript": "5.9.3",
+    "typescript-eslint": "^8.73.0",
     "vite": "7.3.6"
   }
 }

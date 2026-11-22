@@ -15,14 +15,10 @@
   </head>
   <body>
     <div id="left">
-      <!-- The game under test — its runtime.ts detects the parent frame and posts here. -->
       <iframe id="game" src="http://localhost:5173/" allow="autoplay"></iframe>
     </div>
     <div id="log"><h1>messages from the game ↓</h1></div>
     <script>
-      // Every retrovibe message is recorded verbatim for the verifier AND shown
-      // on screen for a human. Messages from the game frame that do NOT match
-      // the pinned envelope are recorded as violations.
       window.__messages = [];
       window.__violations = [];
       const VALID_TYPES = ['gameOver', 'scoreChanged', 'stateChanged'];

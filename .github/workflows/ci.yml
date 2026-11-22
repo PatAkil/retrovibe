@@ -1,0 +1,261 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  RETROVIBE_NO_GIT_HOOKS: '1'
+
+jobs:
+  gates:
+    name: Gates (lint, template clone, fixtures, harness)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Browser (Playwright Chromium) and eyes
+        run: |
+          npx playwright install --with-deps chromium
+          npm run setup
+          node -e 'const m = JSON.parse(require("fs").readFileSync("/tmp/retrovibe-eyes.json", "utf8")); console.log(m.reason); process.exit(m.ready === true ? 0 : 1)'
+      - name: npm run lint:full
+        id: lint
+        run: npm run lint:full 2>&1 | tee /tmp/lint-full.log
+      - name: Clone the template and npm run verify -- --full
+        id: verify
+        if: ${{ !cancelled() }}
+        run: |
+          rm -rf workspace/_ci
+          cp -r workspace/game-template workspace/_ci
+          cd workspace/_ci
+          npm run verify -- --full 2>&1 | tee /tmp/verify.log
+      - name: Fixtures check + build (engine copies refreshed)
+        id: fixtures
+        if: ${{ !cancelled() }}
+        run: |
+          : > /tmp/fixtures.log
+          fail=0
+          for dir in verification/*/; do
+            dir=${dir%/}
+            [ -f "$dir/game/main.ts" ] && [ -f "$dir/package.json" ] || continue
+            rm -rf "$dir/engine"
+            cp -r workspace/game-template/engine "$dir/engine"
+            for script in check build; do
+              if (cd "$dir" && npm run "$script" >> /tmp/fixtures.log 2>&1); then
+                echo "PASS  ${dir#verification/} $script" | tee -a /tmp/fixtures.log
+              else
+                echo "FAIL  ${dir#verification/} $script" | tee -a /tmp/fixtures.log
+                fail=1
+              fi
+            done
+          done
+          exit $fail
+      - name: Host harness (harness/verify.mjs) against the clone's dev server
+        id: harness
+        if: ${{ !cancelled() }}
+        run: |
+          cd workspace/_ci
+          setsid nohup npm run dev > /tmp/retrovibe-dev-_ci.log 2>&1 < /dev/null &
+          echo $! > /tmp/retrovibe-dev-_ci.pid
+          for i in $(seq 60); do
+            [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:5173/)" = 200 ] && break
+            sleep 0.5
+          done
+          cd "$GITHUB_WORKSPACE"
+          set +e
+          node harness/verify.mjs 2>&1 | tee /tmp/harness.log
+          code=${PIPESTATUS[0]}
+          kill -- -"$(cat /tmp/retrovibe-dev-_ci.pid)" 2>/dev/null
+          exit "$code"
+      - name: Gate summary
+        if: always()
+        env:
+          LINT: ${{ steps.lint.outcome }}
+          VERIFY: ${{ steps.verify.outcome }}
+          FIXTURES: ${{ steps.fixtures.outcome }}
+          HARNESS: ${{ steps.harness.outcome }}
+        run: |
+          log=/tmp/verify.log
+          if [ -f "$log" ]; then
+            awk '
+              function flush() { if (gate != "") print "::error title=Gate " gate " failed::" body; gate = "" }
+              /^FAIL  / { flush(); gate = $2; body = ""; next }
+              /^    / && gate != "" { body = body substr($0, 5) "%0A"; next }
+              { flush() }
+              END { flush() }
+            ' "$log"
+          fi
+          {
+            echo "## Gates"
+            echo
+            echo "| Step | Outcome |"
+            echo "|---|---|"
+            echo "| \`npm run lint:full\` (eslint, knip, jscpd, depcruise) | $LINT |"
+            echo "| template clone \`workspace/_ci\`: \`npm run verify -- --full\` | $VERIFY |"
+            echo "| fixtures: \`check\` + \`build\` | $FIXTURES |"
+            echo "| host harness \`harness/verify.mjs\` | $HARNESS |"
+            echo
+            echo "### \`npm run verify -- --full\` (template clone)"
+            echo
+            if [ -f "$log" ]; then
+              echo "| Result | Gate | Time | Note |"
+              echo "|---|---|---|---|"
+              grep -E '^(PASS|FAIL|INFO)  ' "$log" | while read -r result gate secs note; do
+                echo "| $result | \`$gate\` | $secs | $note |"
+              done
+              echo
+              echo "**$(grep -E '^TOTAL ' "$log" || echo 'TOTAL missing: verify crashed')**"
+            else
+              echo "verify did not run"
+            fi
+            echo
+            if [ -f /tmp/fixtures.log ]; then
+              echo "### Fixtures"
+              echo
+              grep -E '^(PASS|FAIL)  ' /tmp/fixtures.log | sed 's/^/- /'
+              echo
+            fi
+            echo "Host harness: $(grep -E '^HARNESS (OK|FAIL)' /tmp/harness.log 2>/dev/null | head -1 || echo 'not run')"
+            echo
+            echo "Screenshots of every scene: the \`look-screens\` artifact of this run."
+            if grep -q '^FAIL  ' "$log" 2>/dev/null; then
+              echo
+              echo '<details open><summary>verify output</summary>'
+              echo
+              echo '```'
+              cat "$log"
+              echo '```'
+              echo '</details>'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload look screenshots and logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: look-screens
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            /tmp/retrovibe-look/
+            /tmp/verify.log
+            /tmp/lint-full.log
+            /tmp/fixtures.log
+            /tmp/harness.log
+            /tmp/retrovibe-setup.log
+            /tmp/retrovibe-dev-_ci.log
+
+  graphics:
+    name: Graphics verification vs baseline (informational)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Browser (Playwright Chromium) and eyes
+        run: |
+          npx playwright install --with-deps chromium
+          npm run setup
+      - name: node verification/capture.mjs
+        id: capture
+        run: |
+          set +e
+          node verification/capture.mjs > /tmp/capture.log 2>&1
+          code=$?
+          cat /tmp/capture.log
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Capture table
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          node harness/ci-comment.mjs --log /tmp/capture.log --summary /tmp/graphics-summary.md \
+            --out /tmp/graphics-comment.md --head-sha "${HEAD_SHA:0:7}" \
+            --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          {
+            cat /tmp/graphics-summary.md
+            echo
+            echo "Every captured frame and \`compare.png\`: the \`graphics-frames\` artifact of this run."
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ steps.capture.outputs.code }}" != 0 ]; then
+            echo "::notice title=Graphics verification::capture exited ${{ steps.capture.outputs.code }} (see job summary)"
+          fi
+      - name: PR comment with the changed frames
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          short=${HEAD_SHA:0:7}
+          rel="pr-$PR/$short"
+          node harness/ci-comment.mjs --log /tmp/capture.log --summary /tmp/graphics-summary.md \
+            --publish "/tmp/graphics/publish/$rel" \
+            --url-prefix "https://raw.githubusercontent.com/$GITHUB_REPOSITORY/verification-screens/$rel" \
+            --head-sha "$short" \
+            --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            --out /tmp/graphics-comment.md
+          if [ -d "/tmp/graphics/publish/$rel" ]; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            store=/tmp/graphics-store
+            for attempt in 1 2 3; do
+              git worktree remove --force "$store" 2>/dev/null || true; rm -rf "$store"; git worktree prune
+              if git fetch -q --depth 1 origin verification-screens 2>/dev/null; then
+                git worktree add -q --detach "$store" FETCH_HEAD
+              else
+                git branch -D "verification-screens-$attempt" >/dev/null 2>&1 || true
+                git worktree add -q --orphan -b "verification-screens-$attempt" "$store"
+              fi
+              mkdir -p "$store/pr-$PR"
+              cp -r "/tmp/graphics/publish/$rel" "$store/pr-$PR/"
+              git -C "$store" add -A
+              git -C "$store" diff --cached --quiet || git -C "$store" commit -q -m "Verification frames for PR #$PR at $short"
+              git -C "$store" push -q origin HEAD:refs/heads/verification-screens && break
+              [ "$attempt" = 3 ] && { echo "::warning title=Graphics verification::could not push frames; images in the comment will not load"; }
+            done
+          fi
+          id=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --jq '.[] | select(.body | startswith("<!-- retrovibe-graphics -->")) | .id' | head -1)
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@/tmp/graphics-comment.md --jq .html_url
+          else
+            gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F body=@/tmp/graphics-comment.md --jq .html_url
+          fi
+      - name: Upload frames
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: graphics-frames
+          if-no-files-found: ignore
+          retention-days: 14
+          path: |
+            verification/out/
+            /tmp/capture.log
+            /tmp/retrovibe-setup.log

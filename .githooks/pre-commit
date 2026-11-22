@@ -1,0 +1,8 @@
+#!/bin/sh
+root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+[ -f "$root/harness/agent-feedback.mjs" ] || exit 0
+if ! command -v node >/dev/null 2>&1; then
+  echo "pre-commit: node not found, commit NOT verified" >&2
+  exit 0
+fi
+exec node "$root/harness/agent-feedback.mjs" precommit

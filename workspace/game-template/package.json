@@ -7,6 +7,9 @@
     "dev": "vite",
     "check": "tsc --noEmit",
     "build": "tsc --noEmit && vite build",
-    "smoke": "node smoke.mjs"
+    "smoke": "node smoke.mjs",
+    "lint": "eslint .",
+    "look": "node scripts/look.mjs",
+    "verify": "node scripts/verify.mjs"
   }
 }

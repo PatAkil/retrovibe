@@ -13,7 +13,12 @@ description: Use when changing anything that shapes how EVERY game looks — the
 
 ```
 verification/
-├── capture.mjs        # harness code (like harness/verify.mjs): drives the fixtures
+├── capture.mjs        # harness code: the CLI (capture / --accept / --game / --compare-games)
+├── fixtures.mjs       # each fixture's frame-indexed input script, moments and expected terminal scene
+├── session.mjs        # per-fixture dev server (own port), engine refresh, one page per run
+├── page-runner.mjs    # the init script injected into the page: virtual clock, seeded Math.random,
+│                      #   stubbed AudioContext, the 'retrovibe' event listener, the impact ring buffer
+├── compare.mjs        # baseline | candidate | diff composite and the two percentages per moment
 ├── baseline/          # the APPROVED look — <fixture>-<moment>.png, committed
 ├── out/               # last capture (gitignored): candidate frames + compare.png
 ├── space-dodge/       # fixture: PICO8 on black, 'stars', 3 hue-separated actors,
@@ -27,24 +32,24 @@ verification/
                        #   'bubbles' retuned into the band for a non-black ground
 ```
 
-- Each fixture is a clone of the template (`game/`, `index.html`, `smoke.mjs`, configs) **without a committed `engine/`**: `capture.mjs` deletes and re-copies `workspace/game-template/engine` into every fixture before each run, so a fixture can never test a stale engine. The copies are gitignored.
-- **Fixtures are frozen.** Their `game/main.ts` changes only when a new engine feature must be demonstrated to be measurable — with the user's explicit OK — and the corresponding input script in `capture.mjs` is updated in the same change. A fixture that stops producing one of its promised moments fails the run.
-- The driver runs each fixture in headless Chromium under a **virtual clock** (rAF and `performance.now` replaced, one exact 1/60 s step per frame), with **seeded `Math.random`** and a **stubbed AudioContext** (so the engine's noise synth never consumes seeded draws), dispatches each scripted **run**'s key events, and grabs the canvas at these **moments**: `title`, `play` (in motion), `paused` (fixed frames); `score` (2 frames after the first `scoreChanged`), `impact` (the last frozen death-tableau frame before `GAME_OVER`: burst + shake + flash), `end` (30 frames after `GAME_OVER`, flash faded), `win` (30 frames after `WIN`, cave-hopper's second run) — the semantic ones detected from the runtime's `[retrovibe]` console messages; plus `shell`, a real page screenshot of the title with the arcade cabinet around the canvas (the only moment that sees `index.html`). A run that ends in a terminal scene other than the one its script expects fails.
-- Two runs of the same tree produce identical frames (0.00 % changed on every moment). That is the instrument's self-check: a non-zero diff with no code change means something in the engine became non-deterministic (unseeded randomness, wall-clock reads) — report it, do not accept.
+- Each fixture is a clone of the template — modular `game/` (the template's module names: `app.ts`, `theme.ts`, `sprites.ts`, `state.ts`, `play.ts`, `view.ts`, `screens.ts`, `frame.ts`, …), its own `STYLE.md`, `index.html`, `smoke.mjs`, `scripts/`, configs — **without a committed `engine/`**: the capture deletes and re-copies `workspace/game-template/engine` into every fixture before each run, so a fixture can never test a stale engine. The copies are gitignored. Fixtures are linted like everything else (no exemptions), so they carry no comments — their art decisions live in their `STYLE.md`.
+- **Fixtures are frozen.** Their `game/` modules change only when a new engine feature must be demonstrated to be measurable, or when an engine API change forces a re-signature — with the user's explicit OK — and the fixture's input script in `fixtures.mjs` is updated in the same change. A fixture that stops producing one of its promised moments fails the run.
+- The driver starts each fixture's Vite server on its own port (`VG_PORT_BASE`, default 5301, plus the fixture's index in name order; `--game` uses base + 98, i.e. 5399) and stops it afterwards. It launches the browser through `harness/browser.mjs` (`CHROMIUM_PATH`, else the `/tmp/retrovibe-chromium` wrapper from `npm run setup`, else Playwright's own) and runs each fixture under a **virtual clock** (rAF and `performance.now` replaced, one exact 1/60 s step per frame), with **seeded `Math.random`** and a **stubbed AudioContext** (so the engine's noise synth never consumes seeded draws). It dispatches each scripted **run**'s key events and grabs the canvas at these **moments**: `title`, `play` (in motion), `paused` (fixed frames); `score` (2 frames after the first `scoreChanged`), `impact` (the last frozen death-tableau frame before `GAME_OVER`, from a 16-frame ring buffer: burst + shake + flash), `end` (30 frames after `GAME_OVER`, flash faded), `win` (30 frames after `WIN`, cave-hopper's second run) — the semantic ones detected from the runtime's standalone `retrovibe` window event (the game's `createRuntime()` dispatches it; nothing reads the console); plus `shell`, a real page screenshot of the title with the arcade cabinet around the canvas (the only moment that sees `index.html`). A run that ends in a terminal scene other than the one its script expects fails.
+- Two runs of the same tree produce identical frames (0.00 % changed on every moment, byte-identical PNGs). That is the instrument's self-check: a non-zero diff with no code change means something in the engine became non-deterministic (unseeded randomness, wall-clock reads) — report it, do not accept.
 - **What the instrument cannot see:** anything not driven by `requestAnimationFrame` (timers and promises never fire inside a run); mid-shake frames other than the ones captured; respawn frames; reduced-motion modes; and — most importantly — **the choices a future game-writer makes from guidance**. The fixtures have hard-coded style cards, so an edit to a skill's *advice* leaves all frames byte-identical. Guidance changes are verified differently: see "Verifying a guidance change" below.
 - The orchestrating session runs the loop itself (it is judgement work, not lifecycle command-following); `lifecycle-runner` never touches `verification/`.
 
 ## The loop
 
-Run it from the repo root. Never run the template in place; the fixtures are the only things that run here. First confirm the instrument is present on your branch — `ls verification/capture.mjs verification/baseline` — if it is not, you are on a branch that predates it: stop and say so rather than improvising a check.
+Run it from the repo root. Never run the template in place; the fixtures are the only things that run here. First confirm the instrument is present on your branch — `ls verification/capture.mjs verification/baseline` — if it is not, you are on a branch that predates it: stop and say so rather than improvising a check. The browser comes from `npm run setup` (see **playing-the-game** step 1).
 
 ### 1. Trigger
 
-Any of: a diff under `workspace/game-template/` (engine, `game/main.ts`, `index.html`); an edit to `ensuring-arcade-visuals`, to the visual items of `improving-game-quality`, or to `adding-easter-egg`'s palette-swap guidance; a change to `verification/` itself. If none applies, this skill does not run. Engine and template diffs take the fixture loop (steps 2–7); skill-text diffs take "Verifying a guidance change" (below) — a skill edit that also touches the engine takes both.
+Any of: a diff under `workspace/game-template/` (engine, `game/`, `STYLE.md`, `index.html`); an edit to `ensuring-arcade-visuals`, to the visual items of `improving-game-quality`, or to `adding-easter-egg`'s palette-swap guidance; a change to `verification/` itself. If none applies, this skill does not run. Engine and template diffs take the fixture loop (steps 2–7); skill-text diffs take "Verifying a guidance change" (below) — a skill edit that also touches the engine takes both.
 
 ### 2. Refresh the engine copies, then run the functional gates
 
-The fixtures carry no engine in git. Copy the template's engine into each one **first** — `capture.mjs` does this on its own, but `check`/`build` do not, so running them before a refresh checks a stale or missing copy:
+The fixtures carry no engine in git. Copy the template's engine into each one **first** — `capture.mjs` does this on its own, but `check`/`lint`/`build` do not, so running them before a refresh checks a stale or missing copy:
 
 ```bash
 rm -rf verification/space-dodge/engine && cp -r workspace/game-template/engine verification/space-dodge/engine
@@ -55,24 +60,26 @@ rm -rf verification/brick-bounce/engine && cp -r workspace/game-template/engine 
 Then, one plain command per fixture (some sandboxes reject shell loops and subshells):
 
 ```bash
-cd verification/space-dodge && npm run check && npm run build; cd ../..
-cd verification/cave-hopper && npm run check && npm run build; cd ../..
-cd verification/brick-bounce && npm run check && npm run build; cd ../..
+cd verification/space-dodge && npm run check && npm run lint && npm run build; cd ../..
+cd verification/cave-hopper && npm run check && npm run lint && npm run build; cd ../..
+cd verification/brick-bounce && npm run check && npm run lint && npm run build; cd ../..
 ```
 
-A fixture that no longer type-checks against the changed engine is an API break — fix the engine (or, with the user's OK, the fixture) before capturing. `dist/` folders left by `build` are gitignored; `rm -rf verification/*/dist` if you want them gone.
+A fixture that no longer type-checks against the changed engine is an API break — fix the engine (or, with the user's OK, re-signature the fixture) before capturing. `dist/` folders left by `build` are gitignored; `rm -rf verification/*/dist` if you want them gone.
 
 ### 3. Capture
 
 ```bash
-lsof -ti:5301,5302,5303 | xargs -r kill
+ps -eo pid,args | awk '/node .*vite/ && !/awk/'
 node verification/capture.mjs
 ```
+
+The capture starts and stops its own servers. The first line only checks for a leftover one from an interrupted run: `readlink /proc/<pid>/cwd` on each pid, and `kill <pid>` any whose folder is under `verification/`. If another worktree is capturing at the same time, give this one its own range instead: `VG_PORT_BASE=5401 node verification/capture.mjs`. A capture takes about 2–3 minutes.
 
 Exit status is nonzero only for a fixture that fails to boot, throws, misses a promised moment, ends in a terminal scene its script did not expect, or leaves a declared moment MISSING — those are hard failures. A baseline frame for a moment no fixture declares any more is reported as *stale* (not a failure) and removed by `--accept`. Pixel differences never fail the run; they are the *input* to step 4. Stdout ends with a table per fixture and moment with **two** percentages: pixels that changed *at all*, and pixels that changed *visibly* (largest channel delta ≥ 24/255).
 
 Read the table first, mechanically:
-- A change meant to be **invisible by default** (an opt-in feature, a refactor) must show **0.00 % | 0.00 % on every moment**. Anything else means the default path moved — a hard failure until explained. One known benign cause: an engine change that consumes a different number of `Math.random()` calls at start-up shifts every seeded ambient particle — the "any" column lights up on all moments while nothing looks different. Confirm that is the cause by reading the diff (only particles moved) and say so in the report; do not wave it through unexamined.
+- A change meant to be **invisible by default** (an opt-in feature, a refactor) must show **0.00 % | 0.00 % on every moment**. A **refactor** (an engine split, a fixture restructured into modules, a re-signature) is held to more than that: the frames must be **hash-identical**. Before the change, on the untouched tree, capture and record `(cd verification/out && sha256sum *-*.png) > /tmp/vg-before.sha`; after it, capture again and run `(cd verification/out && sha256sum -c /tmp/vg-before.sha)` — every line must say `OK`. Anything else means the default path moved — a hard failure until explained. One known benign cause: an engine change that consumes a different number of `Math.random()` calls at start-up shifts every seeded ambient particle — the "any" column lights up on all moments while nothing looks different. Confirm that is the cause by reading the diff (only particles moved) and say so in the report; do not wave it through unexamined.
 - A change meant to be **visible** must show non-zero on the moments it targets. 0.00 % | 0.00 % everywhere means the change is not wired into anything a game actually renders.
 - A change to a **global default** (vignette, scanline alpha, flash curve, font) legitimately touches most pixels on most moments: expect a high "any" column with a low "visible" column for a subtle tonal tweak (a vignette softening measured ~63 % | 0.00 %). The percentages say *where* and *how much*; only step 4 says *whether it is better*.
 
@@ -113,10 +120,11 @@ git add verification/baseline && git commit -m "verification: accept new baselin
 ### 7. Cleanup
 
 ```bash
-lsof -ti:5301,5302,5303,5399 | xargs -r kill
+ps -eo pid,args | awk '/node .*vite/ && !/awk/'
+rm -rf verification/*/dist
 ```
 
-`verification/out/` and the fixture `engine/` copies are gitignored; leave them.
+The capture stops its own servers, so the first line normally prints nothing; any pid it does print whose `readlink /proc/<pid>/cwd` is under `verification/` is a leftover — `kill <pid>`. `verification/out/` and the fixture `engine/` copies are gitignored; leave them.
 
 ## Verifying a guidance change
 
@@ -126,10 +134,10 @@ When the diff is to a *skill* (what future game-writers are told to do), the fix
    - `vg-space`: "A top-down space game: move a ship, collect crystals, dodge a drifting mine; touching the mine ends the run."
    - `vg-cave`: "A one-screen platformer in a cave: jump between ledges over spikes, grab three gems, reach the exit door."
    - `vg-brick`: "A breakout game under water: paddle, ball, a wall of shells to clear; three balls then game over."
-2. Capture each with a label: `node verification/capture.mjs --game workspace/vg-space --label cand` writes `verification/out/game/cand/vg-space-{shell,title,play,paused}.png` from a generic input script (start, move, pause, then a lawnmower sweep of the arena). The sweep also writes `score`, `impact` (a full-screen flash detected by a brightness jump) and `end` **when the unknown game happens to reach them** — absent files mean the sweep never got there, not that feedback is missing; judge R4 from whatever impact/score frames exist, and from the game's code when none do. Labelled game captures survive fixture captures. The `--game` server uses port 5399.
+2. Capture each with a label (the game's own dev server need not run — the capture starts one): `node verification/capture.mjs --game workspace/vg-space --label cand` writes `verification/out/game/cand/vg-space-{shell,title,play,paused}.png` from a generic input script (start, move, pause, then a lawnmower sweep of the arena). The sweep also writes `score`, `impact` (a full-screen flash detected by a brightness jump) and `end` **when the unknown game happens to reach them** — absent files mean the sweep never got there, not that feedback is missing; judge R4 from whatever impact/score frames exist, and from the game's code when none do. Labelled game captures survive fixture captures. The `--game` server uses `VG_PORT_BASE` + 98 (5399 by default). Before capturing, also `npm run look -- --scene <s>` each game for its `win`/`gameover` frames the sweep may miss — the dev hook reaches every scene the game supports.
 3. View every frame at full size and score R1–R7 per game, in words, with regions. The three fixtures are the bar: a generated game that reads worse than its fixture counterpart on any criterion is evidence the guidance regressed.
 4. For a before/after, generate the same three prompts from the **base** branch in a separate git worktree (`git worktree add ../rv-base <base-branch>` — never `git stash`, which does not move untracked game folders), capture them there with `--label base`, then copy that worktree's `verification/out/game/base/` into this checkout's `verification/out/game/base/` and run `node verification/capture.mjs --compare-games base cand` for a side-by-side composite. Generation varies run to run, so judge the *pattern* across the three games, not one frame.
-5. Report as in step 5; afterwards `rm -rf workspace/vg-space workspace/vg-cave workspace/vg-brick` (never the template, never the fixtures), remove the base worktree, and `lsof -ti:5399 | xargs -r kill`.
+5. Report as in step 5; afterwards stop each game's dev server (`kill -- -$(cat /tmp/retrovibe-dev-vg-space.pid) && rm /tmp/retrovibe-dev-vg-space.pid`, likewise for the other two), `rm -rf workspace/vg-space workspace/vg-cave workspace/vg-brick` (never the template, never the fixtures), and remove the base worktree.
 
 ## Reviewing at scale — blind and adversarial passes
 
@@ -142,12 +150,12 @@ Both report per criterion with frame coordinates or regions; the orchestrating s
 
 ## Adding a fixture
 
-Only when an existing fixture cannot exercise something the generator now does (a new ambient type, a new scene kind, a scrolling level). Clone the template into `verification/<name>` (`cp -r workspace/game-template verification/<name>`, then `rm -rf verification/<name>/engine`), write a small, plain game (≈200 lines, one style card, every scene reachable by a fixed key script), add its input script and promised moments to `FIXTURES` in `capture.mjs`, run the loop, get the user's approval, accept. `capture.mjs` allocates `5301 + index` in name order, so a fourth fixture takes 5304 — add it to the reclaim/cleanup lines here.
+Only when an existing fixture cannot exercise something the generator now does (a new ambient type, a new scene kind, a scrolling level). Clone the template into `verification/<name>` (`cp -r workspace/game-template verification/<name>`, then `rm -rf verification/<name>/engine verification/<name>/game/devhook.ts` and wire `main.ts` without the hook — the fixture runs under the capture's virtual clock instead), write a small, plain game in the template's modules (one `STYLE.md`, lint-clean, every scene reachable by a fixed key script), add its input script and promised moments to `FIXTURES` in `verification/fixtures.mjs`, run the loop, get the user's approval, accept. Ports are `VG_PORT_BASE + index` in name order, so the base range grows by one.
 
 ## Checklist
 
 - [ ] Trigger applies (template/engine, visual skill, or `verification/` changed).
-- [ ] Engine copies refreshed, then functional gates green on all three fixtures.
+- [ ] Engine copies refreshed, then functional gates (check, lint, build) green on all three fixtures.
 - [ ] Capture ran with exit 0 (all promised moments produced, runs ended in the expected scene, no MISSING rows).
 - [ ] For a guidance (skill) change: three prompt-set games generated, captured with `--game`, and judged.
 - [ ] Diff table read mechanically: invisible-by-default → all 0.00 % | 0.00 %; targeted change → non-zero where intended; global default → high "any", judged by eye.
@@ -155,4 +163,4 @@ Only when an existing fixture cannot exercise something the generator now does (
 - [ ] Per-criterion (R1–R8), per-fixture verdicts written; regressions named with a region.
 - [ ] Composite and verdicts sent to the user; accept/fix/revert recommended.
 - [ ] Baseline accepted and committed only after user approval.
-- [ ] Ports 5301–5303 (and 5399 after a `--game` run) released.
+- [ ] No leftover capture servers (`ps … | awk` prints none under `verification/`); `verification/*/dist` removed.

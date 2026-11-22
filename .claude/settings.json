@@ -1,0 +1,85 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ \"$(uname -s)\" = Linux ] && [ -n \"${AIR_ARTIFACTS_DIR:-}${JBCENTRAL_EXPOSED_PORT_URL_5173:-}\" ] && [ -f \"$CLAUDE_PROJECT_DIR/harness/setup-eyes.mjs\" ] && command -v node >/dev/null 2>&1 && cd \"$CLAUDE_PROJECT_DIR\" && timeout 600 node harness/setup-eyes.mjs >/dev/null 2>>/tmp/retrovibe-setup.log; exit 0",
+            "async": true,
+            "timeout": 620
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -f \"$CLAUDE_PROJECT_DIR/harness/agent-feedback.mjs\" ] && command -v node >/dev/null 2>&1 && exec node \"$CLAUDE_PROJECT_DIR/harness/agent-feedback.mjs\" session-start; exit 0",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -f \"$CLAUDE_PROJECT_DIR/harness/agent-feedback.mjs\" ] && command -v node >/dev/null 2>&1 && exec node \"$CLAUDE_PROJECT_DIR/harness/agent-feedback.mjs\" subagent-start; exit 0",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|Edit|MultiEdit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -f \"$CLAUDE_PROJECT_DIR/harness/agent-feedback.mjs\" ] && command -v node >/dev/null 2>&1 && exec node \"$CLAUDE_PROJECT_DIR/harness/agent-feedback.mjs\" edit; exit 0",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "Bash|Edit|MultiEdit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -f \"$CLAUDE_PROJECT_DIR/harness/agent-feedback.mjs\" ] && command -v node >/dev/null 2>&1 && exec node \"$CLAUDE_PROJECT_DIR/harness/agent-feedback.mjs\" edit; exit 0",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -f \"$CLAUDE_PROJECT_DIR/harness/agent-feedback.mjs\" ] && command -v node >/dev/null 2>&1 && exec node \"$CLAUDE_PROJECT_DIR/harness/agent-feedback.mjs\" stop; exit 0",
+            "timeout": 600
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -f \"$CLAUDE_PROJECT_DIR/harness/agent-feedback.mjs\" ] && command -v node >/dev/null 2>&1 && exec node \"$CLAUDE_PROJECT_DIR/harness/agent-feedback.mjs\" stop; exit 0",
+            "timeout": 600
+          }
+        ]
+      }
+    ]
+  }
+}
