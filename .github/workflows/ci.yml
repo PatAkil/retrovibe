@@ -34,7 +34,7 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - name: Browser (Playwright Chromium) and eyes
         run: |
-          npx playwright install --with-deps chromium
+          npx playwright install --with-deps chromium || echo "::notice title=Browser::Playwright has no Chromium for this runner image; npm run setup extracts one instead"
           npm run setup
           node -e 'const m = JSON.parse(require("fs").readFileSync("/tmp/retrovibe-eyes.json", "utf8")); console.log(m.reason); process.exit(m.ready === true ? 0 : 1)'
       - name: npm run lint:full
@@ -181,7 +181,7 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - name: Browser (Playwright Chromium) and eyes
         run: |
-          npx playwright install --with-deps chromium
+          npx playwright install --with-deps chromium || echo "::notice title=Browser::Playwright has no Chromium for this runner image; npm run setup extracts one instead"
           npm run setup
       - name: node verification/capture.mjs
         id: capture
