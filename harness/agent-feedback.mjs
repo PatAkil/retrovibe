@@ -3,7 +3,7 @@ import { killChildren } from './feedback-checks.mjs';
 import { gateByHand, precommit } from './feedback-commit.mjs';
 import { handleEdit } from './feedback-edit.mjs';
 import { handleStop } from './feedback-stop.mjs';
-import { agentKey, findRepo, freshAgent, logEvent, updateState } from './feedback-state.mjs';
+import { agentKey, findRepo, freshAgent, logEvent, readState, releaseActiveLocks, updateState } from './feedback-state.mjs';
 import { ownFingerprints } from './feedback-units.mjs';
 
 const LIMIT_MS = { edit: 55000, stop: 580000, 'session-start': 25000, 'subagent-start': 25000, precommit: 590000, gate: 590000 };
@@ -22,17 +22,25 @@ function readInput(command) {
 
 function sessionStart(input, repo) {
   const session = String(input.session_id ?? 'cli');
+  const existing = readState(repo.dir);
+  const fps = session in existing.baselines ? null : ownFingerprints(repo.root);
+  const agent = `main:${session}` in existing.agents ? null : freshAgent(repo.root, {});
   updateState(repo.dir, (state) => {
-    state.baselines[session] ??= ownFingerprints(repo.root);
-    state.agents[`main:${session}`] ??= freshAgent(repo.root, {});
+    if (fps !== null) {
+      state.baselines[session] ??= fps;
+    }
+    if (agent !== null) {
+      state.agents[`main:${session}`] ??= agent;
+    }
   });
   return { code: 0 };
 }
 
 function subagentStart(input, repo) {
   const key = `agent:${String(input.agent_id ?? 'unknown')}`;
+  const agent = freshAgent(repo.root, { startFps: ownFingerprints(repo.root) });
   updateState(repo.dir, (state) => {
-    state.agents[key] = freshAgent(repo.root, { startFps: ownFingerprints(repo.root) });
+    state.agents[key] = agent;
     state.active[key] = Date.now();
   });
   return { code: 0 };
@@ -66,8 +74,9 @@ async function main() {
   }
   setTimeout(() => {
     killChildren();
+    releaseActiveLocks();
     process.stderr.write(`agent-feedback ${command}: gave up after ${String(LIMIT_MS[command] / 1000)}s\n`);
-    process.exit(command === 'precommit' ? 1 : 0);
+    process.exit(command === 'precommit' || command === 'gate' ? 1 : 0);
   }, LIMIT_MS[command]).unref();
   const input = readInput(command);
   const repo = findRepo(typeof input.cwd === 'string' ? input.cwd : process.cwd());
@@ -82,5 +91,6 @@ try {
   await main();
 } catch (e) {
   killChildren();
+  releaseActiveLocks();
   emit({ code: 1, stderr: `agent-feedback: internal error, skipped: ${e instanceof Error ? e.message : String(e)}\n` });
 }

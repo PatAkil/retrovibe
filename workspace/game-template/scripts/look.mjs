@@ -172,15 +172,16 @@ async function main() {
     return;
   }
   let result = { ok: false, state: null, errors, shot: null };
-  const browser = await launchBrowser();
+  let browser;
   try {
+    browser = await launchBrowser();
     const page = await browser.newPage();
     collectErrors(page, errors);
     result = await look(page, errors);
   } catch (e) {
     errors.push(`look: ${e.message.split('\n')[0]}`);
   } finally {
-    await browser.close();
+    await browser?.close();
   }
   emit(result, result.unsupported === true && errors.length === 0 ? EXIT_UNSUPPORTED : Number(!result.ok));
 }

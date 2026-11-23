@@ -36,15 +36,9 @@ jobs:
         run: |
           npx playwright install --with-deps chromium || echo "::notice title=Browser::Playwright has no Chromium for this runner image; npm run setup extracts one instead"
           npm run setup
-          node -e 'const m = JSON.parse(require("fs").readFileSync("/tmp/retrovibe-eyes.json", "utf8")); console.log(m.reason); process.exit(m.ready === true ? 0 : 1)'
+          node --input-type=module -e 'import { readFileSync } from "node:fs"; import { EYES_MARKER } from "./harness/browser.mjs"; const m = JSON.parse(readFileSync(EYES_MARKER, "utf8")); console.log(m.reason); process.exit(m.ready === true ? 0 : 1)'
       - name: Fixture engine copies (gitignored, refreshed from the template)
-        run: |
-          for dir in verification/*/; do
-            dir=${dir%/}
-            [ -f "$dir/game/main.ts" ] && [ -f "$dir/package.json" ] || continue
-            rm -rf "$dir/engine"
-            cp -r workspace/game-template/engine "$dir/engine"
-          done
+        run: node harness/sync-fixture-engines.mjs
       - name: npm run lint:full
         id: lint
         run: npm run lint:full 2>&1 | tee /tmp/lint-full.log
@@ -166,7 +160,8 @@ jobs:
             /tmp/lint-full.log
             /tmp/fixtures.log
             /tmp/harness.log
-            /tmp/retrovibe-setup.log
+            /tmp/retrovibe-*/setup.log
+            ${{ runner.temp }}/retrovibe-*/setup.log
             /tmp/retrovibe-dev-_ci.log
 
   graphics:
@@ -240,6 +235,7 @@ jobs:
                 git branch -D "verification-screens-$attempt" >/dev/null 2>&1 || true
                 git worktree add -q --orphan -b "verification-screens-$attempt" "$store"
               fi
+              rm -rf "$store/pr-$PR"
               mkdir -p "$store/pr-$PR"
               cp -r "/tmp/graphics/publish/$rel" "$store/pr-$PR/"
               git -C "$store" add -A
@@ -264,4 +260,5 @@ jobs:
           path: |
             verification/out/
             /tmp/capture.log
-            /tmp/retrovibe-setup.log
+            /tmp/retrovibe-*/setup.log
+            ${{ runner.temp }}/retrovibe-*/setup.log

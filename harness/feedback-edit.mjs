@@ -1,22 +1,47 @@
-import { basename, isAbsolute, join, relative } from 'node:path';
+import { realpathSync } from 'node:fs';
+import { basename, dirname, isAbsolute, join, normalize, relative } from 'node:path';
 import { engineMissing, lintFiles, toolsMissing, typed, typeErrors } from './feedback-checks.mjs';
 import {
-  acquire, agentKey, claimedByOther, diffSnapshots, gatedFiles, isSubagent, othersBusy, release,
+  acquire, agentKey, claimedByOther, diffSnapshots, gatedFiles, isSubagent, othersBusy, readState, release,
   statSnapshot, updateState,
 } from './feedback-state.mjs';
 import { GRAPHICS_REMINDER, ownFingerprints, touchesGraphics, unitsOf } from './feedback-units.mjs';
 
 const SLACK_MS = 2000;
+const FALLBACK_WINDOW_MS = 15000;
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
 const MAX_LINES = 40;
 const TYPED_KINDS = new Set(['user', 'template', 'fixture']);
 const BRAND = 'Retrovibe per-edit check';
 
+function realPathOrSelf(path) {
+  try {
+    return realpathSync(path);
+  } catch {
+    return path;
+  }
+}
+
+function resolveReal(path) {
+  try {
+    return realpathSync(path);
+  } catch {
+    const dir = dirname(path);
+    return dir === path ? path : join(realPathOrSelf(dir), basename(path));
+  }
+}
+
+function normalizeNamedPath(path, realRoot) {
+  const rel = isAbsolute(path) ? relative(realRoot, resolveReal(path)) : normalize(path);
+  return rel.replace(/\\/g, '/').replace(/^\.\//, '');
+}
+
 function namedPaths(input, root) {
   const toolInput = input.tool_input ?? {};
+  const realRoot = realPathOrSelf(root);
   return new Set([toolInput.file_path, toolInput.notebook_path]
-    .filter((p) => typeof p === 'string')
-    .map((p) => (isAbsolute(p) ? relative(root, p) : p)));
+    .filter((p) => typeof p === 'string' && p !== '')
+    .map((p) => normalizeNamedPath(p, realRoot)));
 }
 
 function mentions(command, path) {
@@ -44,11 +69,9 @@ function previousSnapshot(agent, current, windowStart) {
   return Object.fromEntries(Object.entries(current).filter(([, v]) => v[0] < windowStart));
 }
 
-function recordBaseline(input, repo, state, key) {
-  const session = String(input.session_id ?? 'cli');
-  if (!isSubagent(key) && !(session in state.baselines)) {
-    state.baselines[session] = ownFingerprints(repo.root);
-  }
+function commandWindowMs(input) {
+  const raw = Number(input.duration_ms);
+  return Number.isFinite(raw) && raw > 0 ? raw : FALLBACK_WINDOW_MS;
 }
 
 function attributionContext(input, repo, state, key) {
@@ -56,7 +79,7 @@ function attributionContext(input, repo, state, key) {
   const command = input.tool_input?.command;
   return {
     state, key, now,
-    windowStart: now - Number(input.duration_ms ?? 0) - SLACK_MS,
+    windowStart: now - commandWindowMs(input) - SLACK_MS,
     tool: String(input.tool_name ?? ''),
     named: namedPaths(input, repo.root),
     command: typeof command === 'string' ? command : '',
@@ -68,20 +91,25 @@ function needsReminder(repo, agent, mine) {
   return agent?.reminded !== true && touchesGraphics(unitsOf(repo.root, mine));
 }
 
-function planChecks(input, repo, state) {
+function storeBaseline(state, prep) {
+  if (prep.baseline !== null) {
+    state.baselines[prep.session] ??= prep.baseline;
+  }
+}
+
+function planChecks(input, repo, state, prep) {
   const key = agentKey(input);
   const ctx = attributionContext(input, repo, state, key);
-  const current = statSnapshot(repo.root, gatedFiles(repo.root));
   const agent = state.agents[key];
-  const changes = diffSnapshots(previousSnapshot(agent, current, ctx.windowStart), current, ctx.now);
-  recordBaseline(input, repo, state, key);
+  const changes = diffSnapshots(previousSnapshot(agent, prep.current, ctx.windowStart), prep.current, ctx.now);
+  storeBaseline(state, prep);
   const mine = changes.filter((c) => attributed(ctx, c)).map((c) => c.path);
   for (const path of mine) {
     state.claims[path] = { agent: key, at: ctx.now };
   }
   const touched = [...new Set([...(agent?.touched ?? []), ...mine])];
   const remind = needsReminder(repo, agent, mine);
-  state.agents[key] = { ...agent, snap: current, seen: ctx.now, touched, reminded: remind ? true : agent?.reminded === true };
+  state.agents[key] = { ...agent, snap: prep.current, seen: ctx.now, touched, reminded: remind ? true : agent?.reminded === true };
   const event = input.hook_event_name === 'PostToolUseFailure' ? 'PostToolUseFailure' : 'PostToolUse';
   return { key, event, mine, remind, others: ctx.others, seen: new Set(agent?.reported ?? []), claims: { ...state.claims } };
 }
@@ -135,7 +163,7 @@ async function runChecks(plan, repo) {
   const targets = typeTargets(repo, existing);
   const [lint, ...perUnit] = await Promise.all([
     lintFiles(repo.root, existing),
-    ...targets.units.map((u) => typeErrors(repo.root, repo.dir, u)),
+    ...targets.units.map((u) => typeErrors(repo.root, repo.dir, u, 'edit')),
   ]);
   const notes = [...targets.notes, ...(plan.remind ? [GRAPHICS_REMINDER] : [])];
   return present(plan, { lint, types: perUnit.flat(), notes });
@@ -150,6 +178,18 @@ function warnMissingOnce(repo, key) {
   return fresh ? { code: 1, stderr: 'agent-feedback: node_modules is missing, so per-edit lint and type feedback is off. Run npm install at the repo root.\n' } : { code: 0 };
 }
 
+function preparePlan(input, repo) {
+  const key = agentKey(input);
+  const session = String(input.session_id ?? 'cli');
+  const existing = readState(repo.dir);
+  const needsBaseline = !isSubagent(key) && !(session in existing.baselines);
+  return {
+    session,
+    current: statSnapshot(repo.root, gatedFiles(repo.root)),
+    baseline: needsBaseline ? ownFingerprints(repo.root) : null,
+  };
+}
+
 export async function handleEdit(input, repo) {
   if (toolsMissing(repo.root).length) {
     return warnMissingOnce(repo, agentKey(input));
@@ -159,7 +199,8 @@ export async function handleEdit(input, repo) {
     return { code: 1, stderr: 'agent-feedback: another per-edit check held the lock for 20s; skipped this one (the end-of-turn gate still runs).\n' };
   }
   try {
-    const plan = updateState(repo.dir, (state) => planChecks(input, repo, state));
+    const prep = preparePlan(input, repo);
+    const plan = updateState(repo.dir, (state) => planChecks(input, repo, state, prep));
     if (plan.mine.length === 0) {
       return { code: 0 };
     }

@@ -1,27 +1,28 @@
 import { spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ensureEyesDir, EYES_LOCK, EYES_MARKER, SETUP_LOG, WRAPPER } from './browser.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const BIN = '/tmp/chromium';
-const LIBS = '/tmp/al2023/lib';
-const FONTS = '/tmp/fonts/fonts.conf';
-const WRAPPER = '/tmp/retrovibe-chromium';
-const MARKER = '/tmp/retrovibe-eyes.json';
-const LOCK = '/tmp/retrovibe-eyes.lock';
-const SETUP_LOG = '/tmp/retrovibe-setup.log';
+const TMP = tmpdir();
+const BIN = join(TMP, 'chromium');
+const LIBS = join(TMP, 'al2023', 'lib');
+const FONTS_DIR = join(TMP, 'fonts');
+const FONTS = join(FONTS_DIR, 'fonts.conf');
 const FORCE = process.argv.includes('--force');
 const APT_PACKAGES = ['libnspr4', 'libnss3', 'libsqlite3-0'];
 const PROBE_PAGE = '<canvas width="8" height="8"></canvas>';
 const t0 = Date.now();
+const shQuote = (s) => `'${s.replaceAll("'", "'\\''")}'`;
 
 const WRAPPER_TEXT = [
   '#!/bin/sh',
-  `export LD_LIBRARY_PATH=${LIBS}\${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}`,
-  ': "${FONTCONFIG_PATH:=/tmp/fonts}"',
+  `export LD_LIBRARY_PATH=${shQuote(LIBS)}\${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}`,
+  `if [ -z "\${FONTCONFIG_PATH:-}" ]; then FONTCONFIG_PATH=${shQuote(FONTS_DIR)}; fi`,
   'export FONTCONFIG_PATH',
-  `exec ${BIN} --headless=shell --no-sandbox --disable-gpu "$@"`,
+  `exec ${shQuote(BIN)} --headless=shell --no-sandbox --disable-gpu "$@"`,
   '',
 ].join('\n');
 
@@ -34,7 +35,7 @@ const firstLine = (text) => String(text).trim().split('\n')[0];
 
 function readMarker() {
   try {
-    return JSON.parse(readFileSync(MARKER, 'utf8'));
+    return JSON.parse(readFileSync(EYES_MARKER, 'utf8'));
   } catch {
     return null;
   }
@@ -42,7 +43,7 @@ function readMarker() {
 
 function writeMarker(ready, reason, chromium) {
   const marker = { ready, reason, chromium, at: new Date().toISOString() };
-  writeFileSync(MARKER, `${JSON.stringify(marker)}\n`);
+  writeFileSync(EYES_MARKER, `${JSON.stringify(marker)}\n`);
   log(`marker ${JSON.stringify(marker)}`);
   return marker;
 }
@@ -156,10 +157,14 @@ async function fullSetup() {
     ensureNodeModules();
     if (envChromium() !== '') {
       await launchCheck(envChromium());
+      if (envChromium() !== WRAPPER) {
+        rmSync(WRAPPER, { force: true });
+      }
       return writeMarker(true, 'launch ok (CHROMIUM_PATH)', envChromium());
     }
     const own = await playwrightDefault();
     if (own) {
+      rmSync(WRAPPER, { force: true });
       return writeMarker(true, 'launch ok (playwright browser)', own);
     }
     return await extractedSetup();
@@ -173,7 +178,7 @@ function exportEnv(marker) {
   if (!file || marker.chromium !== WRAPPER) {
     return;
   }
-  const line = `export CHROMIUM_PATH=${WRAPPER}`;
+  const line = `export CHROMIUM_PATH=${shQuote(WRAPPER)}`;
   const current = existsSync(file) ? readFileSync(file, 'utf8') : '';
   if (!current.includes(line)) {
     appendFileSync(file, `${line}\n`);
@@ -208,26 +213,41 @@ function fastPath() {
 }
 
 function takeLock() {
-  try {
-    mkdirSync(LOCK);
-    return true;
-  } catch {
-    if (Date.now() - statSync(LOCK).mtimeMs > 600000) {
-      rmSync(LOCK, { recursive: true, force: true });
-      return takeLock();
+  for (;;) {
+    try {
+      mkdirSync(EYES_LOCK);
+      return true;
+    } catch (err) {
+      if (err.code !== 'EEXIST') {
+        throw err;
+      }
+      let mtimeMs;
+      try {
+        mtimeMs = statSync(EYES_LOCK).mtimeMs;
+      } catch (statErr) {
+        if (statErr.code === 'ENOENT') {
+          continue;
+        }
+        throw statErr;
+      }
+      if (Date.now() - mtimeMs > 600000) {
+        rmSync(EYES_LOCK, { recursive: true, force: true });
+        continue;
+      }
+      return false;
     }
-    return false;
   }
 }
 
 async function waitForOtherRun() {
-  for (let i = 0; i < 600 && existsSync(LOCK); i++) {
+  for (let i = 0; i < 600 && existsSync(EYES_LOCK); i++) {
     await sleep(500);
   }
   return readMarker() ?? writeMarker(false, 'another setup run did not finish', WRAPPER);
 }
 
 async function main() {
+  ensureEyesDir();
   const fast = fastPath();
   if (fast) {
     report(fast);
@@ -241,7 +261,7 @@ async function main() {
     log(FORCE ? 'setup (forced)' : 'setup');
     report(await fullSetup());
   } finally {
-    rmSync(LOCK, { recursive: true, force: true });
+    rmSync(EYES_LOCK, { recursive: true, force: true });
   }
 }
 

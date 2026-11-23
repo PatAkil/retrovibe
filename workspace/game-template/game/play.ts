@@ -21,10 +21,14 @@ function moveHazard(g: Game, dt: number): void {
   hazard.vy *= timeRamp;
   hazard.x += hazard.vx * dt;
   hazard.y += hazard.vy * dt;
-  if (hazard.x < SAFE_MARGIN || hazard.x > W - SAFE_MARGIN - hazard.w) {
+  const maxX = W - SAFE_MARGIN - hazard.w;
+  const maxY = H - SAFE_MARGIN - hazard.h;
+  if (hazard.x < SAFE_MARGIN || hazard.x > maxX) {
+    hazard.x = clamp(hazard.x, SAFE_MARGIN, maxX);
     hazard.vx *= -1;
   }
-  if (hazard.y < SAFE_MARGIN || hazard.y > H - SAFE_MARGIN - hazard.h) {
+  if (hazard.y < SAFE_MARGIN || hazard.y > maxY) {
+    hazard.y = clamp(hazard.y, SAFE_MARGIN, maxY);
     hazard.vy *= -1;
   }
 }

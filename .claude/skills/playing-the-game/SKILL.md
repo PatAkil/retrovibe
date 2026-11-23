@@ -16,7 +16,7 @@ One server at a time: the port is pinned to 5173 with `strictPort: true` in the 
 ### 1. Eyes up — the browser
 
 ```bash
-cat /tmp/retrovibe-eyes.json
+cat "${TMPDIR:-/tmp}/retrovibe-$(id -u)/eyes.json"
 ```
 
 If the file is missing or does not say `"ready":true`, run at the repo root:
@@ -25,14 +25,14 @@ If the file is missing or does not say `"ready":true`, run at the repo root:
 npm run setup
 ```
 
-It is idempotent (a second run returns in well under a second) and touches only the browser — never a dev server. It uses `CHROMIUM_PATH` when set, else Playwright's own browser, else extracts Chromium from the `@sparticuz/chromium` devDependency behind the wrapper `/tmp/retrovibe-chromium`, proves a launch, and prints one line (`eyes: ready - … | chromium /tmp/retrovibe-chromium | 0.00s`). `NOT READY - <reason>` exits 1; details are in `/tmp/retrovibe-setup.log`; `--force` redoes everything. `npx playwright install chromium` is never required (it is blocked here).
+It is idempotent (a second run returns in well under a second) and touches only the browser — never a dev server. It uses `CHROMIUM_PATH` when set, else Playwright's own browser, else extracts Chromium from the `@sparticuz/chromium` devDependency behind the wrapper `${TMPDIR:-/tmp}/retrovibe-<uid>/chromium`, proves a launch, and prints one line (`eyes: ready - … | chromium ${TMPDIR:-/tmp}/retrovibe-<uid>/chromium | 0.00s`). `NOT READY - <reason>` exits 1; details are in `${TMPDIR:-/tmp}/retrovibe-<uid>/setup.log`; `--force` redoes everything. `npx playwright install chromium` is never required (it is blocked here).
 
 ### 2. This game's server on 5173
 
-From the game folder, first ask whether 5173 already serves **this** game — if this prints `200`, skip to step 3:
+From the game folder, first ask whether 5173 already serves **this** game (`/__retrovibe_root` returns `{"root":"<realpath>"}`) — if this exits 0 (prints `this game`), skip to step 3:
 
 ```bash
-cd workspace/<game-name> && curl -s -o /dev/null -w '%{http_code}' "http://localhost:5173/@fs$PWD/index.html"
+cd workspace/<game-name> && curl -sf http://localhost:5173/__retrovibe_root | grep -Fq "\"$(pwd -P)\"" && echo "this game"
 ```
 
 Otherwise reclaim the port. Stop every server a pid file knows about, then check for orphans a past session left without one:
@@ -84,10 +84,10 @@ One line per gate — eyes, serve, lint, check, build, smoke (plus `sim:quick` a
 
 ```bash
 kill -0 "$(cat /tmp/retrovibe-dev-<game-name>.pid)" && echo alive
-curl -s -o /dev/null -w '%{http_code}' "http://localhost:5173/@fs$PWD/index.html"
+curl -sf http://localhost:5173/__retrovibe_root | grep -Fq "\"$(pwd -P)\"" && echo "this game"
 ```
 
-The first must print `alive`, the second `200`. If either fails, relaunch (step 2) and re-verify — never send "ready to play" against a dead port or another game's server.
+The first must print `alive`, the second `this game` (exit 0 when `/__retrovibe_root` returns `{"root":"<realpath>"}` matching `pwd -P`). If either fails, relaunch (step 2) and re-verify — never send "ready to play" against a dead port or another game's server.
 
 **The URL**: when `JBCENTRAL_EXPOSED_PORT_URL_5173` is set (a cloud box with an exposed port — the game's `vite.config.ts` then binds 0.0.0.0 and serves HMR over wss), give that public URL once `curl -s -o /dev/null -w '%{http_code}' "$JBCENTRAL_EXPOSED_PORT_URL_5173"` prints 200; otherwise `http://localhost:5173/`.
 

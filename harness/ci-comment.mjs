@@ -4,6 +4,7 @@ import { join } from 'node:path';
 const COMMENT_MARKER = '<!-- retrovibe-graphics -->';
 const MAX_PAIRS = 8;
 const ROW = /^ {2}(\S+)\s+(\S+)\s+(.+)$/;
+const SAFE_IDENT = /^[A-Za-z0-9_-]+$/;
 const NUMBERS = /^(\d+\.\d+) % \| +(\d+\.\d+) %$/;
 
 const args = process.argv.slice(2);
@@ -21,11 +22,16 @@ function parseRow(line) {
   if (!m) {
     return null;
   }
+  const name = String(m[1]);
+  const moment = String(m[2]);
+  if (!SAFE_IDENT.test(name) || !SAFE_IDENT.test(moment)) {
+    return null;
+  }
   const cell = String(m[3]).trim();
   const nums = NUMBERS.exec(cell.replace(/\s+/g, ' '));
   const any = nums ? Number(nums[1]) : null;
   const visible = nums ? Number(nums[2]) : null;
-  return { name: String(m[1]), moment: String(m[2]), cell, any, visible, changed: any === null || any > 0 };
+  return { name, moment, cell, any, visible, changed: any === null || any > 0 };
 }
 
 function parseLog(text) {

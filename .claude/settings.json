@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "[ \"$(uname -s)\" = Linux ] && [ -n \"${AIR_ARTIFACTS_DIR:-}${JBCENTRAL_EXPOSED_PORT_URL_5173:-}\" ] && [ -f \"$CLAUDE_PROJECT_DIR/harness/setup-eyes.mjs\" ] && command -v node >/dev/null 2>&1 && cd \"$CLAUDE_PROJECT_DIR\" && timeout 600 node harness/setup-eyes.mjs >/dev/null 2>>/tmp/retrovibe-setup.log; exit 0",
+            "command": "[ \"$(uname -s)\" = Linux ] && [ -n \"${AIR_ARTIFACTS_DIR:-}${JBCENTRAL_EXPOSED_PORT_URL_5173:-}\" ] && [ -f \"$CLAUDE_PROJECT_DIR/harness/setup-eyes.mjs\" ] && command -v node >/dev/null 2>&1 && cd \"$CLAUDE_PROJECT_DIR\" && mkdir -m 700 -p \"${TMPDIR:-/tmp}/retrovibe-$(id -u)\" && timeout 600 node harness/setup-eyes.mjs >/dev/null 2>>\"${TMPDIR:-/tmp}/retrovibe-$(id -u)/setup.log\"; exit 0",
             "async": true,
             "timeout": 620
           }

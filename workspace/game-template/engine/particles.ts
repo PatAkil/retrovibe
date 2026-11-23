@@ -97,7 +97,7 @@ export function createParticles(opts: ParticleOptions): ParticleSystem {
       sparks.push(...spawnSparks(x, y, o));
     },
     setAmbient(preset, color) {
-      if (color !== undefined) {ambientColor = color;}
+      ambientColor = color;
       ambient = rebuild(preset);
     },
   };

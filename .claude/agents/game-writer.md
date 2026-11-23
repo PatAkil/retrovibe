@@ -50,7 +50,7 @@ Discipline:
 - **Look at what you changed.** `npm run look -- --scene <scene> [--seed 7]` for each
   scene you touched: read `state` and `errors` first, and the screenshot whenever the
   look changed. Before reporting ready, `npm run verify` must print `TOTAL PASS`
-  (`npm run verify -- --full` after a structural change). If `/tmp/retrovibe-eyes.json`
+  (`npm run verify -- --full` after a structural change). If `${TMPDIR:-/tmp}/retrovibe-<uid>/eyes.json`
   is not ready, run `npm run setup` at the repo root.
 - **Sharing the tree.** Other writers may edit other files of the same game against
   the same dev server. Edit only the files your brief assigns and name them in your

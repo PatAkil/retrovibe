@@ -3,12 +3,25 @@ import { basename, resolve } from 'node:path';
 import { launchBrowser } from '../harness/browser.mjs';
 import { buildCompare } from './compare.mjs';
 import { FIXTURES, FIXTURE_NAMES, GENERIC_RUN } from './fixtures.mjs';
-import { BASELINE, OUT, ROOT, VERIFY, captureFixture, captureRun, dataUrlToBuffer, startDevServer } from './session.mjs';
+import { BASELINE, OUT, ROOT, VERIFY, captureFixture, captureRun, dataUrlToBuffer, startDevServer, stopAllServers } from './session.mjs';
 
 const STATUS = resolve(OUT, 'status.json');
 const FIRST_PORT = Number(process.env.VG_PORT_BASE) || 5301;
 const GAME_PORT = FIRST_PORT + 98;
+const LABEL_RE = /^[A-Za-z0-9_-]+$/;
 const argv = process.argv.slice(2);
+
+let shuttingDown = false;
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.on(signal, () => {
+    if (shuttingDown) {
+      return;
+    }
+    shuttingDown = true;
+    const code = signal === 'SIGINT' ? 130 : 143;
+    void stopAllServers().finally(() => { process.exit(code); });
+  });
+}
 
 function fail(message) {
   console.error(message);
@@ -62,7 +75,7 @@ function gameTarget() {
     fail('--game: never run the template in place; clone it first');
   }
   const label = argv.includes('--label') ? flagValue('--label') : 'default';
-  if (!/^[A-Za-z0-9_-]+$/.test(label ?? '')) {
+  if (!LABEL_RE.test(label ?? '')) {
     fail('--label: letters, digits, - and _ only');
   }
   return { dir, label };
@@ -89,12 +102,15 @@ async function captureGame() {
     console.error(`CAPTURE FAIL: ${e.message}`);
     process.exitCode = 1;
   } finally {
-    server.stop();
+    await server.stop();
     await browser.close();
   }
 }
 
 function gameStatLine(st, a, b) {
+  if (st.sizeMismatch) {
+    return `SIZE MISMATCH (${st.baseSize} vs ${st.candSize})`;
+  }
   if (st.hasBase && st.hasCand) {
     return `${st.pct.toFixed(2).padStart(6)} % | ${st.vis.toFixed(2).padStart(6)} %`;
   }
@@ -103,9 +119,12 @@ function gameStatLine(st, a, b) {
 
 async function compareGames() {
   const [a, b] = [flagValue('--compare-games'), flagValue('--compare-games', 2)];
-  const dirA = resolve(OUT, 'game', a ?? '');
-  const dirB = resolve(OUT, 'game', b ?? '');
-  if (!a || !b || !existsSync(dirA) || !existsSync(dirB)) {
+  if (!LABEL_RE.test(a ?? '') || !LABEL_RE.test(b ?? '')) {
+    fail('--compare-games <labelA> <labelB>: labels may contain letters, digits, - and _ only');
+  }
+  const dirA = resolve(OUT, 'game', a);
+  const dirB = resolve(OUT, 'game', b);
+  if (!existsSync(dirA) || !existsSync(dirB)) {
     fail('--compare-games <labelA> <labelB>: both labels must exist under verification/out/game/');
   }
   const names = [...new Set([...readdirSync(dirA), ...readdirSync(dirB)].filter((f) => f.endsWith('.png')))].sort();
@@ -132,7 +151,7 @@ function resetOut() {
     .filter((d) => d.isDirectory() && !['out', 'baseline'].includes(d.name) && !FIXTURES[d.name])
     .map((d) => d.name);
   if (unknown.length) {
-    console.warn(`warning: directories under verification/ with no input script in capture.mjs are ignored: ${unknown.join(', ')}`);
+    console.warn(`warning: directories under verification/ with no input script in fixtures.mjs are ignored: ${unknown.join(', ')}`);
   }
 }
 
@@ -146,6 +165,9 @@ function statCell(s, failures) {
   }
   if (!s.hasBase) {
     return 'no baseline';
+  }
+  if (s.sizeMismatch) {
+    return `SIZE MISMATCH (${s.baseSize} vs ${s.candSize})`;
   }
   return `${s.pct.toFixed(2).padStart(6)} % | ${s.vis.toFixed(2).padStart(6)} %`;
 }

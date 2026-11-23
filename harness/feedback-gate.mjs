@@ -20,7 +20,7 @@ async function staticGate(repo, unit) {
   const skipTypes = engineMissing(repo.root, unit);
   const [lint, types] = await Promise.all([
     lintPaths(repo.root, [unit.dir]),
-    skipTypes ? Promise.resolve([]) : typeErrors(repo.root, repo.dir, unit),
+    skipTypes ? Promise.resolve([]) : typeErrors(repo.root, repo.dir, unit, 'gate'),
   ]);
   const notes = skipTypes ? [`note: ${unit.dir}/engine is missing (gitignored copy), tsc skipped; node verification/capture.mjs refreshes it`] : [];
   return verdict(`eslint + tsc (${unit.dir})`, [...lint, ...types], notes);
@@ -32,7 +32,7 @@ async function basicUserGate(repo, unit) {
     return first;
   }
   const build = await buildGame(repo.root, unit);
-  const out = build.pass ? 'PASS  lint + check + build (smoke skipped: the headless browser gate needs Linux)' : build.out;
+  const out = build.pass ? 'PASS  lint + check + build (no scripts/verify.mjs in this game folder)' : build.out;
   return { name: `lint + check + build (${unit.dir})`, pass: build.pass, out, failed: build.pass ? [] : ['build'] };
 }
 

@@ -44,6 +44,7 @@ export default {
   ignoreDependencies: ['esbuild'],
   entry: [
     `${GAME}/game/main.ts`,
+    `${GAME}/game/sim.ts`,
     `${GAME}/engine/index.ts`,
     `${GAME}/vite.config.ts`,
     `${GAME}/smoke.mjs`,

@@ -141,19 +141,41 @@ function fixtureBuilders(g: Game, driver: Driver): Record<Fixture, () => void> {
   };
 }
 
-function preservingStorage(run: () => void): void {
-  const stored: [string, string][] = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i);
-    const v = k === null ? null : localStorage.getItem(k);
-    if (k !== null && v !== null) {
-      stored.push([k, v]);
+function readStorage(): [string, string][] | null {
+  try {
+    const stored: [string, string][] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      const v = k === null ? null : localStorage.getItem(k);
+      if (k !== null && v !== null) {
+        stored.push([k, v]);
+      }
     }
+    return stored;
+  } catch {
+    return null;
   }
-  run();
-  localStorage.clear();
-  for (const [k, v] of stored) {
-    localStorage.setItem(k, v);
+}
+
+function restoreStorage(stored: readonly [string, string][]): void {
+  try {
+    localStorage.clear();
+    for (const [k, v] of stored) {
+      localStorage.setItem(k, v);
+    }
+  } catch {
+    return;
+  }
+}
+
+function preservingStorage(run: () => void): void {
+  const stored = readStorage();
+  try {
+    run();
+  } finally {
+    if (stored !== null) {
+      restoreStorage(stored);
+    }
   }
 }
 
@@ -186,6 +208,7 @@ export function installDevHook(g: Game): LoopCallbacks {
   const messages = recordMessages();
   const driver = createDriver(g);
   if (fixture !== null) {
+    g.best = 0;
     preservingStorage(fixtureBuilders(g, driver)[fixture]);
   }
   let manual = HOLD;

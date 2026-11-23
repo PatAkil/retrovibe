@@ -3,7 +3,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, parse, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { envOr } from './browser.mjs';
-import { servesGame, startServer } from './devserver.mjs';
+import { killChild, servesGame, startServer } from './devserver.mjs';
 
 const GAME = join(dirname(fileURLToPath(import.meta.url)), '..');
 const FULL = process.argv.includes('--full');
@@ -12,6 +12,7 @@ const EXIT_UNSUPPORTED = 2;
 const DEFAULT_URL = 'http://localhost:5173/';
 const HOOK_GLOBAL = '__retrovibe';
 const server = { url: envOr('LOOK_URL', envOr('SMOKE_URL', DEFAULT_URL)), stop: undefined };
+const activeChildren = new Set();
 
 function walkUp(relative) {
   let dir = GAME;
@@ -31,11 +32,16 @@ function run(cmd, args, options = {}) {
   return new Promise((resolve) => {
     let out = '';
     const env = { ...process.env, FORCE_COLOR: '0', NO_COLOR: '1', SMOKE_URL: server.url, LOOK_URL: server.url, ...options.env };
-    const child = spawn(cmd, args, { cwd: options.cwd ?? GAME, env });
+    const child = spawn(cmd, args, { cwd: options.cwd ?? GAME, env, detached: true });
+    activeChildren.add(child);
+    const finish = (result) => {
+      activeChildren.delete(child);
+      resolve(result);
+    };
     child.stdout.on('data', (d) => { out += d; });
     child.stderr.on('data', (d) => { out += d; });
-    child.on('error', (e) => { resolve({ code: 127, out: `${out}${e.message}\n` }); });
-    child.on('close', (code) => { resolve({ code: code ?? 1, out }); });
+    child.on('error', (e) => { finish({ code: 127, out: `${out}${e.message}\n` }); });
+    child.on('close', (code) => { finish({ code: code ?? 1, out }); });
   });
 }
 
@@ -83,11 +89,12 @@ async function serve() {
     return missing('node_modules/.bin/vite');
   }
   try {
-    const started = await startServer(GAME, vite);
+    const started = await startServer(GAME, vite, (stop) => { server.stop = stop; });
     server.url = started.url;
     server.stop = started.stop;
     return { code: 0, out: '', note: `started ${started.url} (pid ${started.pid}, stopped afterwards)` };
   } catch (e) {
+    server.stop = undefined;
     return { code: 1, out: `${e.message}\n` };
   }
 }
@@ -178,6 +185,13 @@ export function gates() {
     ...simGates(),
   ];
   return FULL ? list.concat(fullGates()) : list;
+}
+
+export function stopChildren() {
+  for (const child of activeChildren) {
+    killChild(child);
+  }
+  activeChildren.clear();
 }
 
 export function stopServer() {

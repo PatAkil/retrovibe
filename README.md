@@ -47,7 +47,7 @@ Claude reports what it built and what it looked at, never that it "playtested".
 ## How it's put together
 
 - `workspace/game-template/` — pristine, self-contained template. Each game is
-  a plain `cp -r` clone carrying its own copy of `engine/` (19 small modules
+  a plain `cp -r` clone carrying its own copy of `engine/` (18 small modules
   behind one barrel), a reference game split into small modules under `game/`,
   its style card `STYLE.md`, a dev-only hook (`?scene=`, `?seed=`) that lets the
   tools reach every screen deterministically, and the gate scripts.

@@ -20,6 +20,15 @@ function ownHookInTheWay() {
   return existsSync(full) && !readFileSync(full, 'utf8').includes('agent-feedback.mjs');
 }
 
+function configureHooks() {
+  chmodSync(join(ROOT, HOOKS, 'pre-commit'), 0o755);
+  if (gitOut(['config', 'core.hooksPath', HOOKS]) === null) {
+    process.exitCode = 1;
+    return `failed to set core.hooksPath to ${HOOKS}; run "git config core.hooksPath ${HOOKS}" manually`;
+  }
+  return `core.hooksPath set to ${HOOKS} (pre-commit gates the game folders a commit touches)`;
+}
+
 function install() {
   if (process.env.CI || process.env.RETROVIBE_NO_GIT_HOOKS) {
     return 'skipped (CI or RETROVIBE_NO_GIT_HOOKS set)';
@@ -34,9 +43,7 @@ function install() {
   if (current !== '' || ownHookInTheWay()) {
     return `left your existing hooks alone; run "git config core.hooksPath ${HOOKS}" to enable the gate on commit`;
   }
-  chmodSync(join(ROOT, HOOKS, 'pre-commit'), 0o755);
-  gitOut(['config', 'core.hooksPath', HOOKS]);
-  return `core.hooksPath set to ${HOOKS} (pre-commit gates the game folders a commit touches)`;
+  return configureHooks();
 }
 
 try {

@@ -1,5 +1,6 @@
 import type { PixelCanvas } from './canvas';
 import type { Rect } from './geometry';
+import { parseHex } from './palette';
 import { drawText, textWidth } from './text';
 
 export const SAFE_MARGIN = 8;
@@ -37,6 +38,16 @@ const V_POSITION: Readonly<Record<VAnchor, (span: number, h: number) => number>>
   middle: (span, h) => Math.round((span - h) / 2),
 };
 
+function drawBorder(ctx: CanvasRenderingContext2D, r: Rect, color: string): void {
+  ctx.fillStyle = color;
+  ctx.fillRect(r.x, r.y, r.w, 1);
+  if (r.h > 1) {ctx.fillRect(r.x, r.y + r.h - 1, r.w, 1);}
+  if (r.h > 2) {
+    ctx.fillRect(r.x, r.y + 1, 1, r.h - 2);
+    if (r.w > 1) {ctx.fillRect(r.x + r.w - 1, r.y + 1, 1, r.h - 2);}
+  }
+}
+
 export function drawPanel(pc: PixelCanvas, rect: Rect, opts: PanelOptions = {}): void {
   const x0 = Math.max(SAFE_MARGIN, Math.round(rect.x));
   const y0 = Math.max(SAFE_MARGIN, Math.round(rect.y));
@@ -44,16 +55,12 @@ export function drawPanel(pc: PixelCanvas, rect: Rect, opts: PanelOptions = {}):
   const y1 = Math.min(pc.height - SAFE_MARGIN, Math.round(rect.y + rect.h));
   if (x1 <= x0 || y1 <= y0) {return;}
   const ctx = pc.ctx;
+  const w = x1 - x0;
+  const h = y1 - y0;
   ctx.fillStyle = opts.color ?? PLATE_FILL;
-  ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+  ctx.fillRect(x0, y0, w, h);
   const border = opts.border ?? PLATE_BORDER;
-  if (border) {
-    ctx.fillStyle = border;
-    ctx.fillRect(x0, y0, x1 - x0, 1);
-    ctx.fillRect(x0, y1 - 1, x1 - x0, 1);
-    ctx.fillRect(x0, y0, 1, y1 - y0);
-    ctx.fillRect(x1 - 1, y0, 1, y1 - y0);
-  }
+  if (border) {drawBorder(ctx, { x: x0, y: y0, w, h }, border);}
 }
 export function dimScene(pc: PixelCanvas, alpha = 0.55): void {
   pc.ctx.fillStyle = `rgba(0,0,0,${Math.max(0, Math.min(1, alpha))})`;
@@ -99,12 +106,7 @@ export function hudText(pc: PixelCanvas, text: string, anchor: Anchor, opts: Hud
     shadow: opts.shadow ?? true,
   });
 }
-function expandHex(hex: string): string {
-  return hex.length === 3 ? hex.replace(/./g, (c) => c + c) : hex;
-}
 function hexToRgba(color: string, alpha: number): string {
-  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(color.trim())?.[1];
-  if (hex === undefined) {return color;}
-  const n = parseInt(expandHex(hex), 16);
-  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
+  const rgb = parseHex(color);
+  return rgb ? `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha})` : color;
 }

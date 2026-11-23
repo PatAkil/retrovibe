@@ -55,9 +55,10 @@ export function createInput(actions: ActionDecl[], opts: InputOptions = {}): Inp
   };
   const onKeyUp = (e: KeyboardEvent): void => {
     if (OWNED.has(e.code)) {e.preventDefault();}
-    down.delete(e.code);
     const button = CODE_TO_BUTTON[e.code];
-    if (button && !buttonDown(button)) {justReleased.add(button);}
+    const wasDown = button ? buttonDown(button) : false;
+    down.delete(e.code);
+    if (button && wasDown && !buttonDown(button)) {justReleased.add(button);}
   };
   const onBlur = (): void => {
     down.clear();

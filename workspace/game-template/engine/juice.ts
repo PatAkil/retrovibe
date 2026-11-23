@@ -1,4 +1,5 @@
 import type { Point } from './geometry';
+import { parseHex } from './palette';
 
 export interface Juice {
   shake(intensity: number, duration: number): void;
@@ -28,12 +29,8 @@ const RADIUS_SCALE = 0.55;
 const FLASH_HOLD = 0.12;
 
 function withAlpha(color: string, alpha: number): string {
-  const hex = color.trim();
-  if (/^#[0-9a-fA-F]{6}$/.test(hex)) {
-    const n = parseInt(hex.slice(1), 16);
-    return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
-  }
-  return 'rgba(0,0,0,0)';
+  const rgb = parseHex(color);
+  return rgb ? `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha})` : 'rgba(0,0,0,0)';
 }
 
 function flashShape(t: number): number {

@@ -15,6 +15,7 @@ const MAX_GREEN = 200;
 const LOG_BYTES = 256 * 1024;
 const NOT_GATED = ['.claude/', '.github/', '.githooks/', 'verification/baseline/'];
 const SLEEPER = new Int32Array(new SharedArrayBuffer(4));
+const activeLocks = new Set();
 
 export const sleepSync = (ms) => {
   Atomics.wait(SLEEPER, 0, 0, ms);
@@ -129,6 +130,7 @@ export function acquire(path, { waitMs, staleMs }) {
   for (;;) {
     try {
       mkdirSync(path);
+      activeLocks.add(path);
       return true;
     } catch {
       if (isStale(path, staleMs)) {
@@ -144,7 +146,14 @@ export function acquire(path, { waitMs, staleMs }) {
 }
 
 export function release(path) {
+  activeLocks.delete(path);
   rmSync(path, { recursive: true, force: true });
+}
+
+export function releaseActiveLocks() {
+  for (const path of [...activeLocks]) {
+    release(path);
+  }
 }
 
 const emptyState = () => ({ green: {}, baselines: {}, agents: {}, claims: {}, active: {}, blocks: {} });

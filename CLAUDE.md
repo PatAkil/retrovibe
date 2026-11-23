@@ -15,7 +15,7 @@ retrovibe/
 ├── tools/                    # eslint-no-comments.mjs (local rule), tsconfig.default.json
 ├── workspace/
 │   ├── game-template/        # pristine + self-contained; NEVER modified, NEVER run in place
-│   │   ├── engine/           # 19 modules behind the barrel engine/index.ts — copied with every clone
+│   │   ├── engine/           # 18 modules behind the barrel engine/index.ts — copied with every clone
 │   │   ├── game/             # the reference game, split into small modules (below)
 │   │   ├── STYLE.md          # the reference game's style card (the art decisions)
 │   │   ├── scripts/          # look.mjs, verify.mjs (+ browser, devserver, gates) — template code
@@ -50,8 +50,8 @@ HUD · `screens.ts` title, pause, terminal screens · `lookup.ts` `at()` ·
 - **Eyes once per box**: `npm install` then `npm run setup` at the root. Setup is
   idempotent (well under a second when ready) and finds a browser on its own:
   `CHROMIUM_PATH`, else Playwright's, else Chromium extracted from `@sparticuz/chromium`
-  behind the wrapper `/tmp/retrovibe-chromium`. Marker `/tmp/retrovibe-eyes.json`
-  (`"ready":true`), log `/tmp/retrovibe-setup.log`. `npx playwright install chromium` is
+  behind the wrapper `${TMPDIR:-/tmp}/retrovibe-<uid>/chromium`. Marker `${TMPDIR:-/tmp}/retrovibe-<uid>/eyes.json`
+  (`"ready":true`), log `${TMPDIR:-/tmp}/retrovibe-<uid>/setup.log`. `npx playwright install chromium` is
   never required (it is blocked in this container).
 - **Dev server lifecycle is pid-file based** (handles don't survive sessions; port-lookup
   tools are not installed here and `pkill -f` kills your own shell). One server, on 5173:
@@ -62,7 +62,7 @@ HUD · `screens.ts` title, pause, terminal screens · `lookup.ts` `at()` ·
   - who holds the port without a pid file: `ps -eo pid,args | awk '/node .*vite/ && !/awk/'`,
     then `readlink /proc/<pid>/cwd` names the game; reclaim with `kill <pid>`;
   - liveness: `curl -s -o /dev/null -w '%{http_code}' http://localhost:5173/` → `200`;
-    serving THIS game (from its folder): `curl -s -o /dev/null -w '%{http_code}' "http://localhost:5173/@fs$PWD/index.html"` → `200`.
+    serving THIS game (from its folder): `curl -sf http://localhost:5173/__retrovibe_root | grep -Fq "\"$(pwd -P)\""` → exit 0 (endpoint returns `{"root":"<realpath>"}`).
 - **Hand-off URL**: `$JBCENTRAL_EXPOSED_PORT_URL_5173` when it is set (the dev server
   then binds 0.0.0.0 with HMR over wss), else `http://localhost:5173/`.
 - **The template is never modified and never run in place.** Playtest clones.

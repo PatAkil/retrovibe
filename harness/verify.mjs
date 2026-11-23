@@ -9,7 +9,7 @@ const DEFAULT_GAME_URL = 'http://localhost:5173/';
 const GAME_URL = new URL(process.env.HARNESS_GAME_URL ?? DEFAULT_GAME_URL).href;
 const REQUIRED = ['stateChanged', 'scoreChanged', 'gameOver'];
 const template = readFileSync(fileURLToPath(new URL('./index.html', import.meta.url)), 'utf8');
-const html = template.replace(DEFAULT_GAME_URL, GAME_URL);
+const html = template.replace(DEFAULT_GAME_URL, () => GAME_URL);
 
 function listen(server) {
   return new Promise((resolve, reject) => {

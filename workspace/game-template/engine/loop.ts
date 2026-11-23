@@ -29,6 +29,7 @@ export function createLoop(cbs: LoopCallbacks, opts: LoopOptions = {}): GameLoop
   let rafId = 0;
   let last = 0;
   let accumulator = 0;
+  const isRunning = (): boolean => running;
 
   function frame(nowMs: number): void {
     if (!running) {return;}
@@ -41,15 +42,15 @@ export function createLoop(cbs: LoopCallbacks, opts: LoopOptions = {}): GameLoop
       return;
     }
 
-    let delta = now - last;
+    const delta = Math.max(0, Math.min(now - last, maxFrame));
     last = now;
-    if (delta > maxFrame) {delta = maxFrame;}
     accumulator += delta;
 
-    while (accumulator >= step) {
+    while (accumulator >= step && isRunning()) {
       cbs.update(step);
       accumulator -= step;
     }
+    if (!isRunning()) {return;}
     cbs.render(accumulator / step);
   }
 

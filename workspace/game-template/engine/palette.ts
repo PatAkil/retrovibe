@@ -57,17 +57,21 @@ export function swapPalette(p: Palette, mapping: Record<number, number>): Palett
     return target !== undefined && p[target] !== undefined ? p[target] : color;
   });
 }
+export function parseHex(color: string): readonly [number, number, number] | null {
+  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(color.trim())?.[1];
+  if (hex === undefined) {return null;}
+  const full = hex.length === 3 ? hex.replace(/./g, (c) => c + c) : hex;
+  const n = parseInt(full, 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
 const linear = (channel: number): number => {
   const c = channel / 255;
   return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
 };
 const luminance = (hex: string): number => {
-  const h = hex.replace('#', '');
-  return (
-    0.2126 * linear(parseInt(h.slice(0, 2), 16)) +
-    0.7152 * linear(parseInt(h.slice(2, 4), 16)) +
-    0.0722 * linear(parseInt(h.slice(4, 6), 16))
-  );
+  const rgb = parseHex(hex);
+  if (!rgb) {return 0;}
+  return 0.2126 * linear(rgb[0]) + 0.7152 * linear(rgb[1]) + 0.0722 * linear(rgb[2]);
 };
 export function contrast(a: string, b: string): number {
   const la = luminance(a);

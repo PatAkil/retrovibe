@@ -10,7 +10,7 @@ follow them to the letter, never improvise around them:
 - Cloning and integrity: **creating-a-game** steps 2–3 (collision guard,
   `git status --porcelain workspace/game-template`, `cp -r`, eyes check).
 - Eyes, dev server and gates: **playing-the-game** — `npm run setup` at the
-  root when `/tmp/retrovibe-eyes.json` is not ready; the port-5173 reclaim from
+  root when `${TMPDIR:-/tmp}/retrovibe-<uid>/eyes.json` is not ready; the port-5173 reclaim from
   the pid files (`/tmp/retrovibe-dev-<name>.pid`) and the
   `ps -eo pid,args | awk '/node .*vite/ && !/awk/'` orphan check; the
   background `setsid nohup npm run dev` launch with its pid file; the ~15 s

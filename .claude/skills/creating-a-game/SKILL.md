@@ -73,7 +73,7 @@ Check whether `workspace/<game-name>` already exists:
    ```
    cp -r workspace/game-template workspace/<game-name>
    ```
-4. Eyes: if `/tmp/retrovibe-eyes.json` is missing or does not say `"ready":true`, run `npm run setup` at the repo root (idempotent, browser only — see **playing-the-game** step 1).
+4. Eyes: if `${TMPDIR:-/tmp}/retrovibe-<uid>/eyes.json` is missing or does not say `"ready":true`, run `npm run setup` at the repo root (idempotent, browser only — see **playing-the-game** step 1).
 
 No dependency install is needed — devDeps live once at the repo root and games resolve bins by walking up.
 
@@ -110,7 +110,7 @@ Write the game in 2–3 coherent milestone saves, not one monolithic write: (1) 
   ```
   `--full` adds knip, jscpd, depcruise, the no-hook build check and `look:all` (every scene, `unsupported` ones reported). **playing-the-game** owns the server and the hand-off.
 
-A green build alone never triggers "done" — it proves compilation, not that the game boots. The handoff state is **server up** (playing-the-game step 4): the dev server stays running after the gate and its liveness is re-verified immediately before the message is sent. Claude may say what it saw through `look`; it never claims to have played the game: report "builds, boots clean, ready to play at <URL>". **The user is the playtester.**
+A green build alone never triggers "done" — it proves compilation, not that the game boots. The handoff state is **server up** (playing-the-game step 5): the dev server stays running after the gate and its liveness is re-verified immediately before the message is sent. Claude may say what it saw through `look`; it never claims to have played the game: report "builds, boots clean, ready to play at <URL>". **The user is the playtester.**
 
 **Escalation rule**: if `check`, `lint` or the smoke gate fails twice on the same approach, escalate the writer one model tier for a fresh attempt instead of a third patch (see CLAUDE.md → Models & orchestration).
 

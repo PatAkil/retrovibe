@@ -1,3 +1,5 @@
+import { parseHex } from './palette';
+
 export type AmbientPreset = 'stars' | 'rain' | 'snow' | 'embers' | 'bubbles';
 
 type Depth = 0 | 1 | 2 | 3;
@@ -60,10 +62,11 @@ const STAR_TWINKLE: Readonly<Record<Depth, { base: number; amp: number }>> = {
 export const rand = (a: number, b: number): number => a + Math.random() * (b - a);
 
 function shade(hex: string, f: number): string {
-  const h = hex.replace('#', '');
+  const rgb = parseHex(hex);
+  if (!rgb) {return hex;}
   let out = '#';
-  for (let i = 0; i < 3; i++) {
-    const v = Math.min(255, Math.max(0, Math.round(parseInt(h.slice(i * 2, i * 2 + 2), 16) * f)));
+  for (const c of rgb) {
+    const v = Math.min(255, Math.max(0, Math.round(c * f)));
     out += v.toString(16).padStart(2, '0');
   }
   return out;

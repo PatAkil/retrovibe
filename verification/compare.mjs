@@ -4,9 +4,10 @@ import { FIXTURE_NAMES, MOMENTS, declaredMoments } from './fixtures.mjs';
 import { BASELINE, OUT } from './session.mjs';
 
 function cmpLoad(src) {
-  return new Promise((res) => {
+  return new Promise((res, rej) => {
     const i = new window.Image();
     i.onload = () => { res(i); };
+    i.onerror = () => { rej(new Error(`failed to load image: ${src.slice(0, 64)}`)); };
     i.src = src;
   });
 }
@@ -50,6 +51,7 @@ function cmpDiff(base, cand, diff) {
   const x = c.getContext('2d');
   x.drawImage(base, 0, 0);
   const a = x.getImageData(0, 0, c.width, c.height).data;
+  x.clearRect(0, 0, c.width, c.height);
   x.drawImage(cand, 0, 0);
   const b = x.getImageData(0, 0, c.width, c.height).data;
   const d = dctx.createImageData(c.width, c.height);
@@ -64,29 +66,65 @@ function cmpMissingText(r) {
     : 'MISSING — the capture produced no frame for this moment';
 }
 
+function cmpSizeLabel(img) {
+  return img ? `${img.width}x${img.height}` : null;
+}
+
+function cmpIsSizeMismatch(base, cand) {
+  return Boolean(base && cand && (base.width !== cand.width || base.height !== cand.height));
+}
+
+function cmpDiffCell(base, cand) {
+  if (cmpIsSizeMismatch(base, cand)) {
+    return {
+      node: cmpNote(`SIZE MISMATCH (${cmpSizeLabel(base)} vs ${cmpSizeLabel(cand)})`),
+      counts: { changed: 0, visible: 0 },
+    };
+  }
+  const diff = document.createElement('canvas');
+  const ref = cand ?? base;
+  diff.width = ref.width;
+  diff.height = ref.height;
+  const counts = cmpDiff(base, cand, diff);
+  diff.style.width = '100%';
+  return { node: diff, counts };
+}
+
+function cmpRowStats(r, base, cand, counts) {
+  const baseSize = cmpSizeLabel(base);
+  const candSize = cmpSizeLabel(cand);
+  const common = {
+    name: r.name, moment: r.moment, declared: r.declared,
+    hasBase: Boolean(base), hasCand: Boolean(cand), baseSize, candSize,
+  };
+  if (cmpIsSizeMismatch(base, cand)) {
+    return { ...common, sizeMismatch: true, pct: 100, vis: 100 };
+  }
+  const ref = cand ?? base;
+  const total = ref.width * ref.height;
+  const both = Boolean(base && cand);
+  return {
+    ...common, sizeMismatch: false,
+    pct: both ? (100 * counts.changed) / total : null,
+    vis: both ? (100 * counts.visible) / total : null,
+  };
+}
+
 async function cmpRow(grid, r) {
   grid.appendChild(Object.assign(document.createElement('div'), { textContent: r.moment ? `${r.name} · ${r.moment}` : r.name }));
   const cand = r.cand ? await cmpLoad(r.cand) : null;
   const base = r.base ? await cmpLoad(r.base) : null;
   grid.appendChild(base ? cmpCell(r.base) : cmpNote('no baseline yet'));
   grid.appendChild(cand ? cmpCell(r.cand) : cmpNote(cmpMissingText(r)));
-  const diff = document.createElement('canvas');
-  const ref = cand ?? base;
-  diff.width = ref.width;
-  diff.height = ref.height;
-  const { changed, visible } = cmpDiff(base, cand, diff);
-  diff.style.width = '100%';
-  grid.appendChild(diff);
-  const total = ref.width * ref.height;
-  const both = Boolean(base && cand);
-  return {
-    name: r.name, moment: r.moment, declared: r.declared, hasBase: Boolean(base), hasCand: Boolean(cand),
-    pct: both ? (100 * changed) / total : null,
-    vis: both ? (100 * visible) / total : null,
-  };
+  const { node, counts } = cmpDiffCell(base, cand);
+  grid.appendChild(node);
+  return cmpRowStats(r, base, cand, counts);
 }
 
-const PAGE_HELPERS = [cmpLoad, cmpCell, cmpNote, cmpPixels, cmpDiff, cmpMissingText, cmpRow].map(String).join('\n');
+const PAGE_HELPERS = [
+  cmpLoad, cmpCell, cmpNote, cmpPixels, cmpDiff, cmpMissingText,
+  cmpSizeLabel, cmpIsSizeMismatch, cmpDiffCell, cmpRowStats, cmpRow,
+].map(String).join('\n');
 
 function fixtureRows() {
   const rows = [];
@@ -104,10 +142,16 @@ function fixtureRows() {
   return rows;
 }
 
+const HTML_ENTITIES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+
+function escapeHtml(text) {
+  return String(text).replace(/[&<>"']/g, (ch) => HTML_ENTITIES[ch]);
+}
+
 function pageHtml(left, right) {
   return `<body style="margin:0;background:#101014;color:#ddd;font:13px system-ui">
     <div id="grid" style="display:grid;grid-template-columns:150px repeat(3,1fr);gap:6px;padding:8px;align-items:center">
-      <div></div><b style="text-align:center">${left}</b><b style="text-align:center">${right}</b><b style="text-align:center">changed pixels (dim = subtle, bright = visible)</b>
+      <div></div><b style="text-align:center">${escapeHtml(left)}</b><b style="text-align:center">${escapeHtml(right)}</b><b style="text-align:center">changed pixels (dim = subtle, bright = visible)</b>
     </div></body>`;
 }
 
@@ -122,18 +166,23 @@ export async function buildCompare(browser, options = {}) {
   } = options;
   const rows = rowsIn.map((r) => ({ ...r, base: asDataUrl(r.baseFile), cand: asDataUrl(r.candFile) }));
   const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
-  await page.setContent(pageHtml(left, right));
-  await page.addScriptTag({ content: PAGE_HELPERS });
-  const stats = await page.evaluate(async (all) => {
-    const grid = document.getElementById('grid');
-    const out = [];
-    for (const r of all) {
-      out.push(await window.cmpRow(grid, r));
-    }
-    return out;
-  }, rows);
-  const shot = await page.screenshot({ fullPage: true });
-  await page.close();
+  let stats;
+  let shot;
+  try {
+    await page.setContent(pageHtml(left, right));
+    await page.addScriptTag({ content: PAGE_HELPERS });
+    stats = await page.evaluate(async (all) => {
+      const grid = document.getElementById('grid');
+      const out = [];
+      for (const r of all) {
+        out.push(await window.cmpRow(grid, r));
+      }
+      return out;
+    }, rows);
+    shot = await page.screenshot({ fullPage: true });
+  } finally {
+    await page.close();
+  }
   writeFileSync(outFile, shot);
   return stats;
 }

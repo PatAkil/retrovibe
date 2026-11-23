@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { EYES_MARKER } from './browser.mjs';
 
 const ENTRY = {
   eslint: 'node_modules/eslint/bin/eslint.js',
@@ -12,7 +13,6 @@ const TYPED = /(?:\.ts|\/tsconfig\.json)$/;
 const TS_ERROR = /^(.+?)\((\d+),(\d+)\): error TS\d+: /;
 const CHECK_MS = 45000;
 const GATE_MS = 480000;
-const EYES_MARKER = '/tmp/retrovibe-eyes.json';
 const BROWSER_GATES = new Set(['eyes', 'smoke', 'look:all']);
 const children = new Set();
 
@@ -109,16 +109,23 @@ export function engineMissing(root, unit) {
   return unit.kind === 'fixture' && !existsSync(join(root, unit.dir, 'engine', 'index.ts'));
 }
 
-export async function typeErrors(root, stateDir, unit) {
-  const info = join(stateDir, `tsc-${slug(unit.dir)}.tsbuildinfo`);
+export async function typeErrors(root, stateDir, unit, scope = '') {
+  const tag = scope === '' ? String(process.pid) : scope;
+  const info = join(stateDir, `tsc-${slug(unit.dir)}-${tag}.tsbuildinfo`);
   const project = join(unit.dir, 'tsconfig.json');
   const args = [join(root, ENTRY.tsc), '-p', project, '--noEmit', '--pretty', 'false', '--incremental', '--tsBuildInfoFile', info];
-  const r = await execNode(root, args, CHECK_MS);
-  if (r.timedOut) {
-    return [{ file: '(tsc)', text: `tsc -p ${project} timed out after ${String(CHECK_MS / 1000)}s` }];
+  try {
+    const r = await execNode(root, args, CHECK_MS);
+    if (r.timedOut) {
+      return [{ file: '(tsc)', text: `tsc -p ${project} timed out after ${String(CHECK_MS / 1000)}s` }];
+    }
+    const errors = parseTsc(`${r.stdout}${r.stderr}`);
+    return r.code !== 0 && errors.length === 0 ? [{ file: '(tsc)', text: tail(`${r.stdout}${r.stderr}`, 12) }] : errors;
+  } finally {
+    if (scope === '') {
+      rmSync(info, { force: true });
+    }
   }
-  const errors = parseTsc(`${r.stdout}${r.stderr}`);
-  return r.code !== 0 && errors.length === 0 ? [{ file: '(tsc)', text: tail(`${r.stdout}${r.stderr}`, 12) }] : errors;
 }
 
 export function eyesReady() {
@@ -145,7 +152,7 @@ export async function buildGame(root, unit) {
   return { name: 'build', pass, out: pass ? '' : tail(`${r.stdout}${r.stderr}`, 15) };
 }
 
-export const canVerify = (root, unit) => process.platform === 'linux' && existsSync(join(root, unit.dir, 'scripts', 'verify.mjs'));
+export const canVerify = (root, unit) => existsSync(join(root, unit.dir, 'scripts', 'verify.mjs'));
 
 export const browserOnlyFailure = (result) =>
   !result.pass && result.failed.length > 0 && result.failed.every((g) => BROWSER_GATES.has(g)) && !eyesReady();

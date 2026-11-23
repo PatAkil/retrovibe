@@ -53,7 +53,7 @@ function backingFor(opts: TextOptions, scale: number): Backing | null {
   const shadow = outline === undefined && requested !== undefined ? requested : opts.shadow;
   if (outline) {return { offsets: OUTLINE_OFFSETS, color: outline };}
   if (!shadow) {return null;}
-  return { offsets: SHADOW_OFFSETS, color: outline ?? shadow };
+  return { offsets: SHADOW_OFFSETS, color: shadow };
 }
 
 function backingColor(back: Backing): string {
