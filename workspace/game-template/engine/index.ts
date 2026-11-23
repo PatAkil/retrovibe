@@ -1,6 +1,3 @@
-// engine/index.ts — barrel export. The reference game and all clones import the
-// engine from here: `import { createLoop, createInput, ... } from '../engine';`
-
 export { createLoop } from './loop';
 export type { GameLoop, LoopCallbacks, LoopOptions } from './loop';
 
@@ -8,37 +5,19 @@ export { createInput, controlHints, BUTTON_KEY } from './input';
 export type { Input, InputOptions, ButtonName, ActionDecl } from './input';
 
 export { createScenes } from './scenes';
-export type { SceneMachine, Scene } from './scenes';
+export type { SceneMachine, Scene, SceneOptions } from './scenes';
 
-export {
-  createPixelCanvas,
-  makeSprite,
-  flipSprite,
-  frameIndex,
-  drawSprite,
-  drawText,
-  drawTextCentered,
-  textWidth,
-  blink,
-  pulse,
-  fillBands,
-  fillDither,
-  drawBevel,
-  drawFrame,
-  drawLogo,
-  SHADOW_COLOR,
-  OUTLINE_COLOR,
-} from './draw';
-export type {
-  PixelCanvas,
-  CreatePixelCanvasOptions,
-  Sprite,
-  SpriteMap,
-  MakeSpriteOptions,
-  TextOptions,
-  DitherPattern,
-  LogoOptions,
-} from './draw';
+export type { Point, Rect, CenterRow } from './geometry';
+
+export { createPixelCanvas } from './canvas';
+export type { PixelCanvas, CreatePixelCanvasOptions } from './canvas';
+export { makeSprite, flipSprite, drawSprite } from './sprite';
+export type { Sprite, SpriteMap, MakeSpriteOptions } from './sprite';
+export { frameIndex, blink, pulse } from './anim';
+export { drawText, drawTextCentered, textWidth, drawLogo } from './text';
+export type { TextOptions, LogoOptions } from './text';
+export { fillBands, fillDither, drawBevel, drawFrame } from './fills';
+export type { DitherPattern, DitherStyle, BevelStyle, FrameStyle } from './fills';
 
 export { PICO8, GAMEBOY, DUSK, NEON, SUNSET, OCEAN, PALETTES, swapPalette, contrast } from './palette';
 export type { Palette } from './palette';
@@ -53,7 +32,7 @@ export { createAudio } from './audio';
 export type { Audio, Sfx } from './audio';
 
 export { SAFE_MARGIN, drawScore, drawLives, hudText, drawPanel, dimScene } from './ui';
-export type { HudOptions, PanelOptions, HAnchor, VAnchor } from './ui';
+export type { HudOptions, PanelOptions, HAnchor, VAnchor, Anchor } from './ui';
 
 export { createCrt } from './crt';
 export type { Crt, CrtOptions } from './crt';

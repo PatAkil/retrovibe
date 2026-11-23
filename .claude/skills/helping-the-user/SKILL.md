@@ -33,6 +33,16 @@ Pick the ones the request leaves open; offer concrete options rather than open-e
 **Flavor (one question, optional)**
 - "What's the vibe — space, dungeon, ocean, neon city?"
 
+## Rules-heavy genres — a different bar
+
+Watch for requests whose fun is in **decisions and numbers** rather than reflexes: RPG, JRPG, roguelike/roguelite, deck-builder or card battler, tactics/strategy, tower defense with an economy, management or life sim, idle/incremental. For these the three-question bar still applies (the loop is "pick an action / a route / a card", the lose condition is "HP zero" or "bankrupt", the controls are usually cursor + select), but add these questions, two at most:
+
+- "What does one run look like — how long, and what changes between runs?"
+- "What's the main decision the player keeps making — which fight, which card, which upgrade?"
+- "What carries over when you lose — nothing (permadeath), or unlocks?"
+
+Then hand the spec to **creating-a-game**, which routes it through **designing-mechanics** (options on the table, the user picks, the contract in the game's `DESIGN.md`) before any code, and later **balancing-with-the-simulator**. Arcade action games — dodgers, shooters, platformers, breakout — never take this path.
+
 ## Combining answers into a coherent loop
 
 Behaviors the user lists separately must connect into one loop: the thing you *want* (score, progress) and the thing you *avoid* (the lose condition) should push against each other. If they don't, propose the link.
@@ -51,7 +61,8 @@ Resulting spec to hand back to **creating-a-game**:
 
 Steer toward what the engine and a single-screen Canvas game do well:
 - **Good fits**: one screen or simple scrolling, a handful of entity types (player, 1–2 hazards, 1–2 pickups), score-chasing, endless difficulty ramp, short runs (30s–3min).
-- **Trim or defer**: inventories, dialogue, save systems, multiplayer, many levels with distinct art, physics beyond simple collision. Offer the arcade-sized version: "level 1 of that idea" — e.g. "a zelda-like" becomes "one dungeon room, dodge enemies, grab the key, reach the door."
+- **Trim or defer**: dialogue, save systems, multiplayer, many levels with distinct art, physics beyond simple collision — and in an *action* game, inventories. Offer the arcade-sized version: "level 1 of that idea" — e.g. "a zelda-like" becomes "one dungeon room, dodge enemies, grab the key, reach the door."
+- **Rules-heavy games** fit too when kept to a few screens at 240×160 (a map, a battle, a reward pick) with a handful of systems; items, stats and an act structure are fine there because the simulator can balance them. Still trim to one act or one deck first and say so.
 - Platformers are supported (**building-platformer-games**) but keep them to a few hand-placed screens, not a level editor.
 
 When you scope something down, say so explicitly and confirm the smaller version is what they want before handing back to **creating-a-game**.

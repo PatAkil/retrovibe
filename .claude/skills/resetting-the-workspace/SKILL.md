@@ -19,10 +19,11 @@ Delete user-created game folders under `workspace/` and reach a neutral starting
 ### 1. Stop any running dev server
 
 ```bash
-lsof -ti:5173 | xargs -r kill
+for f in /tmp/retrovibe-dev-*.pid; do [ -e "$f" ] && kill -- -"$(cat "$f")"; rm -f "$f"; done
+ps -eo pid,args | awk '/node .*vite/ && !/awk/'
 ```
 
-Port-based, not handle-based, so orphan servers from ended sessions are reclaimed too. Never delete a folder out from under a live server. The `-r` makes this a no-op when nothing is listening.
+The first line stops every server launched per **playing-the-game** (each runs in its own process group, pid in `/tmp/retrovibe-dev-<name>.pid`); it is a no-op when there are none. The second lists orphans from ended sessions that have no pid file: for each pid, `readlink /proc/<pid>/cwd` names the folder, and a server serving a `workspace/<name>` game is stopped with `kill <pid>`. Never delete a folder out from under a live server, and never `pkill -f` (it kills your own shell).
 
 ### 2. Enumerate game folders — the classifier
 
@@ -85,7 +86,7 @@ Same pathspec discipline (exactly the deleted folders). The reset leaves **no un
 The neutral end state — scoped to what reset owns:
 
 - only `game-template` (plus any explicitly-kept games) among the game folders in `workspace/` (`ls workspace/`);
-- no dev server on 5173;
+- no dev server on 5173: `curl -s -o /dev/null -w '%{http_code}' http://localhost:5173/` prints `000`;
 - template porcelain clean: `git status --porcelain workspace/game-template` prints nothing — if it prints anything, restore:
 
 ```bash
@@ -110,4 +111,4 @@ The completion message names:
 git checkout <hash> -- workspace/<name>
 ```
 
-This restores the entire folder in place — `main.ts` alone is not the game (`index.html` is an explicit writer surface, and `git show` only prints one file to the terminal). The audience is git-naive; give the command verbatim, ready to paste.
+This restores the entire folder in place — no single file is the game (its code is spread over the `game/` modules, `STYLE.md` and `index.html`, and `git show` only prints one file to the terminal). The audience is git-naive; give the command verbatim, ready to paste.

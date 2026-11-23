@@ -8,39 +8,63 @@ iterate → reset → repeat**. Deploy is post-MVP.
 
 ```
 retrovibe/
-├── package.json              # ONE install at the root: typescript, vite, playwright,
-│                             #   @types/node. NO "workspaces" field (would break
-│                             #   walk-up bin resolution).
+├── package.json              # ONE install at the root: typescript, vite, playwright, eslint +
+│                             #   typescript-eslint, knip@5, jscpd, dependency-cruiser, esbuild,
+│                             #   @sparticuz/chromium. NO "workspaces" field (walk-up bin resolution).
+├── eslint.config.mjs, knip.config.js, .jscpd.json, .dependency-cruiser.cjs   # the lint suite
+├── tools/                    # eslint-no-comments.mjs (local rule), tsconfig.default.json
 ├── workspace/
 │   ├── game-template/        # pristine + self-contained; NEVER modified, NEVER run in place
-│   │   ├── engine/           # 11 modules — copied with the template, each game standalone
-│   │   ├── game/main.ts      # the reference game every skill points to
-│   │   ├── smoke.mjs         # headless smoke gate (template code, not a repo helper script)
-│   │   ├── vite.config.ts    # base:'./', port 5173 strictPort, external cacheDir
+│   │   ├── engine/           # 18 modules behind the barrel engine/index.ts — copied with every clone
+│   │   ├── game/             # the reference game, split into small modules (below)
+│   │   ├── STYLE.md          # the reference game's style card (the art decisions)
+│   │   ├── scripts/          # look.mjs, verify.mjs (+ browser, devserver, gates) — template code
+│   │   ├── smoke.mjs         # headless boot gate — template code
+│   │   ├── vite.config.ts    # base:'./', port 5173 strictPort (VITE_PORT overrides), external cacheDir
 │   │   └── index.html        # arcade shell; game mounts into #screen
 │   └── <game-name>/          # user games — clones of game-template
-├── .claude/skills/           # twelve skills, commands baked in
-├── harness/                  # parent-frame postMessage verification harness
-└── verification/             # graphics verification: 3 FROZEN fixture games (clones of the
-                              #   template, engine copies gitignored + refreshed per run),
-                              #   capture.mjs (harness code), baseline/ = the approved look
+├── .claude/skills/           # fourteen skills, commands baked in
+├── .claude/agents/           # game-writer, lifecycle-runner
+├── harness/                  # setup-eyes.mjs (npm run setup), browser.mjs, verify.mjs + sweep.mjs +
+│                             #   index.html (parent-frame postMessage harness)
+└── verification/             # graphics verification: capture.mjs (+ fixtures, session, page-runner,
+                              #   compare), 3 FROZEN modular fixture games (engine copies gitignored,
+                              #   refreshed per run), baseline/ = the approved look
 ```
+
+Reference game modules (`game/`): `main.ts` wiring only · `app.ts` engine services ·
+`theme.ts` size + palette roles · `sprites.ts` · `state.ts` the `Game` type, tuning,
+`g.rng`, best score · `flow.ts` scene hooks + host messages · `play.ts` the PLAYING
+rules · `frame.ts` update/render lookup tables per scene · `view.ts` backdrop, actors,
+HUD · `screens.ts` title, pause, terminal screens · `lookup.ts` `at()` ·
+`devhook.ts` dev-only hook.
 
 ## Conventions (single definition — skills rely on these)
 
 - **Run game commands from the game folder**: `cd workspace/<game-name> && npm run <script>`.
-  Scripts: `dev` (Vite, port 5173, strictPort), `check` (`tsc --noEmit`),
-  `build` (`tsc --noEmit && vite build`), `smoke` (`node smoke.mjs`).
+  Scripts: `dev` (Vite, 5173, strictPort), `check` (`tsc --noEmit`), `lint` (ESLint),
+  `build` (`tsc --noEmit && vite build`), `smoke`, `look`, `verify` (see *Agent eyes*).
+  Rules-heavy games that adopt the simulator add `sim` / `sim:quick`.
 - **No install step per game.** Bins and modules resolve by walking up to the
   root `node_modules`. Never run `npm install` inside a game folder.
-- **The smoke gate needs a browser once**: `npx playwright install chromium`
-  at the root after `npm install` — unless the environment already provides
-  Playwright browsers (`PLAYWRIGHT_BROWSERS_PATH` set, as in this container).
-  Without it, `npm run smoke` fails with "Executable doesn't exist".
-- **Dev server lifecycle is port-based** (handles don't survive sessions):
-  reclaim/teardown with `lsof -ti:5173 | xargs -r kill`; always launch
-  `npm run dev` in the background and poll for the readiness line
-  `Local:   http://localhost:5173/`.
+- **Eyes once per box**: `npm install` then `npm run setup` at the root. Setup is
+  idempotent (well under a second when ready) and finds a browser on its own:
+  `CHROMIUM_PATH`, else Playwright's, else Chromium extracted from `@sparticuz/chromium`
+  behind the wrapper `${TMPDIR:-/tmp}/retrovibe-<uid>/chromium`. Marker `${TMPDIR:-/tmp}/retrovibe-<uid>/eyes.json`
+  (`"ready":true`), log `${TMPDIR:-/tmp}/retrovibe-<uid>/setup.log`. `npx playwright install chromium` is
+  never required (it is blocked in this container).
+- **Dev server lifecycle is pid-file based** (handles don't survive sessions; port-lookup
+  tools are not installed here and `pkill -f` kills your own shell). One server, on 5173:
+  - launch (always in the background):
+    `cd workspace/<name> && (setsid nohup npm run dev > /tmp/retrovibe-dev-<name>.log 2>&1 < /dev/null & echo $! > /tmp/retrovibe-dev-<name>.pid)`,
+    then poll the log ≤ 15 s for `Local:   http://localhost:5173/`;
+  - stop: `kill -- -$(cat /tmp/retrovibe-dev-<name>.pid) && rm /tmp/retrovibe-dev-<name>.pid`;
+  - who holds the port without a pid file: `ps -eo pid,args | awk '/node .*vite/ && !/awk/'`,
+    then `readlink /proc/<pid>/cwd` names the game; reclaim with `kill <pid>`;
+  - liveness: `curl -s -o /dev/null -w '%{http_code}' http://localhost:5173/` → `200`;
+    serving THIS game (from its folder): `curl -sf http://localhost:5173/__retrovibe_root | grep -Fq "\"$(pwd -P)\""` → exit 0 (endpoint returns `{"root":"<realpath>"}`).
+- **Hand-off URL**: `$JBCENTRAL_EXPOSED_PORT_URL_5173` when it is set (the dev server
+  then binds 0.0.0.0 with HMR over wss), else `http://localhost:5173/`.
 - **The template is never modified and never run in place.** Playtest clones.
   Creation is `cp -r workspace/game-template workspace/<game-name>` — only
   after the collision guard (folder must not already exist) and the integrity
@@ -56,14 +80,30 @@ retrovibe/
   (`git add workspace/<name> && git commit ... -- workspace/<name>`), never
   `git add -A`; deleted games stay recoverable via the reported
   `git checkout <hash> -- workspace/<name>`.
-- **No helper scripts.** Skills carry all commands inline.
+- **Tools are code, never ad-hoc.** Per-game tools are template code copied with every
+  clone (`smoke.mjs`, `scripts/*.mjs`); repo-level tools live in `harness/` and
+  `verification/`. Skills carry every command inline and never generate helper
+  scripts — the one recipe a skill hands over, `sim/run.mjs`
+  (balancing-with-the-simulator), becomes part of that game.
+- **No comments, anywhere.** `//`, `/* */` and JSDoc are lint errors in every linted
+  file. Intent goes into names, types and small functions; the art decisions go into
+  the game's **`STYLE.md`** (copied from the template, rewritten per game, edited in the
+  same change as the look); the rules of a rules-heavy game go into its `DESIGN.md`.
+- **No console in `game/` or `engine/`.** A real fault is `reportError(new Error(...))`
+  — a page error, so `look`, `smoke` and `verify` fail on it.
+- **Every game keeps its dev hook working** (`game/devhook.ts`, see *Agent eyes*): its
+  fixtures follow the game's own state, and scenes the game cannot reach go into
+  `unsupported`.
 - **Skill frontmatter convention**: every SKILL.md description starts with
   `Use when <trigger conditions>.` followed by one sentence on what it does —
   triggers first, so the right skill is inferred before reading further.
-- **Done means**: `npm run check` after every edit; `npm run build` **and**
-  `npm run smoke` green before handing off. A green build alone is never
-  "done" — and the user, not Claude, is the playtester. Claude reports
-  "builds, boots clean, ready to play at <URL>", never "playtested".
+- **Done means**: `npm run check` and `npm run lint` after every edit; look at what
+  changed (`npm run look -- --scene <s>`, state and errors first, the screenshot whenever
+  the look changed); `npm run verify` prints `TOTAL PASS` before handing off;
+  `npm run verify -- --full` after a structural change (new or moved modules, a new
+  scene, a dev-hook change). A green build alone is never "done" — and the user, not
+  Claude, is the playtester. Claude reports "builds, boots clean, ready to play at
+  <URL>" and may say what it saw through `look`; never "playtested".
 - **Graphics changes are verified by looking, not only by building.** Any
   change under `workspace/game-template/` (engine, reference game, shell) or
   to a skill that directs visual choices is not done until the
@@ -73,50 +113,153 @@ retrovibe/
   quality; a monochrome palette passes every ratio and still looks worse.
   Not triggered by creating or iterating a user game.
 
-## Engine API (frozen — authoritative surface is `engine/index.ts`)
+## Lint suite and thresholds
 
-Editing anything under `engine/` (or the template's `game/main.ts` / `index.html`) is a graphics-generator change: it is not done until the **verifying-graphics** loop has run and its frames have been viewed (see Conventions).
+A hard gate on the template, the fixtures, `harness/`, `verification/` **and every
+generated game**. No suppressions (inline config is off, unused directives are errors),
+no baseline files, no per-file overrides, no loosened numbers: **fix the code, never the
+config**; if a rule is genuinely wrong for a case, stop and report it.
 
-Games import from `'../engine'`:
+| Gate | Rule |
+|---|---|
+| `npm run lint` (ESLint strict + stylistic, type-checked) | no comments · `complexity` 10 · `max-depth` 4 · `max-params` 4 · `max-lines` 400/file · `max-lines-per-function` 80 (blank lines skipped) · `max-nested-callbacks` 3 · `eqeqeq` · `curly` (braces on every `if`) · template literals take numbers and strings only · `no-console` in `game/` and `engine/` · game imports the engine only via `'../engine'` |
+| naming | camelCase; module-level `const` may be UPPER_CASE; types PascalCase; properties camelCase or UPPER_CASE (quoted keys and DOM key codes are free) |
+| `tsconfig.json` | `strict`, `noUncheckedIndexedAccess`, `noUnusedLocals`, `noUnusedParameters`, `noImplicitReturns` |
+| knip | no unused files, exports or dependencies. CLAUDE.md and the skills are entries: an engine export cited in them counts as used |
+| jscpd | zero duplicated blocks (50 tokens / 5 lines) |
+| dependency-cruiser | no cycles, no orphans, game → engine only via `engine/index.ts`, engine never imports game, headless rules (`game/types.ts`, `data.ts`, `sim.ts`, `sim/**`, `rules/**`) import nothing else |
+
+`npm run verify -- --full` in a game runs knip, jscpd and depcruise for it; root
+`npm run lint` / `npm run lint:full` cover the template and the repo.
+
+Working within them:
+
+- **Lookup tables over long switches.** A `Record<Scene, …>` of handlers is one line
+  per case, complexity 1, and exhaustive by type (`UPDATE_SCENE` / `RENDER_SCENE` in the
+  template's `frame.ts`).
+- **Option and geometry objects over long parameter lists** — `{x, y}`, `{x, y, w, h}`,
+  a style object, or the game object `g` every presentation function takes.
+- **Guard indexed access honestly**: `at(list, i)` from `game/lookup.ts` throws a clear
+  `RangeError`; palettes are fixed-length tuples, so `PICO8[7]` is a plain `string`.
+  Never `!` or a cast.
+- **Strings are not spread.** `[...row]` on a string trips `no-misused-spread`; use
+  `row.split('')` (sprite mirror helpers).
+- **Export only what another module imports.** knip (`verify -- --full`) fails on unused
+  exports; its "Configuration hints" lines are informational, not failures.
+- **Split along natural seams** — rules vs view vs screens, one concern per file — not
+  at line counts. A new file must be imported by something and must not form a cycle.
+
+## Agent eyes
+
+| Command (in the game folder) | What it does |
+|---|---|
+| `npm run look -- [--scene S] [--seed N] [--keys "Left,Space"] [--steps N] [--out f.png] [--no-shot]` | One JSON line `{ok, state, errors, shot}`; exit 1 on any console/page error or no canvas, exit 2 when the game lists the scene as `unsupported`. With `--scene`/`--seed` the page holds the loop and each key is followed by `--steps` (default 30) fixed ticks — same arguments, same pixels. Scenes: `title playing paused gameover win`. Shots: `$AIR_ARTIFACTS_DIR/look/<game>/`, else `/tmp/retrovibe-look/<game>/` |
+| `npm run smoke` | Page loads, a `<canvas>` attaches, zero `console.error`/page errors over 40 frames (`SMOKE_URL` overrides the target) |
+| `npm run verify` | eyes, serve, lint, check, build, smoke (+ `sim:quick` as INFO when `sim/run.mjs` exists); one `PASS/FAIL/INFO` line per gate, then `TOTAL`. Reuses a server on 5173 only if it serves THIS game, else starts its own on a free port and stops it |
+| `npm run verify -- --full` | adds knip, jscpd, depcruise, `dist:no-hook` (no `__retrovibe` in `dist/`), `look:all` (every scene) |
+
+`LOOK_URL`/`SMOKE_URL` point any of them at another server.
+
+**Dev hook contract** (`game/devhook.ts`, installed only under `import.meta.env.DEV`,
+absent from the build): `?seed=<uint>` routes the game's random decisions through a
+seeded PRNG (`g.rng`); `?scene=<title|playing|paused|gameover|win>` boots a deterministic
+fixture (seed defaults to 1); `&hold=1` also seeds `Math.random` and stops the loop from
+ticking or drawing. `window.__retrovibe = { state(), step(n), press(action), messages,
+unsupported }`: `state()` is the game's JSON snapshot, `step(n)` runs n fixed ticks and
+renders once, `press('A'|'B'|'PAUSE'|'UP'|'DOWN'|'LEFT'|'RIGHT')` queues one edge press
+for the next tick, `messages` collects the runtime messages, `unsupported: string[]` lists
+scenes the game cannot reach (e.g. `['win']`) — `look` exits 2 for them and `look:all`
+reports them instead of failing.
+A game without one of the five scenes (usually WIN) removes it from the hook's `Fixture` type
+and `FIXTURES` list and names it in `UNSUPPORTED`; the hook then ignores `?scene=<name>`
+silently, so `look` exits 2 instead of 1. The scene machine's type still requires `WIN`
+entries in the `frame.ts` update/render tables — keep them as the terminal-screen no-ops.
+`--steps N` applies after each key in `--keys`.
+
+## Automatic feedback (hooks)
+
+Deterministic, not remembered: `.claude/settings.json` wires `harness/agent-feedback.mjs` into
+every session and subagent, and `.githooks/pre-commit` into git (`npm install` runs `prepare`,
+which sets `core.hooksPath=.githooks`; skipped when `CI` or `RETROVIBE_NO_GIT_HOOKS` is set).
+State lives in `.git/retrovibe-feedback/` (`events.log` has one JSON line per hook run).
+
+A **unit** is a game folder (`workspace/<name>` or `verification/<fixture>` with `game/main.ts`
+and `package.json`) or "repo tooling" (everything else that is linted). Never gated: `*.md`,
+`.claude/`, `.github/`, `.githooks/`, `verification/baseline/`.
+
+| When | Effect |
+|---|---|
+| SessionStart / SubagentStart | records a per-unit fingerprint and file snapshot; on a cloud box also runs `npm run setup` in the background |
+| after every Bash / Edit / Write / MultiEdit / NotebookEdit call | changed files credited to this agent get `eslint`; their `.ts` files get an incremental `tsc` for the game folder that holds them. Errors → exit 2 with file, line, rule: read and fix them. The first template or fixture edit adds the verifying-graphics reminder |
+| Stop / SubagentStop | per unit changed this session and not remembered green — user game: `npm run verify`; template or fixture: eslint + `tsc --noEmit` (never a build or dev server in the template); tooling: eslint. Red blocks with the failing output |
+| `git commit` | only the units the staged paths touch: refuses if such a unit has unstaged or untracked gated files, or fails its gate. Other units' dirt is ignored. Deletion-only, docs-only and baseline-only commits run nothing |
+| `npm run gate` (root) | the same gate by hand for every unit that differs from HEAD; remembers green results |
+
+- **Fix what the hooks report.** The stop gate blocks at most 3 times in a row and releases at
+  once when nothing changed since its last block; the tree is then still red and the commit
+  hook will refuse it.
+- **Parallel writers.** A change is credited through the file an Edit/Write names, a file the
+  Bash command names, or (Bash only) a file modified during that call that no other agent
+  claimed in the last 20 min. Other agents' `tsc` errors arrive as non-blocking context; a
+  subagent that stops while others run gets the scoped check; the main agent's gate is deferred
+  while background agents run. Name each writer's files in its brief.
+- **Degrades, never hangs.** Timeouts (60 s edit, 600 s stop) and a watchdog; without
+  `node_modules` it says so once and steps aside; when only the browser gates fail and the
+  browser is not ready it releases with a message. Bypass is the owner's call only:
+  `git commit --no-verify`.
+
+## Engine API (authoritative surface is `engine/index.ts`)
+
+Editing anything under `engine/` (or the template's `game/` / `index.html`) is a
+graphics-generator change: not done until **verifying-graphics** has run. Games import
+from `'../engine'` only. Geometry arguments are object literals — a point `{x, y}`, a
+rect `{x, y, w, h}`, a centred row `{width, y}` (types `Point`, `Rect`, `CenterRow`);
+rects snap to whole logical px and a non-positive size draws nothing.
 
 | Module | Key exports | Purpose |
 |---|---|---|
-| loop.ts | `createLoop({update, render})` → `.start()/.stop()` | Fixed-timestep (60 Hz) accumulator loop; frame-delta clamp (250 ms) + clock reset on focus; auto-pause on blur |
-| input.ts | `createInput(actions, {onFirstKey})`, `controlHints(input)`, `BUTTON_KEY` | Arrows/WASD → `input.dir`; buttons A = Space/Z, B = X/C, PAUSE = P/Esc (dedicated, aliased — down while ≥1 alias down); `pressed/held/released`, `endFrame()` per tick; labels declared in code |
-| scenes.ts | `createScenes()` → `.current/.is/.to/.onEnter` | Enforced machine `TITLE → PLAYING ⇄ PAUSED → (GAME_OVER | WIN) → restart` |
-| draw.ts | `createPixelCanvas`, `makeSprite`, `flipSprite`, `drawSprite`, `frameIndex`, `drawText`, `drawTextCentered`, `textWidth`, `blink`, `pulse`, `drawLogo`, `fillBands`, `fillDither`, `drawBevel`, `drawFrame` | Pixel-scaled canvas, ASCII-art sprites, 3×5 bitmap font with 5-wide M/W (those two glyphs are 5 font-px wide — a 3-wide cell cannot draw them unambiguously; `FONT` entries may be any width with equal-length rows, and `textWidth`/`drawText`/`drawTextCentered`/`drawLogo` advance per glyph, so only strings containing M or W measure differently). `TextOptions.shadow`/`.outline` (bool or color string, default `SHADOW_COLOR`/`OUTLINE_COLOR`) add a 1-px drop shadow or all-round keyline — off by default in `drawText`, on by default in `drawTextCentered` at `scale >= 2` and in every `ui.ts` HUD helper (shadow); the two are mutually exclusive per call. The full keyline is applied only at `scale >= 3`: at scale 2 a 1-px keyline pressing in from both sides closes the 1-font-px counters (A/O/0/8/B/D/P/R turn into blobs), so a requested `outline` silently degrades to the drop shadow there. Font glyph fixes (N, S no longer collide with M/H/5) are legibility fixes, not API. Art helpers (all opt-in, setup-time or cheap): `makeSprite(rows, map, {outline, flipX})` bakes a 1-cell keyline (sprite grows by 1 cell per side — use the inner size for hitboxes, or author the outline into the rows) or a mirrored copy; `flipSprite(sprite)`; `frameIndex(time, fps, count)` picks an animation frame from the game clock; `drawLogo(ctx, text, W, y, {color, shade, shadow, scale})` draws a two-tone lit-from-above arcade logo with an offset shadow (`color` is REQUIRED and comes from the game's palette — it throws without one; `shade` defaults to `color`, `shadow` to `OUTLINE_COLOR`, and there are no palette-specific literals left in the engine); `fillBands` (horizontal gradient bands), `fillDither` (pixel-aligned **4×4 ordered/Bayer** checker (50 %) / sparse (25 %) dither — a 2×2 tile phase-locks to the CRT's 2-px scanline pitch and bands instead of averaging; patterns cached per context in a `WeakMap` and `fillStyle` restored after the fill), `drawBevel` (slab with light top/left and dark bottom/right edges), `drawFrame` (hollow border). `blink(time, period=0.9, onRatio=0.6)` and `pulse(time, period=1.2)` are clock-driven 0..1 helpers for breathing prompts/highlights — not new API surface for game logic, just exported timing utilities |
-| palette.ts | `PICO8`, `GAMEBOY`, `DUSK`, `NEON`, `SUNSET`, `OCEAN`, `PALETTES`, `swapPalette`, `contrast` | Curated retro palettes (roles documented per index) + swap support + `contrast(a,b)` legality check (actors ≥3:1 vs static surfaces, ≥4.5:1 authored on any non-black ground — the CRT lift eats ~1.4× of the measured ratio; ambient 1.8–2.5:1 band) |
-| particles.ts | `createParticles({width, height, ambient, ambientColor})` → `.update/.render/.burst/.setAmbient` | Ambient presets (stars/rain/snow/embers/bubbles; band-compliant default colors, overridable) + 2–3 px impact bursts. API unchanged; defaults now build ambient as 2–3 depth layers (far dim/slow, mid, near brighter/faster, plus a rare bright spark for stars/embers), each particle twinkles on a deterministic per-particle clock, and most presets (rain excepted) cluster into clumps/streams instead of an even sprinkle — all automatic, nothing new to call |
-| juice.ts | `createJuice()` → `.shake/.flash/.hitStop/.frozen/.update/.preRender/.postRender` | Screen shake, flash, hit-stop. Order: clear → `preRender` → world → `postRender` → CRT. The shake translate is rounded to whole logical pixels, so dither fields and 1-px keylines never resample sub-pixel mid-shake. `flash(color, duration, origin?)`'s overlay holds its peak for the first 12% of the duration, then fades on a quadratic ease-out over the rest, so the burst/shake/frozen tableau underneath stays visible through the flash. Without `origin` it is the uniform full-screen overlay, peaking at 0.55 alpha (never a full-opacity wash). With an `origin` (`{x, y}` in LOGICAL px — the space the world draws in; `postRender` runs after `ctx.restore()`, so the flash sits in un-shaken screen space over the shaken tableau) it is a RADIAL flash centred on the impact point: a cached radial gradient (rebuilt only when origin/colour/frame size change, never per frame) peaking at 0.75 alpha at the centre and reaching full transparency at 0.55 x the larger frame dimension, so the death point glows in the flash colour with its burst readable inside it while the HUD, the far background and the opposite side of the frame keep their own colours. Pass the origin on DEATH flashes; WIN/pickup flashes stay uniform |
-| audio.ts | `createAudio()` → `.unlock/.play/.ready` | WebAudio chiptune sfx (`jump/pickup/explosion/hit/blip`); `unlock()` inside the first user gesture |
-| ui.ts | `SAFE_MARGIN`, `drawScore`, `drawLives`, `hudText`, `drawPanel`, `dimScene` | HUD helpers, enforced edge margin. `drawScore`/`drawLives`/`hudText` carry a 1-px drop shadow by default (`{shadow: false}` to opt out); `hudText` also adds a translucent dark plate behind large centered text (`h:'center', v:'middle', scale>=2` — e.g. PAUSED) by default (`{plate: false}` to opt out). `drawPanel(pc, x, y, w, h, {color, border})` draws that plate directly, clamped inside `SAFE_MARGIN`. `dimScene(pc, alpha=0.55)` darkens the whole frame behind a terminal-screen overlay (GAME_OVER/WIN/PAUSED) while keeping the world visible as context — its fill overscans the viewport by 16 logical px so a screen shake can't expose an undimmed strip at the edges. Dim OR plate, never both |
-| crt.ts | `createCrt()` → `.render(ctx, w, h, dt)` | Draw LAST. Four layered passes over the finished frame: halation (a cached one-shot SNAPSHOT of the frame re-drawn at -1 and +1 device px via `'lighter'`, edge-clamped so columns 0 and w-1 behave like interior columns — snapshotting is what keeps the two sides symmetric instead of double-ghosted), a phosphor lift (additive blue-grey so pure-black art reads as a lit tube, not pure black anymore), scanlines (`'multiply'` toward mid-grey, not opaque black bars — `scanlineAlpha`, default 0.09, is this multiply depth, 0 disables), then vignette + flicker. `CrtOptions`: `scanlineAlpha`, `vignetteAlpha` (0.35), `flicker` (0.03), plus `halation` (per-side alpha, default 0.09, 0 skips the layer) and `lift` (phosphor tint, default `'rgb(15,17,28)'`, `''` skips it). `render` leaves the context state as it found it |
-| runtime.ts | `createRuntime()` → `.gameOver/.scoreChanged/.stateChanged/.embedded/.send` | Host contract, pinned wire format `{source:'retrovibe', type, payload}` |
+| loop.ts | `createLoop({update, render}, {step, maxFrame})` → `.start()/.stop()/.running` | Fixed 1/60 s step; frame delta clamped to `maxFrame` 0.25 s; throws `RangeError` on a non-positive option. Pauses on blur/hidden (keeps calling `render(0)`), resets the clock on focus |
+| input.ts | `createInput(actions, {onFirstKey, target})`, `controlHints(input)`, `BUTTON_KEY` | Arrows/WASD → `input.dir`; A = Space/Z, B = X/C, PAUSE = P/Esc (aliased: down while ≥1 alias down); `pressed/held/released`, `endFrame()` once per tick, `actions`, `dispose()`; labels declared in code |
+| scenes.ts | `createScenes(initial = 'TITLE', {onIllegal})` → `.current/.is/.to/.onEnter` | `TITLE → PLAYING ⇄ PAUSED → (GAME_OVER \| WIN) → restart`, plus `PLAYING → PLAYING`, `PAUSED → TITLE`. `to()` returns `false` on an illegal move, silently unless `onIllegal(from, to)` is given |
+| canvas.ts | `createPixelCanvas({width, height, scale = 3, parent})` → `{canvas, ctx, width, height, scale, clear(color)}` | Smoothing off, scale baked into the transform — draw in logical px; throws when `parent` is `null` |
+| sprite.ts | `makeSprite(rows, map, {outline, flipX})`, `flipSprite`, `drawSprite(ctx, sprite, {x, y}, px = 1)` | ASCII-art sprites; `.`/space/unmapped chars transparent. `outline` bakes a 1-cell keyline — the sprite grows 1 cell per side, hitboxes use the inner size |
+| anim.ts | `frameIndex(time, fps, count)`, `blink(time, period = 0.9, onRatio = 0.6)` → 1/0, `pulse(time, period = 1.2)` → 0..1 | Clock-driven animation and breathing prompts |
+| text.ts | `drawText(ctx, text, {x, y}, opts)`, `drawTextCentered(ctx, text, {width, y}, opts)`, `textWidth(text, scale = 1, spacing = 1)`, `drawLogo(ctx, text, {width, y}, {color, shade, shadow, scale = 3})` | 3×5 bitmap font, M/W 5 wide (proportional — always measure with `textWidth`), uppercased. `TextOptions` `color/scale/spacing/shadow/outline` (bool or colour, mutually exclusive). The keyline is drawn only at `scale >= 3` — below, it degrades to a drop shadow (a keyline closes the 1-px counters). `drawTextCentered` asks for an outline by default at `scale >= 2` unless `shadow` is given. `drawLogo` `color` is REQUIRED (throws) and comes from the palette |
+| fills.ts | `fillBands(ctx, rect, colors)`, `fillDither(ctx, rect, {colorA, colorB, pattern})`, `drawBevel(ctx, rect, {fill, light, dark})`, `drawFrame(ctx, rect, {color, thickness = 1})` | Horizontal bands; 4×4 Bayer dither (`'checker'` 50 % default, `'sparse'` 25 %; cached per context); lit-top/left slab; hollow border |
+| palette.ts | `PICO8`, `GAMEBOY`, `DUSK`, `NEON`, `SUNSET`, `OCEAN`, `PALETTES`, `swapPalette`, `contrast` | Fixed-length tuples (16/4/8/8/8/8) so `PICO8[7]` is a `string`; a `Palette` (`readonly string[]`, e.g. a `swapPalette` result) indexes to `string \| undefined`. `contrast(a, b)`: actors ≥ 3:1 vs static surfaces, ≥ 4.5:1 authored on any non-black ground; ambient 1.8–2.5:1 |
+| particles.ts | `createParticles({width, height, ambient, ambientCount = 48, ambientColor})` → `.update/.render/.burst(x, y, {count, color, speed, life})/.setAmbient(preset, color?)` | Ambient `stars/rain/snow/embers/bubbles` as automatic depth layers with twinkle and clumping; 2–3 px bursts (defaults 8 / 90 / 0.5 s) |
+| juice.ts | `createJuice()` → `.shake/.flash/.hitStop/.frozen/.update/.preRender/.postRender` | Order: clear → `preRender` → world → `postRender` → CRT. Shake rounded to whole px. `flash(color, duration, origin?)`: uniform overlay peaking at 0.55, or with an `origin` (logical px) a RADIAL flash centred there (0.75 at centre, clear at 0.55× the larger dimension). Origin on DEATH flashes; WIN/pickup flashes stay uniform |
+| audio.ts | `createAudio()` → `.unlock/.play/.ready` | Chiptune sfx `jump/pickup/explosion/hit/blip`; `unlock()` inside the first gesture; `play` before it is a silent no-op |
+| ui.ts | `SAFE_MARGIN` (8), `drawScore(pc, score, opts)`, `drawLives(pc, lives, opts)`, `hudText(pc, text, {h, v}, {color, scale, shadow, plate})`, `drawPanel(pc, rect, {color, border})`, `dimScene(pc, alpha = 0.55)` | HUD inside the margin with a 1-px shadow by default; `hudText` adds a plate behind centred text at `scale >= 2` unless `plate: false`; `dimScene` overscans 16 px so shake never exposes an edge. Dim OR plate, never both |
+| crt.ts | `createCrt({scanlineAlpha, vignetteAlpha, flicker, halation, lift})` → `.render(ctx, w, h, dt)` | Draw LAST. Halation (cached snapshot ±1 device px, `'lighter'`, 0.09; 0 skips), phosphor lift (`'rgb(15,17,28)'`; `''` skips), multiply scanlines (0.09), vignette (0.35) + flicker (0.03) |
+| runtime.ts | `createRuntime({targetOrigin = '*', onStandalone})` → `.gameOver/.scoreChanged/.stateChanged/.embedded/.send` | Wire format `{source:'retrovibe', type, payload}`; embedded → `postMessage` to the parent; standalone → a `window` CustomEvent `'retrovibe'` (message in `detail`), or `onStandalone(message)` instead when given |
+
+Internal (not exported): `font.ts`, `ambient.ts`, `geometry.ts` helpers.
 
 ## Models & orchestration (revisit as models change — roles, not benchmarks)
 
-Two repo agents in `.claude/agents/` make the tiering mechanical:
-
 | Agent | Model tier | Owns |
 |---|---|---|
-| `lifecycle-runner` | fast/cheap (Haiku-class) | Clone, integrity checks, ports, dev server, smoke, reset/overwrite safety commits, resets — command-following only |
-| `game-writer` | strong/fast (Sonnet-class) | Writing/editing game code — milestone saves, per-save `npm run check` |
+| `lifecycle-runner` | fast/cheap (Haiku-class) | Clone, integrity checks, eyes setup, dev server, smoke/verify runs, reset/overwrite safety commits, resets — command-following only |
+| `game-writer` | strong/fast (Sonnet-class) | Writing/editing one game's modules, `STYLE.md` and dev hook in milestone saves, `check` + `lint` per save, `look` at what it changed, `verify` before reporting |
 
-- **Escalation rule**: if `npm run check` or the smoke gate fails **twice on
-  the same approach**, escalate the writer one model tier (Sonnet → Opus;
-  fast mode when available) for a fresh attempt instead of a third patch —
-  a retry cascade costs more wall-clock than one stronger pass.
-- **Warm-server ordering**: launch the dev server (per playing-the-game's
-  port discipline) at the *start* of development, in the background — each
-  milestone save hot-reloads, and the final smoke gate pays no startup. The
-  handoff contract is unchanged: the user gets the URL only after build and
-  smoke are green.
-- **Read budget for writers**: CLAUDE.md's engine API table + the cloned
-  `game/main.ts` suffice to start; open a companion skill only when its
-  domain is actually touched.
+- **Escalation rule**: if `check`, `lint` or the smoke gate fails **twice on the same
+  approach**, escalate the writer one tier (Sonnet → Opus) for a fresh attempt instead
+  of a third patch.
+- **Warm-server ordering**: launch the dev server at the *start* of development, in
+  the background — each save hot-reloads and the final gate pays no startup. The user
+  gets the URL only after `verify` is green.
+- **Parallel writers** are fine once the design (and `STYLE.md`) is written: split by
+  module (rules + state vs sprites + view + screens), name each writer's files in its
+  brief, one shared dev server that nobody restarts. While others are mid-change each
+  writer checks only its own files (`npx tsc --noEmit 2>&1 | grep '^game/<file>'`,
+  `npx eslint game/<files>`); the orchestrator runs the whole-game gates once all report.
+- **Read budget for writers**: this file's engine API and lint sections + the cloned
+  `game/` modules and `STYLE.md` suffice to start; open a companion skill only when its
+  domain is touched.
 
 ## Skill routing
 
 The routing list lives **once**, in the orchestrator:
 [`.claude/skills/creating-a-game/SKILL.md`](.claude/skills/creating-a-game/SKILL.md).
-Start there for any game request; it routes to the other eleven skills.
+Start there for any game request; it routes to the other thirteen skills.

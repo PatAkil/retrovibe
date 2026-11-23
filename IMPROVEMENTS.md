@@ -483,3 +483,33 @@ rendering, contrast/grayscale checks, size-floor measurements).
 > - End state: all items marked ☑ here, `workspace/` holds only a pristine
 >   `game-template`, no server on 5173, `git status` clean, branch pushed.
 >   Report per item: what changed, gate results, and the user playtest list.
+
+---
+
+## ☑ 11. Ember Quest port — modular engine, lint gate, agent eyes (2026-11-22)
+
+Improvements proven in the Ember Quest fork were ported back into the
+generator (plan: `emberquest-port-plan.md`). Owner decisions, all approved on
+2026-11-22: **break the engine API** (geometry-object signatures —
+`drawSprite(ctx, s, {x, y}, px)`, `drawText(ctx, t, {x, y})`,
+`drawTextCentered/drawLogo(ctx, t, {width, y})`, rect-taking fills and
+`drawPanel`; `draw.ts` split into canvas/sprite/anim/text/fills/geometry/font;
+console-free loop, scenes and runtime — standalone messages are a `retrovibe`
+window event); **no comments anywhere** (the style card moves to a per-game
+`STYLE.md`, the teaching moves into the skills); **lint thresholds are a hard
+gate on generated games too** (the template and every game are small modules;
+`game-writer` runs check + lint per save); **no ESLint exemptions** — fixtures,
+`harness/` and `verification/` are linted and the fixtures are restructured
+into modules with hash-identical capture frames as the acceptance bar; **tools are code, never ad-hoc** —
+per-game tools are template code (`smoke.mjs`, `scripts/look.mjs`,
+`scripts/verify.mjs`), repo tools live in `harness/`, skills still never
+generate helper scripts; the **simulator and design skills are an opt-in path
+for rules-heavy games** (`designing-mechanics`, `balancing-with-the-simulator`
+with an inline `sim/run.mjs` recipe); release/Pages deferred.
+
+Also landed: `npm run setup` (browser from `CHROMIUM_PATH`, Playwright or
+`@sparticuz/chromium`) replaces `npx playwright install chromium`; a dev hook
+(`?seed`, `?scene`, `&hold`, `window.__retrovibe`, `unsupported`) in every game;
+`look` before reporting; pid-file dev-server lifecycle replacing every
+port-based kill; the exposed-port URL at hand-off. Skills, agents, CLAUDE.md
+and README rewritten to match; skill count 12 → 14.

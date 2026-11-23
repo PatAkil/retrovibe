@@ -1,0 +1,11 @@
+{
+  "threshold": 0,
+  "minTokens": 50,
+  "minLines": 5,
+  "mode": "mild",
+  "format": ["typescript", "javascript"],
+  "reporters": ["console"],
+  "absolute": false,
+  "gitignore": true,
+  "exitCode": 1
+}

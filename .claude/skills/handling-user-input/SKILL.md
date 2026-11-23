@@ -5,7 +5,7 @@ description: Use when anything touches controls — declaring or relabeling acti
 
 # Handling user input
 
-Every Retrovibe game uses `engine/input.ts` for all keyboard input. Import only from the barrel: `import { createInput, controlHints, BUTTON_KEY } from '../engine';`. The reference implementation is `workspace/game-template/game/main.ts` — copy its patterns. After any input edit: `cd workspace/<game-name> && npm run check`.
+Every Retrovibe game uses `engine/input.ts` for all keyboard input. Import only from the barrel: `import { createInput, controlHints, BUTTON_KEY } from '../engine';`. The reference implementation is the template's game: `game/app.ts` declares the actions, `game/frame.ts` and `game/play.ts` read the edges per scene, `game/screens.ts` renders the hints — copy its patterns. After any input edit, from the game folder: `npm run check && npm run lint`, then `npm run look -- --scene title` to read the hints off the screenshot. `look --keys` drives the buttons through the dev hook (`A`, `B`, `PAUSE` and the four directions, one edge press per key followed by `--steps` ticks), so `npm run look -- --scene playing --keys "Space"` proves what A does in play.
 
 ## Movement — arrows + WASD, one vector
 
@@ -40,33 +40,29 @@ This declaration is the **only** place a button's meaning is written down:
 - **Never hand-write the title-screen control hints anywhere else.** A hand-written hint is a second source of truth that drifts. (Other screens may show contextual button text — e.g. the reference game-over screen's `` `${BUTTON_KEY.A.hint} RESTART` `` — but the key name must come from the same physical binding `BUTTON_KEY` documents, and the title screen always renders from the declarations.)
 - When an edit changes what a button does, change the `label` in the **same declaration** in the same edit. There is no separate file to keep in sync — a wrong or missing label is visible the moment the game is played.
 
-Complete setup, from `workspace/game-template/game/main.ts`:
+Complete setup — the pattern `game/app.ts` follows. The actions are declared once, with their labels, and the title screen renders its hints from exactly this list through `controlHints`, so a label can never drift from what the button does. The reference game declares `A` as `start` and `PAUSE` as `pause`; `B` is deliberately undeclared (its `STYLE.md` says so). `InputOptions` also takes `target` (default `window`) for an embedding that must scope the listeners:
 
 ```ts
-import { createInput, controlHints, createAudio } from '../engine';
+import { createInput, createAudio } from '../engine';
 
 const audio = createAudio();
-// Actions are DECLARED here with their labels — the title screen renders hints
-// from these declarations (controlHints), so labels can never drift.
 const input = createInput(
   [
     { button: 'A', label: 'start' },
     { button: 'PAUSE', label: 'pause' },
   ],
-  { onFirstKey: () => audio.unlock() },
+  { onFirstKey: () => { audio.unlock(); } },
 );
 ```
 
-And the title-screen render, also from `main.ts`:
+And the title-screen render. The declared hints come from `controlHints(input)`, never hand-written; the movement line is the one static string, placed after them:
 
 ```ts
-// Control hints rendered FROM the action declarations — never hand-written.
-controlHints(input).forEach((hint, i) => {
-  drawTextCentered(pc.ctx, hint, W, 100 + i * 10, { color: PICO8[7] });
+const hints = controlHints(input);
+hints.forEach((hint, i) => {
+  drawTextCentered(pc.ctx, hint, { width: W, y: 100 + i * 10 }, { color: PICO8[7] });
 });
-drawTextCentered(pc.ctx, 'ARROWS/WASD MOVE', W, 100 + controlHints(input).length * 10, {
-  color: PICO8[5],
-});
+drawTextCentered(pc.ctx, 'ARROWS/WASD MOVE', { width: W, y: 100 + hints.length * 10 }, { color: PICO8[5] });
 ```
 
 ## Edge vs held semantics
@@ -79,12 +75,12 @@ The `Input` interface exposes three queries per button:
 
 Because buttons have alias keys, these are **button-level** edges: switching from one alias to another mid-hold (Space held, Z tapped) produces no `pressed` and no `released` — only the whole button going down or fully up does.
 
-**`endFrame()` must be called exactly once per update tick, after all input reads** — it clears the `pressed`/`released` edges. The reference game calls it as the last line of `update(dt)`:
+**`endFrame()` must be called exactly once per update tick, after all input reads** — it clears the `pressed`/`released` edges. Call it as the last line of `update`, after the scene's handler has read `input.dir` and the button edges — the reference's `update(g, dt)` in `game/frame.ts`:
 
 ```ts
-function update(dt: number): void {
-  // ... read input.dir, input.pressed(...), etc. ...
-  input.endFrame();
+function update(g: Game, dt: number): void {
+  UPDATE_SCENE[g.app.scenes.current](g, dt);
+  g.app.input.endFrame();
 }
 ```
 
