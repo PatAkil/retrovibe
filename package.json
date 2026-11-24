@@ -13,7 +13,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@sparticuz/chromium": "^153.0.0",
-    "@types/node": "^22.20.1",
+    "@types/node": "^26.6.6",
     "dependency-cruiser": "^18.9.0",
     "esbuild": "^0.25.12",
     "eslint": "^10.15.0",
