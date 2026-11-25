@@ -43,10 +43,10 @@ export function killChildren() {
   }
 }
 
-export function execNode(cwd, args, timeoutMs) {
+export function execNode(cwd, args, timeoutMs, extraEnv = {}) {
   return new Promise((resolve) => {
     const out = { stdout: '', stderr: '', timedOut: false };
-    const env = { ...process.env, FORCE_COLOR: '0', NO_COLOR: '1' };
+    const env = { ...process.env, FORCE_COLOR: '0', NO_COLOR: '1', ...extraEnv };
     const child = spawn(process.execPath, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
     children.add(child);
     const timer = setTimeout(() => {
@@ -72,11 +72,11 @@ function eslintProblems(result, root) {
   });
 }
 
-export async function lintPaths(root, targets) {
+export async function lintPaths(root, targets, extraEnv = {}) {
   if (targets.length === 0) {
     return [];
   }
-  const r = await execNode(root, [join(root, ENTRY.eslint), '--no-warn-ignored', '--format', 'json', ...targets], CHECK_MS * 2);
+  const r = await execNode(root, [join(root, ENTRY.eslint), '--no-warn-ignored', '--format', 'json', ...targets], CHECK_MS * 2, extraEnv);
   if (r.timedOut) {
     return [{ file: '(eslint)', text: `eslint timed out after ${String(CHECK_MS * 2 / 1000)}s` }];
   }
@@ -87,7 +87,7 @@ export async function lintPaths(root, targets) {
   }
 }
 
-export const lintFiles = (root, files) => lintPaths(root, lintable(files));
+export const lintFiles = (root, files, extraEnv = {}) => lintPaths(root, lintable(files), extraEnv);
 
 function parseTsc(out) {
   const errors = [];

@@ -3,6 +3,8 @@ import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import local from './tools/eslint-no-comments.mjs';
 
+const FAST_LINT = process.env.RETROVIBE_FAST_LINT === '1';
+
 const HEADLESS = [
   '**/game/types.ts', '**/game/data.ts', '**/game/sim.ts', '**/game/sim/**/*.ts', '**/game/rules/**/*.ts',
 ];
@@ -17,19 +19,66 @@ const DOM_KEY_CODE = '^(Arrow(Left|Right|Up|Down)|Key[A-Z]|Digit[0-9]|Numpad[0-9
 
 const NODE_GLOBALS = Object.fromEntries(
   [
-    'process', 'console', 'URL', 'URLSearchParams', 'Buffer', 'fetch', 'performance', 'AbortController',
+    'process', 'console', 'URL', 'URLSearchParams', 'Buffer', 'fetch', 'performance', 'AbortController', 'AbortSignal',
     'structuredClone', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'setImmediate', 'queueMicrotask',
   ].map((name) => [name, 'readonly']),
 );
 
 const COMMONJS_GLOBALS = { module: 'writable', require: 'readonly', __dirname: 'readonly', __filename: 'readonly' };
 
-const GAME_ROOTS = ['workspace/*', 'verification/*'];
+const CORE_RULES = {
+  'local/no-comments': 'error',
+  eqeqeq: ['error', 'always'],
+  curly: ['error', 'all'],
+  complexity: ['error', 10],
+  'max-depth': ['error', 4],
+  'max-params': ['error', 4],
+  'max-lines': ['error', { max: 400, skipBlankLines: true, skipComments: false }],
+  'max-lines-per-function': ['error', { max: 80, skipBlankLines: true, skipComments: false, IIFEs: true }],
+  'max-nested-callbacks': ['error', 3],
+};
 
-const DEFAULT_PROJECT = [
-  '*.js', '*.mjs', '*.cjs', '.*.cjs', 'tools/*.mjs', 'harness/*.mjs', 'verification/*.mjs',
-  ...GAME_ROOTS.flatMap((root) => [`${root}/*.mjs`, `${root}/scripts/*.mjs`, `${root}/sim/*.mjs`]),
-];
+const TS_TYPE_RULES = {
+  '@typescript-eslint/restrict-template-expressions': ['error', {
+    allowNumber: true,
+    allowAny: false,
+    allowBoolean: false,
+    allowNullish: false,
+    allowRegExp: false,
+    allowNever: false,
+    allowArray: false,
+  }],
+  '@typescript-eslint/naming-convention': ['error',
+    { selector: 'default', format: ['camelCase'] },
+    { selector: 'import', format: ['camelCase', 'PascalCase'] },
+    { selector: 'variable', format: ['camelCase'] },
+    { selector: 'variable', modifiers: ['const', 'global'], format: ['camelCase', 'UPPER_CASE'] },
+    { selector: 'parameter', format: ['camelCase'], leadingUnderscore: 'allow' },
+    { selector: 'typeLike', format: ['PascalCase'] },
+    { selector: 'enumMember', format: ['PascalCase', 'UPPER_CASE'] },
+    { selector: ['objectLiteralProperty', 'objectLiteralMethod', 'typeProperty'], format: ['camelCase', 'UPPER_CASE'] },
+    { selector: ['objectLiteralProperty', 'objectLiteralMethod', 'typeProperty'], modifiers: ['requiresQuotes'], format: null },
+    { selector: 'objectLiteralProperty', filter: { regex: DOM_KEY_CODE, match: true }, format: null },
+    { selector: ['typeProperty', 'objectLiteralProperty'], filter: { regex: '^__retrovibe$', match: true }, format: null },
+  ],
+};
+
+const TS_CONFIG = FAST_LINT
+  ? {
+      files: ['**/*.ts'],
+      extends: [tseslint.configs.recommended],
+    }
+  : {
+      files: ['**/*.ts'],
+      extends: [tseslint.configs.strictTypeChecked, tseslint.configs.stylisticTypeChecked],
+      languageOptions: {
+        parserOptions: {
+          projectService: true,
+          tsconfigRootDir: import.meta.dirname,
+        },
+      },
+      rules: TS_TYPE_RULES,
+    };
 
 export default defineConfig(
   {
@@ -46,54 +95,11 @@ export default defineConfig(
     },
   },
   js.configs.recommended,
-  tseslint.configs.strictTypeChecked,
-  tseslint.configs.stylisticTypeChecked,
   {
-    languageOptions: {
-      parserOptions: {
-        projectService: {
-          allowDefaultProject: DEFAULT_PROJECT,
-          defaultProject: 'tools/tsconfig.default.json',
-          maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING: 256,
-        },
-        tsconfigRootDir: import.meta.dirname,
-      },
-    },
     plugins: { local },
-    rules: {
-      'local/no-comments': 'error',
-      eqeqeq: ['error', 'always'],
-      curly: ['error', 'all'],
-      complexity: ['error', 10],
-      'max-depth': ['error', 4],
-      'max-params': ['error', 4],
-      'max-lines': ['error', { max: 400, skipBlankLines: true, skipComments: false }],
-      'max-lines-per-function': ['error', { max: 80, skipBlankLines: true, skipComments: false, IIFEs: true }],
-      'max-nested-callbacks': ['error', 3],
-      '@typescript-eslint/restrict-template-expressions': ['error', {
-        allowNumber: true,
-        allowAny: false,
-        allowBoolean: false,
-        allowNullish: false,
-        allowRegExp: false,
-        allowNever: false,
-        allowArray: false,
-      }],
-      '@typescript-eslint/naming-convention': ['error',
-        { selector: 'default', format: ['camelCase'] },
-        { selector: 'import', format: ['camelCase', 'PascalCase'] },
-        { selector: 'variable', format: ['camelCase'] },
-        { selector: 'variable', modifiers: ['const', 'global'], format: ['camelCase', 'UPPER_CASE'] },
-        { selector: 'parameter', format: ['camelCase'], leadingUnderscore: 'allow' },
-        { selector: 'typeLike', format: ['PascalCase'] },
-        { selector: 'enumMember', format: ['PascalCase', 'UPPER_CASE'] },
-        { selector: ['objectLiteralProperty', 'objectLiteralMethod', 'typeProperty'], format: ['camelCase', 'UPPER_CASE'] },
-        { selector: ['objectLiteralProperty', 'objectLiteralMethod', 'typeProperty'], modifiers: ['requiresQuotes'], format: null },
-        { selector: 'objectLiteralProperty', filter: { regex: DOM_KEY_CODE, match: true }, format: null },
-        { selector: ['typeProperty', 'objectLiteralProperty'], filter: { regex: '^__retrovibe$', match: true }, format: null },
-      ],
-    },
+    rules: CORE_RULES,
   },
+  TS_CONFIG,
   {
     files: ['**/game/**/*.ts', '**/engine/**/*.ts'],
     rules: { 'no-console': 'error' },
@@ -101,41 +107,6 @@ export default defineConfig(
   {
     files: ['**/*.js', '**/*.mjs'],
     languageOptions: { sourceType: 'module', globals: NODE_GLOBALS },
-  },
-  {
-    files: ['**/*.js', '**/*.mjs', '**/*.cjs'],
-    rules: {
-      '@typescript-eslint/no-unsafe-argument': 'off',
-      '@typescript-eslint/no-unsafe-assignment': 'off',
-      '@typescript-eslint/no-unsafe-call': 'off',
-      '@typescript-eslint/no-unsafe-member-access': 'off',
-      '@typescript-eslint/no-unsafe-return': 'off',
-      '@typescript-eslint/restrict-plus-operands': ['error', { allowAny: true }],
-      '@typescript-eslint/restrict-template-expressions': ['error', { allowNumber: true, allowAny: true }],
-    },
-  },
-  {
-    files: ['eslint.config.mjs', '.dependency-cruiser.cjs'],
-    rules: {
-      '@typescript-eslint/naming-convention': ['error',
-        { selector: 'default', format: ['camelCase'] },
-        { selector: 'import', format: ['camelCase', 'PascalCase'] },
-        { selector: 'variable', modifiers: ['const', 'global'], format: ['camelCase', 'UPPER_CASE'] },
-        { selector: 'objectLiteralProperty', format: null },
-      ],
-    },
-  },
-  {
-    files: ['tools/**/*.mjs'],
-    rules: {
-      '@typescript-eslint/naming-convention': ['error',
-        { selector: 'default', format: ['camelCase'] },
-        { selector: 'variable', modifiers: ['const', 'global'], format: ['camelCase', 'UPPER_CASE'] },
-        { selector: 'objectLiteralProperty', format: ['camelCase'] },
-        { selector: 'objectLiteralProperty', modifiers: ['requiresQuotes'], format: null },
-        { selector: 'objectLiteralMethod', format: ['camelCase', 'PascalCase'] },
-      ],
-    },
   },
   {
     files: ['**/smoke.mjs', '**/scripts/**/*.mjs', 'harness/**/*.mjs', 'verification/*.mjs'],
@@ -146,7 +117,6 @@ export default defineConfig(
   {
     files: ['**/*.cjs'],
     languageOptions: { sourceType: 'commonjs', globals: { ...NODE_GLOBALS, ...COMMONJS_GLOBALS } },
-    rules: { '@typescript-eslint/no-require-imports': 'off' },
   },
   {
     files: ['**/game/**/*.ts'],

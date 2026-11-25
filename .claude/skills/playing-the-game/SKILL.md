@@ -62,13 +62,19 @@ If the readiness line is not in the tail, read the log: `strictPort` guarantees 
 
 ### 3. Look
 
+Batch scenes in one command (reuses a single browser, prints one JSON line per scene):
+
 ```bash
-cd workspace/<game-name> && npm run look -- --scene title
-cd workspace/<game-name> && npm run look -- --scene playing --seed 7 --keys "Left,Space"
-cd workspace/<game-name> && npm run look -- --scene gameover
+cd workspace/<game-name> && npm run look -- --scenes title,playing,gameover
 ```
 
-Each prints one JSON line — `ok`, the game's `state` (from the dev hook's `state()`), `errors` (every `console.error` and page error) and `shot`, the screenshot path (`$AIR_ARTIFACTS_DIR/look/<game>/…` when that is set, else `/tmp/retrovibe-look/<game>/`). Read the state first; read the screenshot whenever the look changed. Scenes: `title playing paused gameover win`; with `--scene` or `--seed` the dev hook holds the loop, so the same arguments give the same pixels. Exit 1 means errors or no canvas; exit 2 means the game lists that scene in `unsupported` (e.g. no WIN). `--no-shot` skips the screenshot, `--out f.png` names it, `--steps N` sets the ticks after each key (default 30).
+For targeted input/seed checks, inspect a single scene:
+
+```bash
+cd workspace/<game-name> && npm run look -- --scene playing --seed 7 --keys "Left,Space"
+```
+
+Each JSON line reports `ok`, the game's `state` (from the dev hook's `state()`), `errors` (every `console.error` and page error) and `shot`, the screenshot path (`$AIR_ARTIFACTS_DIR/look/<game>/…` when that is set, else `/tmp/retrovibe-look/<game>/`). Read the state first; read the screenshot whenever the look changed. Scenes: `title playing paused gameover win`; with `--scene`/`--scenes` or `--seed` the dev hook holds the loop, so the same arguments give the same pixels. Exit 1 means errors or no canvas; exit 2 means the game lists that scene in `unsupported` (e.g. no WIN). `--no-shot` skips the screenshot, `--out f.png` names it, `--steps N` sets the ticks after each key (default 30).
 
 ### 4. Runtime gate
 
@@ -76,11 +82,11 @@ Each prints one JSON line — `ok`, the game's `state` (from the dev hook's `sta
 cd workspace/<game-name> && npm run verify
 ```
 
-One line per gate — eyes, serve, lint, check, build, smoke (plus `sim:quick` as INFO when the game has `sim/run.mjs`) — then `TOTAL PASS` or `TOTAL FAIL (<gates>)` with the tail of each failing gate's output. `serve` reuses the server on 5173 only when it serves this game, else it starts its own on a free port and stops it afterwards. The smoke gate (`smoke.mjs`, template code copied into every game; `npm run smoke` runs it alone) drives the headless browser: the page loads, a `<canvas>` is attached in the **live DOM** after the game module ran, and zero `console.error` / `pageerror` fire over 40 frames. A nonzero exit is a hard gate failure: read the output, fix the game, repeat from step 3. After a structural change (new modules, a new scene, a dev-hook change) run `npm run verify -- --full` too: knip, jscpd, depcruise, `dist:no-hook`, `look:all`.
+One line per gate — eyes, serve, lint, check, build, smoke (plus `sim:quick` as INFO when the game has `sim/run.mjs`) — then `TOTAL PASS` or `TOTAL FAIL (<gates>)` with the tail of each failing gate's output. `serve` reuses the server on 5173 only when it serves this game, else it starts its own on a free port and stops it afterwards. The smoke gate (`smoke.mjs`, template code copied into every game; `npm run smoke` runs it alone) drives the headless browser: the page loads, a `<canvas>` is attached in the **live DOM** after the game module ran, and zero `console.error` / `pageerror` fire over 40 frames. A nonzero exit is a hard gate failure: read the output, fix the game, repeat from step 3. For new-game creation and normal iteration, `npm run verify` + batched `npm run look -- --scenes title,playing,gameover` is the complete gate; reserve `npm run verify -- --full` (`knip`, `jscpd`, `depcruise`, `dist:no-hook`, `look:all`) for structural/template changes, CI, or explicit full-audit requests.
 
 ### 5. Hand off to the user — with the server UP
 
-**The handoff state is server up.** After the gate passes, LEAVE the dev server running. Immediately before sending the handoff message, re-verify liveness from the game folder:
+**The handoff state is server up.** After the gate passes, LEAVE the dev server running. If `npm run verify` just reported `serve ... reusing http://localhost:5173/`, liveness is already verified — skip the redundant liveness check / `lifecycle-runner` round-trip and hand off directly. Otherwise, immediately before sending the handoff message, re-verify liveness from the game folder:
 
 ```bash
 kill -0 "$(cat /tmp/retrovibe-dev-<game-name>.pid)" && echo alive

@@ -115,7 +115,7 @@ export function hashFiles(root, files) {
   return hash.digest('hex');
 }
 
-export const fingerprint = (root) => hashFiles(root, gatedFiles(root));
+export const fingerprint = (root, all = gatedFiles(root)) => hashFiles(root, all);
 
 function isStale(path, staleMs) {
   try {
@@ -220,8 +220,8 @@ export function claimedByOther(state, key, path, now) {
   return claim !== undefined && claim.agent !== key && now - claim.at < CLAIM_MS;
 }
 
-export function freshAgent(root, extra) {
-  return { snap: statSnapshot(root, gatedFiles(root)), seen: Date.now(), touched: [], ...extra };
+export function freshAgent(root, extra, all = gatedFiles(root)) {
+  return { snap: statSnapshot(root, all), seen: Date.now(), touched: [], ...extra };
 }
 
 export function logEvent(dir, entry) {

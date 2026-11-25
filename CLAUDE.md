@@ -97,13 +97,14 @@ HUD · `screens.ts` title, pause, terminal screens · `lookup.ts` `at()` ·
 - **Skill frontmatter convention**: every SKILL.md description starts with
   `Use when <trigger conditions>.` followed by one sentence on what it does —
   triggers first, so the right skill is inferred before reading further.
-- **Done means**: `npm run check` and `npm run lint` after every edit; look at what
-  changed (`npm run look -- --scene <s>`, state and errors first, the screenshot whenever
-  the look changed); `npm run verify` prints `TOTAL PASS` before handing off;
-  `npm run verify -- --full` after a structural change (new or moved modules, a new
-  scene, a dev-hook change). A green build alone is never "done" — and the user, not
-  Claude, is the playtester. Claude reports "builds, boots clean, ready to play at
-  <URL>" and may say what it saw through `look`; never "playtested".
+- **Done means**: batch writes per milestone, run `npm run check && npm run lint` once
+  per milestone, look at the screens via batched `npm run look -- --scenes title,playing,gameover`
+  (state and errors first, screenshots whenever the look changed), and `npm run verify`
+  prints `TOTAL PASS` before handing off. Reserve `npm run verify -- --full` for
+  structural/template changes, CI, or explicit full-audit requests. A green build alone
+  is never "done" — and the user, not Claude, is the playtester. Claude reports
+  "builds, boots clean, ready to play at <URL>" and may say what it saw through `look`;
+  never "playtested".
 - **Graphics changes are verified by looking, not only by building.** Any
   change under `workspace/game-template/` (engine, reference game, shell) or
   to a skill that directs visual choices is not done until the
@@ -153,7 +154,7 @@ Working within them:
 
 | Command (in the game folder) | What it does |
 |---|---|
-| `npm run look -- [--scene S] [--seed N] [--keys "Left,Space"] [--steps N] [--out f.png] [--no-shot]` | One JSON line `{ok, state, errors, shot}`; exit 1 on any console/page error or no canvas, exit 2 when the game lists the scene as `unsupported`. With `--scene`/`--seed` the page holds the loop and each key is followed by `--steps` (default 30) fixed ticks — same arguments, same pixels. Scenes: `title playing paused gameover win`. Shots: `$AIR_ARTIFACTS_DIR/look/<game>/`, else `/tmp/retrovibe-look/<game>/` |
+| `npm run look -- [--scene S \| --scenes S1,S2,...] [--seed N] [--keys "Left,Space"] [--steps N] [--out f.png] [--no-shot]` | One JSON line per scene `{ok, state, errors, shot}` (`--scenes title,playing,gameover` batches multiple scenes in one browser launch); exit 1 on any console/page error or no canvas, exit 2 when the game lists the scene as `unsupported`. With `--scene`/`--scenes`/`--seed` the page holds the loop and each key is followed by `--steps` (default 30) fixed ticks — same arguments, same pixels. Scenes: `title playing paused gameover win`. Shots: `$AIR_ARTIFACTS_DIR/look/<game>/`, else `/tmp/retrovibe-look/<game>/` |
 | `npm run smoke` | Page loads, a `<canvas>` attaches, zero `console.error`/page errors over 40 frames (`SMOKE_URL` overrides the target) |
 | `npm run verify` | eyes, serve, lint, check, build, smoke (+ `sim:quick` as INFO when `sim/run.mjs` exists); one `PASS/FAIL/INFO` line per gate, then `TOTAL`. Reuses a server on 5173 only if it serves THIS game, else starts its own on a free port and stops it |
 | `npm run verify -- --full` | adds knip, jscpd, depcruise, `dist:no-hook` (no `__retrovibe` in `dist/`), `look:all` (every scene) |
@@ -190,8 +191,8 @@ and `package.json`) or "repo tooling" (everything else that is linted). Never ga
 | When | Effect |
 |---|---|
 | SessionStart / SubagentStart | records a per-unit fingerprint and file snapshot; on a cloud box also runs `npm run setup` in the background |
-| after every Bash / Edit / Write / MultiEdit / NotebookEdit call | changed files credited to this agent get `eslint`; their `.ts` files get an incremental `tsc` for the game folder that holds them. Errors → exit 2 with file, line, rule: read and fix them. The first template or fixture edit adds the verifying-graphics reminder |
-| Stop / SubagentStop | per unit changed this session and not remembered green — user game: `npm run verify`; template or fixture: eslint + `tsc --noEmit` (never a build or dev server in the template); tooling: eslint. Red blocks with the failing output |
+| after every Bash / Edit / Write / MultiEdit / NotebookEdit call (`PostToolUse`) | tracks touched files cleanly without blocking mid-refactor edits (set `RETROVIBE_EDIT_CHECKS=1` to opt into fast per-edit `eslint` + incremental `tsc`). The first template or fixture edit adds the verifying-graphics reminder |
+| Stop / SubagentStop | per unit changed this session and not remembered green — hits the green cache immediately when `npm run verify` already passed, and skips pristine template clones. Otherwise runs: user game `npm run verify`; template or fixture eslint + `tsc --noEmit` (never a build or dev server in the template); tooling eslint. Red blocks with the failing output |
 | `git commit` | only the units the staged paths touch: refuses if such a unit has unstaged or untracked gated files, or fails its gate. Other units' dirt is ignored. Deletion-only, docs-only and baseline-only commits run nothing |
 | `npm run gate` (root) | the same gate by hand for every unit that differs from HEAD; remembers green results |
 
@@ -240,23 +241,30 @@ Internal (not exported): `font.ts`, `ambient.ts`, `geometry.ts` helpers.
 
 | Agent | Model tier | Owns |
 |---|---|---|
-| `lifecycle-runner` | fast/cheap (Haiku-class) | Clone, integrity checks, eyes setup, dev server, smoke/verify runs, reset/overwrite safety commits, resets — command-following only |
-| `game-writer` | strong/fast (Sonnet-class) | Writing/editing one game's modules, `STYLE.md` and dev hook in milestone saves, `check` + `lint` per save, `look` at what it changed, `verify` before reporting |
+| `lifecycle-runner` | fast/cheap (Haiku-class) | Single-call new-game setup (collision guard, template integrity, clone, eyes, `STYLE.md` digest, warm dev server), plus smoke/verify runs, reset/overwrite safety commits, resets — command-following only |
+| `game-writer` | strong/fast (Sonnet-class) | Writing/editing one game's modules, `STYLE.md` and dev hook in 2 batched milestones, `check` + `lint` per milestone, batched `look --scenes`, `verify` before reporting |
 
 - **Escalation rule**: if `check`, `lint` or the smoke gate fails **twice on the same
   approach**, escalate the writer one tier (Sonnet → Opus) for a fresh attempt instead
   of a third patch.
 - **Warm-server ordering**: launch the dev server at the *start* of development, in
-  the background — each save hot-reloads and the final gate pays no startup. The user
-  gets the URL only after `verify` is green.
-- **Parallel writers** are fine once the design (and `STYLE.md`) is written: split by
-  module (rules + state vs sprites + view + screens), name each writer's files in its
-  brief, one shared dev server that nobody restarts. While others are mid-change each
-  writer checks only its own files (`npx tsc --noEmit 2>&1 | grep '^game/<file>'`,
-  `npx eslint game/<files>`); the orchestrator runs the whole-game gates once all report.
+  the background (inside the single `lifecycle-runner` setup call) — each save
+  hot-reloads and the final gate pays no startup. If `npm run verify` reports
+  `serve ... reusing http://localhost:5173/`, skip the final liveness round-trip.
+  The user gets the URL only after `verify` is green.
+- **Parallel 2-writer fast path (non-trivial games)**: once `STYLE.md` + `state.ts`
+  (the shared `Game` contract) are written, split into two parallel `game-writer`
+  agents against the same warm dev server:
+  - **Writer A (Rules)**: `play.ts`, `flow.ts`, `frame.ts`, `devhook.ts`, `main.ts`
+  - **Writer B (Art/UI)**: `theme.ts`, `sprites.ts`, `view.ts`, `screens.ts`
+  Name each writer's files in its brief; nobody restarts the dev server. While a peer
+  is mid-change each writer checks only its own files (`npx tsc --noEmit 2>&1 | grep '^game/<file>'`,
+  `npx eslint game/<files>`); the orchestrator runs the batched `look --scenes` and
+  `npm run verify` once both report.
 - **Read budget for writers**: this file's engine API and lint sections + the cloned
-  `game/` modules and `STYLE.md` suffice to start; open a companion skill only when its
-  domain is touched.
+  `game/` modules, `STYLE.md`, and the compact existing-games `STYLE.md` digest from
+  setup suffice to start; open a companion skill only when its domain is touched, and
+  read `verification/` fixtures only if a visual pass fails.
 
 ## Skill routing
 

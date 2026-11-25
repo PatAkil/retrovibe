@@ -5,7 +5,7 @@ description: Use when the user asks for a new game, or as the entry point when i
 
 # Creating a game
 
-Turn a user's game description into a playable game folder under `workspace/<game-name>`, cloned from `workspace/game-template`. Follow the five steps in order. Never skip a gate.
+Turn a user's game description into a playable game folder under `workspace/<game-name>`, cloned from `workspace/game-template`. Follow the steps in order. Never skip a gate.
 
 **No commits during the interaction.** The create→play→iterate loop touches git zero times; the working tree simply holds the current game. Recoverability lives at the deletion moments instead: resetting-the-workspace's safety commit, and this skill's explicit-overwrite branch (Step 2). Explicit "commit/save my game" requests still commit, scoped to `workspace/<game-name>` (never `git add -A`).
 
@@ -39,79 +39,64 @@ If the request is vague, invoke **helping-the-user** first. Bar to proceed — a
 - lose condition (how the run ends)
 - controls (which inputs do what)
 
-Do not clone or write code until the bar is met. **Rules-heavy genres** (RPG, roguelike, deck-builder, tactics, management sim) additionally go through **designing-mechanics** before Step 3: options on the table, the user picks, and the contract is written to the game's `DESIGN.md` (in the clone, as the first file after Step 3) before any module is written.
+Do not clone or write code until the bar is met. **Rules-heavy genres** (RPG, roguelike, deck-builder, tactics, management sim) additionally go through **designing-mechanics** before Step 2: options on the table, the user picks, and the contract is written to the game's `DESIGN.md` (in the clone, as the first file after Step 2) before any module is written.
 
-## Step 2 — Route (collision guard)
+## Step 2 — Route, setup & warm server (single `lifecycle-runner` call)
 
-Derive the folder name from the game's name (if the user didn't name it, invent a short fitting one and tell them): lowercase, words joined with hyphens, folder-friendly (letters, digits, hyphens only — e.g. "Space Miner!" → `space-miner`).
+Derive the folder name from the game's name (if the user didn't name it, invent a short fitting one and tell them): lowercase, words joined with hyphens, folder-friendly (letters, digits, hyphens only — e.g. "Space Miner!" → `space-miner`). **`game-template` is reserved and never a valid game name.**
 
-**`game-template` is reserved and never a valid game name.** If the derived name is `game-template`, pick a different name (ask the user). The collision/iterate/overwrite branches below must never be applied to `workspace/game-template` — it is the pristine template, not a game.
+Run **one** `lifecycle-runner` invocation to perform the entire mechanical setup in a single round-trip:
 
-Check whether `workspace/<game-name>` already exists:
-- **Exists** → hand off to **iterating-on-a-game**, or ask the user: pick a new name, iterate on the existing game, or explicitly overwrite. **Overwrite means safety-commit, then delete, then clone:**
-  1. Stop the game's dev server first — never delete a folder a live server is serving: `kill -- -$(cat /tmp/retrovibe-dev-<name>.pid) && rm /tmp/retrovibe-dev-<name>.pid` (no pid file → find it with `ps -eo pid,args | awk '/node .*vite/ && !/awk/'` and `readlink /proc/<pid>/cwd`, then `kill <pid>`).
-  2. Pathspec-limited checkpoint of the old game (fixed message convention):
-     `git add workspace/<name> && git commit -m "checkpoint <name> before overwrite" -- workspace/<name>`
-     (skip only if `git status --porcelain workspace/<name>` is empty AND the folder is already in git history; a never-committed game must be committed here or the overwrite is unrecoverable data loss).
-  3. `rm -rf workspace/<name>`, then clone (Step 3), then stage and commit the deletion together with nothing else riding along: `git add workspace/<name> && git commit -m "overwrite <name>" -- workspace/<name>` — note this stages the fresh clone too; that is fine, it IS the overwrite.
-  4. The handoff message must name the safety commit hash and the whole-game restore command `git checkout <hash> -- workspace/<name>` — recovery the user isn't told about doesn't exist, and it must be findable by a fresh session (see restore routing above).
-- **Does not exist** → continue.
+1. **Collision guard:** check whether `workspace/<game-name>` already exists.
+   - **Exists** → stop and hand off to **iterating-on-a-game**, or ask the user: pick a new name, iterate on the existing game, or explicitly overwrite. **Overwrite means safety-commit, then delete, then clone:**
+     1. Stop the game's dev server first: `kill -- -$(cat /tmp/retrovibe-dev-<name>.pid) && rm /tmp/retrovibe-dev-<name>.pid` (no pid file → `ps -eo pid,args | awk '/node .*vite/ && !/awk/'` + `readlink /proc/<pid>/cwd`, then `kill <pid>`).
+     2. Pathspec-limited checkpoint of the old game: `git add workspace/<name> && git commit -m "checkpoint <name> before overwrite" -- workspace/<name>` (skip only if `git status --porcelain workspace/<name>` is empty AND the folder is already in git history).
+     3. `rm -rf workspace/<name>`, clone, then commit the overwrite: `git add workspace/<name> && git commit -m "overwrite <name>" -- workspace/<name>`.
+     4. Name the safety commit hash and restore command `git checkout <hash> -- workspace/<name>` in the handoff message.
+   - **Never run `cp -r` onto an existing folder** (it nests `game-template/` inside it).
+2. **Template integrity & clone:** `git status --porcelain workspace/game-template` must be empty (else `git checkout -- workspace/game-template && git clean -fd workspace/game-template`), then `cp -r workspace/game-template workspace/<game-name>`. No `npm install` needed — bins walk up to root `node_modules`.
+3. **Eyes check:** if `${TMPDIR:-/tmp}/retrovibe-<uid>/eyes.json` is missing or not `"ready":true`, run `npm run setup` at the repo root (**playing-the-game** step 1).
+4. **Existing-games `STYLE.md` digest:** extract a compact 1-line-per-game palette/ambient/silhouette digest of other `workspace/*/STYLE.md` files (excluding `game-template` and `<game-name>`, e.g. `head -n 12 workspace/*/STYLE.md`) and return it so the orchestrator includes it in `game-writer`'s brief.
+5. **Warm dev server on 5173:** reclaim port 5173 and launch `npm run dev` in the background for `workspace/<game-name>` (**playing-the-game** step 2 — pid file + ≤15 s readiness poll).
 
-**Never run `cp -r` onto an existing folder.** `cp -r workspace/game-template workspace/<game-name>` against an existing directory copies the template *inside* it (`workspace/<game-name>/game-template/`), nesting the template and corrupting the game.
+## Step 3 — Develop
 
-## Step 3 — Setup workspace
+Overlap drafting the `STYLE.md` direction and `state.ts` contract while Step 2's `lifecycle-runner` finishes setup (write them into the clone as soon as Step 2 returns). Pass the compact `STYLE.md` digest from Step 2 directly in `game-writer`'s brief so it diverges without reading every `workspace/*/STYLE.md` file.
 
-1. Verify template integrity — this must print nothing:
-   ```
-   git status --porcelain workspace/game-template
-   ```
-2. If it prints anything, restore before proceeding:
-   ```
-   git checkout -- workspace/game-template && git clean -fd workspace/game-template
-   ```
-3. Only after the collision guard (Step 2) and the integrity check pass, clone:
-   ```
-   cp -r workspace/game-template workspace/<game-name>
-   ```
-4. Eyes: if `${TMPDIR:-/tmp}/retrovibe-<uid>/eyes.json` is missing or does not say `"ready":true`, run `npm run setup` at the repo root (idempotent, browser only — see **playing-the-game** step 1).
+**Writer-brief guardrails (always include):**
+- Draw the player sprite larger than its hitbox (forgiving arcade feel and clear hero silhouette).
+- Keep the hostile/hazard color off the player and bosses so threats read unambiguously.
+- Make end-screen panels (`GAME_OVER` / `WIN`) opaque with no world banners or HUD bleeding behind them.
+- Batch multiple `Write` calls in parallel in the same turn (1–2 turns per writer, never one file per turn).
+- Art writers run `npm run look -- --scenes ...` themselves (retrying outside the sandbox if blocked) and inspect their own screenshots before reporting — never draw blind.
 
-No dependency install is needed — devDeps live once at the repo root and games resolve bins by walking up.
+**Read budget:** CLAUDE.md's engine API, lint and *Agent eyes* sections, the cloned `game/` modules and `STYLE.md`. Import only from `'../engine'`, never modify engine files. Copy presentation patterns from the cloned reference game (`play.ts`, `view.ts`, `screens.ts`, `state.ts`, `flow.ts`, `frame.ts`). **The art rules are not optional reading** — apply **ensuring-arcade-visuals** (`STYLE.md` divergence, `px = 1` multi-tone outlined sprites, ≥2 depth planes, beveled surfaces, `drawLogo` title), gated by **improving-game-quality** item 11b. Do **not** read `verification/{cave-hopper,brick-bounce}/` upfront; only consult them (read-only, frozen, never run/modify/clone) if a visual pass fails.
 
-## Step 4 — Develop
+Open a companion skill only when its domain is touched: **building-platformer-games** (platformers), **handling-user-input** (changing what buttons do), **ensuring-arcade-visuals**, **messaging-game-over**, **adding-easter-egg**; for a rules-heavy game, **balancing-with-the-simulator** once headless rules exist.
 
-Start by launching the dev server in the background for this game (**playing-the-game** step 2 — pid file, readiness poll). It hot-reloads every save, so runtime feedback is continuous and the final gate pays no startup cost.
+**Modules, not one file.** Keep the template's layout (`state.ts`, `play.ts`, `theme.ts`, `sprites.ts`, `view.ts`, `screens.ts`, `frame.ts`, `flow.ts`, `main.ts`, `devhook.ts`) and stay inside the lint thresholds (CLAUDE.md → *Lint suite and thresholds*). Keep `game/devhook.ts` working for this game's own state and list unreachable scenes (e.g. `'win'`) in `UNSUPPORTED`.
 
-**Read budget:** CLAUDE.md's engine API, lint and *Agent eyes* sections, the cloned `game/` modules and `STYLE.md`. The engine barrel is `workspace/<game-name>/engine/index.ts` — import only from `'../engine'`, never modify engine files. The reference game shows every presentation pattern in a small module: score pops and the GET READY beat in `play.ts` / `screens.ts`, idle breathing and death-tableau debris in `view.ts`, BEST tracking in `state.ts`, host messages in `flow.ts`, the per-scene lookup tables in `frame.ts`, a pulsing-not-blinking prompt and the attract title in `screens.ts`. Copy from the code rather than re-deriving these from the skills. **The art rules are not optional reading.** A game that is legible and builds green still hands off as a demo unless its sprites, background, surfaces and title get the art pass — **ensuring-arcade-visuals** §3b (sprite craft) and §7 (backgrounds, beveled surfaces, `drawLogo` titles), gated by **improving-game-quality** item 11b. Beyond the reference game, the art-passed fixtures are worked examples a writer **may read** — `verification/cave-hopper/` (`game/sprites.ts`, `game/view.ts`, `game/screens.ts`, `STYLE.md`) and `verification/brick-bounce/` (the same modules). Fixtures are frozen: read only, **never run, never modify, never clone**, and never copy their look (their combinations are reserved by the divergence rule).
+**Batch writes into 2 milestones** (`PostToolUse` does not block mid-refactor edits, so write cohesive modules in parallel `Write` calls before running checks):
+1. **Milestone 1 — Complete playable game:** rewrite `STYLE.md` + write all `game/*.ts` modules + `devhook.ts` in parallel → run `npm run check && npm run lint` once → run **one batched** `npm run look -- --scenes title,playing,gameover` (reuses one browser; supports extra query params like `playing?level=1,playing?level=2`) and view the screenshots.
+2. **Milestone 2 — Visual & feel polish pass:** fix everything `look` showed + run **improving-game-quality**'s 15-item checklist → run `npm run verify` (and re-`look` any visually changed scene).
 
-Open a companion skill only when its domain is touched: **building-platformer-games** (platformers), **handling-user-input** (changing what buttons do), **ensuring-arcade-visuals**, **messaging-game-over**, **adding-easter-egg**; for a rules-heavy game, **balancing-with-the-simulator** once its headless rules exist. Run **improving-game-quality**'s checklist once before Step 5's full gate.
+**Parallel writer fast paths (for non-trivial games):** once `STYLE.md` + `state.ts` (the shared `Game` contract) are written, spawn `game-writer` agents in parallel against the same warm dev server:
+- **2-writer split (medium games):** Writer A (Rules: `play.ts`, `flow.ts`, `frame.ts`, `devhook.ts`, `main.ts`) · Writer B (Art/UI: `theme.ts`, `sprites.ts`, `view.ts`, `screens.ts`).
+- **3-writer split (rich / multi-boss games):** Writer A (Rules) · Writer B (Hero, enemies, HUD, screens) · Writer C (Backdrops, bosses).
 
-**Style card before code:** before the first milestone save, derive 2–3 distinct visual directions from the game's fiction, pick one, and rewrite the clone's `STYLE.md` with it (keep its structure: the game in one paragraph, a decisions table, controls as presented, the dev hook). It must diverge from the reference game and from every game currently in `workspace/` (the rule and comparison set live in **ensuring-arcade-visuals** §0). Code carries no comments, so `STYLE.md` is where the art decisions live.
+Art writers inspect their own `look --scenes` screenshots before reporting; once all finish, run `npm run verify` (plus at most one quick polish pass if needed).
 
-**Modules, not one file.** Keep the template's layout and rename or replace module contents per game: tuning, entities and the `Game` type in `state.ts`, rules in `play.ts` (split further along seams — `physics.ts`, `level.ts`, `enemies.ts` — once a file grows), palette roles in `theme.ts`, art in `sprites.ts`, drawing in `view.ts` / `screens.ts`, scene dispatch in `frame.ts`, wiring in `main.ts`. Every file stays inside the lint thresholds (CLAUDE.md → *Lint suite and thresholds*).
+## Step 4 — Validation & hand off
 
-Write the game in 2–3 coherent milestone saves, not one monolithic write: (1) `STYLE.md`, theme, sprites, title + input declarations + movement; (2) core loop + lose condition; (3) juice, audio, difficulty, polish. After each save: `npm run check` and `npm run lint`, then `npm run look` on the scenes the milestone touched. Each milestone must be clean before the next begins.
+For new-game creation, run **once** before handing off:
+```bash
+cd workspace/<game-name> && npm run look -- --scenes title,playing,gameover
+cd workspace/<game-name> && npm run verify
+```
+`npm run verify` must print `TOTAL PASS` and every `look` screenshot must be viewed with zero errors. Do **not** run `npm run verify -- --full` on standard new-game creation — reserve `--full` (`knip`, `jscpd`, `depcruise`, `dist:no-hook`, `look:all`) for structural/template changes, CI, or explicit full-audit requests.
 
-**Dev hook as part of the game:** keep `game/devhook.ts` working for this game's own state — its `snapshot()` reports this game's fields, its fixture builders drive this game into `playing`, `paused`, `gameover` and `win` (steer onto a hazard, collect, or set the scene directly), and every scene the game cannot reach goes into its `UNSUPPORTED` list (a game with no win condition lists `'win'`). `STYLE.md`'s dev-hook paragraph describes what `state()` returns.
+**Server-up handoff (**playing-the-game** step 5):** leave the dev server running. If `npm run verify` just reported `serve ... reusing http://localhost:5173/`, skip the final `lifecycle-runner` liveness round-trip and hand off directly; otherwise re-verify liveness before messaging the user. Report "builds, boots clean, ready to play at `<URL>`" plus controls and goal/lose in one line — never claim to have playtested (**the user is the playtester**).
 
-## Step 5 — Validation loop
+**Escalation rule:** if `check`, `lint` or the smoke gate fails twice on the same approach, escalate the writer one model tier for a fresh attempt instead of a third patch (see CLAUDE.md → *Models & orchestration*).
 
-- After **every** edit:
-  ```
-  cd workspace/<game-name> && npm run check && npm run lint
-  ```
-- Look at what changed — the state and errors first, the screenshot whenever the look changed:
-  ```
-  cd workspace/<game-name> && npm run look -- --scene title
-  ```
-- Before notifying the user, the full gate must print `TOTAL PASS`, and once per game (it is a structural change) the full set:
-  ```
-  cd workspace/<game-name> && npm run verify
-  cd workspace/<game-name> && npm run verify -- --full
-  ```
-  `--full` adds knip, jscpd, depcruise, the no-hook build check and `look:all` (every scene, `unsupported` ones reported). **playing-the-game** owns the server and the hand-off.
-
-A green build alone never triggers "done" — it proves compilation, not that the game boots. The handoff state is **server up** (playing-the-game step 5): the dev server stays running after the gate and its liveness is re-verified immediately before the message is sent. Claude may say what it saw through `look`; it never claims to have played the game: report "builds, boots clean, ready to play at <URL>". **The user is the playtester.**
-
-**Escalation rule**: if `check`, `lint` or the smoke gate fails twice on the same approach, escalate the writer one model tier for a fresh attempt instead of a third patch (see CLAUDE.md → Models & orchestration).
-
-There is no commit step — the finished game lives uncommitted in the working tree (see "No commits during the interaction" above).
+There is no commit step — the finished game lives uncommitted in the working tree.

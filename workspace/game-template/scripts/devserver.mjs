@@ -88,7 +88,7 @@ function stopper(child) {
 }
 
 async function waitReady(child, url, output) {
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < 300; i++) {
     if (output.error !== null) {
       throw new Error(`dev server failed to start: ${output.error.message}`, { cause: output.error });
     }
@@ -98,7 +98,7 @@ async function waitReady(child, url, output) {
     if (await answers(url)) {
       return;
     }
-    await sleep(250);
+    await sleep(50);
   }
   throw new Error(`dev server did not answer on ${url} in 15s:\n${output.text}`);
 }

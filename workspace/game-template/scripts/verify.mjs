@@ -1,6 +1,10 @@
-import { gates, stopChildren, stopServer } from './gates.mjs';
+import { availableParallelism } from 'node:os';
+import { gates, recordGreen, stopChildren, stopServer } from './gates.mjs';
 
-const SLOTS = 2;
+const envSlots = Number(process.env.VERIFY_SLOTS);
+const SLOTS = Number.isInteger(envSlots) && envSlots > 0
+  ? envSlots
+  : Math.max(2, Math.min(6, availableParallelism() - 1));
 
 function tail(out, n = 15) {
   return out.trimEnd().split('\n').slice(-n).map((l) => `    ${l}`).join('\n');
@@ -113,6 +117,8 @@ async function main() {
   console.log(`TOTAL ${failed.length > 0 ? `FAIL (${failed.join(', ')})` : 'PASS'} in ${total}s`);
   if (failed.length > 0) {
     process.exitCode = 1;
+  } else {
+    await recordGreen();
   }
 }
 

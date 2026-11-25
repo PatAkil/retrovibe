@@ -1,7 +1,7 @@
 import { engineMissing, lintFiles, tail, toolsMissing, typeErrors } from './feedback-checks.mjs';
 import { gateUnits } from './feedback-gate.mjs';
 import { agentKey, fingerprint, gatedFiles, isSubagent, othersBusy, readState, statSnapshot, updateState } from './feedback-state.mjs';
-import { GRAPHICS_REMINDER, ownFingerprints, TOOLING, touchesGraphics, unitFingerprint, unitOf, unitsOf } from './feedback-units.mjs';
+import { GRAPHICS_REMINDER, isPristineClone, ownFingerprints, TOOLING, touchesGraphics, unitFingerprint, unitOf, unitsOf } from './feedback-units.mjs';
 
 const MAX_BLOCKS = 3;
 const GATE_WAIT_MS = 400000;
@@ -25,14 +25,15 @@ function baselineFor(input, state, key) {
 
 const unitFromId = (root, id) => (id === TOOLING.id ? TOOLING : unitOf(root, `${id}/`));
 
-function unitsToGate(repo, input, state, key) {
+function unitsToGate(repo, ctx) {
+  const { input, state, key, all } = ctx;
   const fromFiles = unitsOf(repo.root, state.agents[key]?.touched ?? []);
   const known = new Set(fromFiles.map((u) => u.id));
-  const moved = movedUnits(baselineFor(input, state, key), ownFingerprints(repo.root));
+  const baseline = baselineFor(input, state, key);
+  const moved = baseline ? movedUnits(baseline, ownFingerprints(repo.root, all)) : [];
   const fromMoves = moved.filter((id) => !known.has(id)).map((id) => unitFromId(repo.root, id));
-  const all = gatedFiles(repo.root);
   return [...fromFiles, ...fromMoves]
-    .filter((u) => u.kind !== 'gone')
+    .filter((u) => u.kind !== 'gone' && !isPristineClone(repo.root, u, all))
     .filter((u) => state.green[u.id] !== unitFingerprint(repo.root, u, all));
 }
 
@@ -73,7 +74,7 @@ async function scopedGate(repo, touched) {
   const files = touched.filter((p) => statSnapshot(repo.root, [p])[p] !== undefined);
   const own = new Set(touched);
   const units = unitsOf(repo.root, files).filter((u) => TYPED_KINDS.has(u.kind) && !engineMissing(repo.root, u));
-  const [lint, ...types] = await Promise.all([lintFiles(repo.root, files), ...units.map((u) => typeErrors(repo.root, repo.dir, u))]);
+  const [lint, ...types] = await Promise.all([lintFiles(repo.root, files), ...units.map((u) => typeErrors(repo.root, repo.dir, u, 'scoped'))]);
   const problems = [...lint, ...types.flat().filter((e) => own.has(e.file))].map((p) => p.text);
   const name = 'scoped check (eslint + tsc on the files you changed; other writers are still running)';
   return { name, pass: problems.length === 0, out: problems.join('\n'), notes: [] };
@@ -114,11 +115,12 @@ function judge(repo, input, key, result) {
 export async function handleStop(input, repo) {
   const key = agentKey(input);
   const state = readState(repo.dir);
-  const units = unitsToGate(repo, input, state, key);
+  const all = gatedFiles(repo.root);
+  const units = unitsToGate(repo, { input, state, key, all });
   if (units.length === 0) {
     return settle(repo, key, null);
   }
-  const fp = fingerprint(repo.root);
+  const fp = fingerprint(repo.root, all);
   const early = releaseReason(input, state.blocks[key], fp) ?? deferReason(input, state, key);
   if (early) {
     return settle(repo, key, early);
@@ -127,7 +129,7 @@ export async function handleStop(input, repo) {
     return settle(repo, key, 'Retrovibe gate skipped: node_modules is missing. Run npm install at the repo root, then npm run gate.');
   }
   const scoped = isSubagent(key) && othersBusy(state, key, Date.now()).some(isSubagent);
-  const result = scoped ? await scopedGate(repo, state.agents[key]?.touched ?? []) : await gateUnits(repo, units, GATE_WAIT_MS);
+  const result = scoped ? await scopedGate(repo, state.agents[key]?.touched ?? []) : await gateUnits(repo, units, GATE_WAIT_MS, all);
   const reminder = touchesGraphics(units) ? GRAPHICS_REMINDER : '';
   return judge(repo, input, key, { ...result, fp, reminder });
 }

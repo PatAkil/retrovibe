@@ -1,11 +1,12 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { gatedFiles, hashFiles } from './feedback-state.mjs';
+import { gatedFiles, git, hashFiles } from './feedback-state.mjs';
 
 const GAME_PATH = /^(workspace|verification)\/([^/]+)\//;
 const NOT_GAMES = new Set(['out', 'baseline']);
 const SHARED = /^(?:eslint\.config\.mjs|knip\.config\.js|package\.json|package-lock\.json|\.jscpd\.json|\.dependency-cruiser\.cjs|tools\/.*)$/;
-const TEMPLATE_ENGINE = 'workspace/game-template/engine/';
+const TEMPLATE_DIR = 'workspace/game-template';
+const TEMPLATE_ENGINE = `${TEMPLATE_DIR}/engine/`;
 export const TOOLING = { id: 'tooling', kind: 'tooling', dir: '' };
 
 function kindOf(area, name) {
@@ -60,13 +61,32 @@ export function unitFingerprint(root, unit, all = gatedFiles(root)) {
   return hashFiles(root, [...own, ...sharedInputs(unit, all, own)]);
 }
 
-export function ownFingerprints(root) {
-  const all = gatedFiles(root);
+export function ownFingerprints(root, all = gatedFiles(root)) {
   const fps = {};
   for (const unit of unitsOf(root, all)) {
     fps[unit.id] = hashFiles(root, unit.files);
   }
   return fps;
+}
+
+function relativeFiles(dir, files) {
+  const prefix = `${dir}/`;
+  return files.filter((f) => f.startsWith(prefix)).map((f) => f.slice(prefix.length)).sort();
+}
+
+export function isPristineClone(root, unit, all = gatedFiles(root)) {
+  if (unit.kind !== 'user') {
+    return false;
+  }
+  const own = relativeFiles(unit.dir, all);
+  const tpl = relativeFiles(TEMPLATE_DIR, all);
+  if (own.length === 0 || own.length !== tpl.length) {
+    return false;
+  }
+  if (git(root, ['status', '--porcelain', '--', TEMPLATE_DIR]) !== '') {
+    return false;
+  }
+  return hashFiles(join(root, unit.dir), own) === hashFiles(join(root, TEMPLATE_DIR), tpl);
 }
 
 export const touchesGraphics = (units) => units.some((u) => u.kind === 'template' || u.kind === 'fixture');

@@ -26,6 +26,7 @@ const EXIT_UNSUPPORTED = 2;
 const { values: opts } = parseArgs({
   options: {
     scene: { type: 'string' },
+    scenes: { type: 'string' },
     seed: { type: 'string' },
     keys: { type: 'string', default: '' },
     steps: { type: 'string', default: '30' },
@@ -36,32 +37,58 @@ const { values: opts } = parseArgs({
 
 const steps = Math.max(0, Math.floor(Number(opts.steps)) || 0);
 const keys = opts.keys.split(',').map((k) => k.trim()).filter(Boolean).map((k) => KEY_NAMES[k.toLowerCase()] ?? k);
-const seed = opts.seed ?? (opts.scene === undefined ? undefined : '1');
+
+function seedFor(scene) {
+  return opts.seed ?? (scene === undefined ? undefined : '1');
+}
 
 function emit(result, code) {
   console.log(JSON.stringify(result));
   process.exitCode = code;
 }
 
-function pageUrl() {
+function parseSceneSpec(raw) {
+  if (raw === undefined) {
+    return { scene: undefined, query: '' };
+  }
+  const idx = raw.indexOf('?');
+  if (idx === -1) {
+    return { scene: raw, query: '' };
+  }
+  return { scene: raw.slice(0, idx), query: raw.slice(idx + 1) };
+}
+
+function pageUrl(spec, seed) {
   const url = new URL(BASE);
   if (seed !== undefined) {
     url.searchParams.set('seed', seed);
   }
-  if (opts.scene !== undefined) {
-    url.searchParams.set('scene', opts.scene);
+  if (spec.scene !== undefined) {
+    url.searchParams.set('scene', spec.scene);
   }
-  if (seed !== undefined || opts.scene !== undefined) {
+  if (spec.query !== '') {
+    for (const [k, v] of new URLSearchParams(spec.query)) {
+      url.searchParams.set(k, v);
+    }
+  }
+  if (seed !== undefined || spec.scene !== undefined) {
     url.searchParams.set('hold', '1');
   }
   return url.href;
 }
 
-function shotPath() {
-  if (opts.out !== undefined) {
+function querySlug(query) {
+  if (query === '') {
+    return '';
+  }
+  return `-${query.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
+}
+
+function shotPath(spec, seed, multi) {
+  if (!multi && opts.out !== undefined) {
     return opts.out;
   }
-  const name = `${opts.scene ?? 'title'}-s${seed ?? 'r'}.png`;
+  const name = `${spec.scene ?? 'title'}${querySlug(spec.query)}-s${seed ?? 'r'}.png`;
   const artifacts = envOr('AIR_ARTIFACTS_DIR', '');
   const dir = artifacts === '' ? join('/tmp/retrovibe-look', GAME) : join(artifacts, 'look', GAME);
   return join(dir, name);
@@ -98,18 +125,18 @@ function readHook(page) {
   });
 }
 
-function sceneMismatch(state) {
-  if (opts.scene === undefined || typeof state?.scene !== 'string') {
+function sceneMismatch(scene, state) {
+  if (scene === undefined || typeof state?.scene !== 'string') {
     return null;
   }
-  const want = SCENE_STATES[opts.scene];
-  return state.scene.toUpperCase() === want ? null : `asked for scene ${opts.scene} but the hook reports ${state.scene}`;
+  const want = SCENE_STATES[scene];
+  return state.scene.toUpperCase() === want ? null : `asked for scene ${scene} but the hook reports ${state.scene}`;
 }
 
-async function drive(page, errors) {
+async function drive(page, scene, errors) {
   const { hooked } = await readHook(page);
-  if (!hooked && opts.scene !== undefined && opts.scene !== 'title') {
-    errors.push(`--scene ${opts.scene} needs the dev hook, but the page has no window.__retrovibe`);
+  if (!hooked && scene !== undefined && scene !== 'title') {
+    errors.push(`--scene ${scene} needs the dev hook, but the page has no window.__retrovibe`);
     return null;
   }
   for (const key of keys) {
@@ -122,68 +149,119 @@ async function drive(page, errors) {
     return null;
   }
   const state = await page.evaluate(() => JSON.parse(JSON.stringify(window.__retrovibe.state() ?? null)));
-  const mismatch = keys.length === 0 ? sceneMismatch(state) : null;
+  const mismatch = keys.length === 0 ? sceneMismatch(scene, state) : null;
   if (mismatch !== null) {
     errors.push(mismatch);
   }
   return state;
 }
 
-async function capture(canvas) {
+async function capture(canvas, spec, seed, multi) {
   if (opts['no-shot'] || !canvas) {
     return null;
   }
-  const path = shotPath();
+  const path = shotPath(spec, seed, multi);
   mkdirSync(dirname(path), { recursive: true });
   await canvas.screenshot({ path });
   return path;
 }
 
-async function unsupportedScene(page) {
-  if (opts.scene === undefined) {
+async function unsupportedScene(page, scene) {
+  if (scene === undefined) {
     return false;
   }
   const { unsupported } = await readHook(page);
-  return unsupported.includes(opts.scene);
+  return unsupported.includes(scene);
 }
 
-async function look(page, errors) {
-  const result = { ok: false, state: null, errors, shot: null };
-  await page.goto(pageUrl(), { waitUntil: 'domcontentloaded', timeout: 15000 });
+async function lookOnPage(page, ctx) {
+  const label = ctx.spec.query === '' ? ctx.spec.scene : `${ctx.spec.scene}?${ctx.spec.query}`;
+  const base = ctx.multi ? { scene: label } : {};
+  const result = { ...base, ok: false, state: null, errors: ctx.errors, shot: null };
+  await page.goto(pageUrl(ctx.spec, ctx.seed), { waitUntil: 'domcontentloaded', timeout: 15000 });
   const canvas = await page.waitForSelector('canvas', { state: 'attached', timeout: 8000 }).catch(() => null);
   if (!canvas) {
-    errors.push('no live <canvas> after module ran');
+    ctx.errors.push('no live <canvas> after module ran');
     return result;
   }
-  if (await unsupportedScene(page)) {
+  if (await unsupportedScene(page, ctx.spec.scene)) {
     return { ...result, unsupported: true };
   }
-  result.state = await drive(page, errors);
-  result.shot = await capture(canvas);
-  result.ok = errors.length === 0;
+  result.state = await drive(page, ctx.spec.scene, ctx.errors);
+  result.shot = await capture(canvas, ctx.spec, ctx.seed, ctx.multi);
+  result.ok = ctx.errors.length === 0;
   return result;
 }
 
-async function main() {
+async function runScene(browser, spec, multi) {
   const errors = [];
-  if (opts.scene !== undefined && !SCENES.includes(opts.scene)) {
-    errors.push(`unknown --scene "${opts.scene}" (known: ${SCENES.join(', ')})`);
-    emit({ ok: false, state: null, errors, shot: null }, 1);
+  const seed = seedFor(spec.scene);
+  const label = spec.query === '' ? spec.scene : `${spec.scene}?${spec.query}`;
+  let page;
+  try {
+    page = await browser.newPage();
+    collectErrors(page, errors);
+    return await lookOnPage(page, { spec, seed, multi, errors });
+  } catch (e) {
+    errors.push(`look: ${e.message.split('\n')[0]}`);
+    return { ...(multi ? { scene: label } : {}), ok: false, state: null, errors, shot: null };
+  } finally {
+    await page?.close().catch(() => undefined);
+  }
+}
+
+function isPassed(result) {
+  return result.ok || (result.unsupported === true && result.errors.length === 0);
+}
+
+async function runMulti() {
+  const specs = opts.scenes.split(',').map((s) => s.trim()).filter(Boolean).map(parseSceneSpec);
+  const bad = specs.filter((s) => !SCENES.includes(s.scene)).map((s) => s.scene);
+  if (specs.length === 0 || bad.length > 0) {
+    const msg = specs.length === 0 ? '--scenes requires at least one scene' : `unknown --scenes "${bad.join(', ')}" (known: ${SCENES.join(', ')})`;
+    emit({ ok: false, state: null, errors: [msg], shot: null }, 1);
     return;
   }
-  let result = { ok: false, state: null, errors, shot: null };
   let browser;
   try {
     browser = await launchBrowser();
-    const page = await browser.newPage();
-    collectErrors(page, errors);
-    result = await look(page, errors);
+    const results = await Promise.all(specs.map((spec) => runScene(browser, spec, true)));
+    for (const r of results) {
+      console.log(JSON.stringify(r));
+    }
+    process.exitCode = results.every(isPassed) ? 0 : 1;
   } catch (e) {
-    errors.push(`look: ${e.message.split('\n')[0]}`);
+    emit({ ok: false, state: null, errors: [`look: ${e.message.split('\n')[0]}`], shot: null }, 1);
   } finally {
     await browser?.close();
   }
-  emit(result, result.unsupported === true && errors.length === 0 ? EXIT_UNSUPPORTED : Number(!result.ok));
+}
+
+async function runSingle() {
+  const spec = parseSceneSpec(opts.scene);
+  if (spec.scene !== undefined && !SCENES.includes(spec.scene)) {
+    emit({ ok: false, state: null, errors: [`unknown --scene "${spec.scene}" (known: ${SCENES.join(', ')})`], shot: null }, 1);
+    return;
+  }
+  let browser;
+  let result = { ok: false, state: null, errors: [], shot: null };
+  try {
+    browser = await launchBrowser();
+    result = await runScene(browser, spec, false);
+  } catch (e) {
+    result.errors.push(`look: ${e.message.split('\n')[0]}`);
+  } finally {
+    await browser?.close();
+  }
+  emit(result, result.unsupported === true && result.errors.length === 0 ? EXIT_UNSUPPORTED : Number(!result.ok));
+}
+
+async function main() {
+  if (opts.scenes !== undefined) {
+    await runMulti();
+    return;
+  }
+  await runSingle();
 }
 
 await main();

@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { dirname, join, parse, relative } from 'node:path';
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { basename, dirname, join, parse, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { envOr } from './browser.mjs';
 import { killChild, servesGame, startServer } from './devserver.mjs';
@@ -8,16 +8,15 @@ import { killChild, servesGame, startServer } from './devserver.mjs';
 const GAME = join(dirname(fileURLToPath(import.meta.url)), '..');
 const FULL = process.argv.includes('--full');
 const SCENES = ['title', 'playing', 'paused', 'gameover', 'win'];
-const EXIT_UNSUPPORTED = 2;
 const DEFAULT_URL = 'http://localhost:5173/';
 const HOOK_GLOBAL = '__retrovibe';
 const server = { url: envOr('LOOK_URL', envOr('SMOKE_URL', DEFAULT_URL)), stop: undefined };
 const activeChildren = new Set();
 
-function walkUp(relative) {
+function walkUp(rel) {
   let dir = GAME;
   for (;;) {
-    const candidate = join(dir, relative);
+    const candidate = join(dir, rel);
     if (existsSync(candidate)) {
       return candidate;
     }
@@ -58,6 +57,17 @@ const tool = (name, ...args) => toolIn({}, name, ...args);
 
 function rootConfig(file) {
   return walkUp(file) ?? join(GAME, file);
+}
+
+function cacheFile(name) {
+  const nodeModules = walkUp('node_modules');
+  const base = nodeModules ?? join(GAME, 'node_modules');
+  const tag = nodeModules === null
+    ? basename(GAME)
+    : relative(dirname(nodeModules), GAME).replace(/[^a-zA-Z0-9_-]/g, '_');
+  const dir = join(base, '.cache', 'retrovibe', tag);
+  mkdirSync(dir, { recursive: true });
+  return join(dir, name);
 }
 
 function knip() {
@@ -104,30 +114,44 @@ function simRates(out) {
   return rates.length > 0 ? rates.join(', ') : 'no win rates parsed';
 }
 
-function lastJson(out) {
-  try {
-    return JSON.parse(out.trim().split('\n').pop());
-  } catch {
-    return null;
+function parseScenes(out) {
+  const map = new Map();
+  for (const line of out.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('{')) {
+      continue;
+    }
+    try {
+      const item = JSON.parse(trimmed);
+      if (typeof item?.scene === 'string') {
+        map.set(item.scene, item);
+      }
+    } catch {
+      continue;
+    }
   }
+  return map;
 }
 
-function sceneVerdict(scene, r) {
-  if (r.code === 0) {
+function sceneVerdict(scene, item, fallback) {
+  if (!item) {
+    return { scene, status: 'fail', detail: fallback };
+  }
+  if (item.ok === true) {
     return { scene, status: 'ok' };
   }
-  if (r.code === EXIT_UNSUPPORTED && lastJson(r.out)?.unsupported === true) {
+  if (item.unsupported === true && (item.errors?.length ?? 0) === 0) {
     return { scene, status: 'unsupported' };
   }
-  return { scene, status: 'fail', detail: r.out.trim().slice(0, 400) };
+  const detail = item.errors?.length > 0 ? item.errors.join('; ') : fallback;
+  return { scene, status: 'fail', detail: detail.slice(0, 400) };
 }
 
 async function lookAll() {
-  const verdicts = [];
-  for (const scene of SCENES) {
-    const r = await run(process.execPath, [join(GAME, 'scripts', 'look.mjs'), '--scene', scene]);
-    verdicts.push(sceneVerdict(scene, r));
-  }
+  const r = await run(process.execPath, [join(GAME, 'scripts', 'look.mjs'), '--scenes', SCENES.join(',')]);
+  const parsed = parseScenes(r.out);
+  const fallback = r.out.trim().slice(0, 400);
+  const verdicts = SCENES.map((scene) => sceneVerdict(scene, parsed.get(scene), fallback));
   const failed = verdicts.filter((v) => v.status === 'fail');
   const skipped = verdicts.filter((v) => v.status === 'unsupported').map((v) => v.scene);
   const out = verdicts.map((v) => `${v.scene}: ${v.status}${v.detail ? ` ${v.detail}` : ''}`).join('\n');
@@ -178,13 +202,25 @@ export function gates() {
   const list = [
     { name: 'eyes', light: true, exec: eyes },
     { name: 'serve', light: true, exec: serve },
-    { name: 'lint', exec: tool('eslint', '.') },
-    { name: 'check', exec: tool('tsc', '--noEmit') },
+    { name: 'lint', exec: tool('eslint', '.', '--cache', '--cache-location', cacheFile('eslintcache')) },
+    { name: 'check', exec: tool('tsc', '--noEmit', '--incremental', '--tsBuildInfoFile', cacheFile('tsbuildinfo')) },
     { name: 'build', exec: tool('vite', 'build', '--logLevel', 'warn') },
     { name: 'smoke', light: true, after: ['eyes', 'serve'], exec: script('smoke.mjs') },
     ...simGates(),
   ];
   return FULL ? list.concat(fullGates()) : list;
+}
+
+export async function recordGreen() {
+  const feedback = walkUp(join('harness', 'agent-feedback.mjs'));
+  if (feedback === null) {
+    return;
+  }
+  try {
+    await run(process.execPath, [feedback, 'record-green', GAME]);
+  } catch {
+    return;
+  }
 }
 
 export function stopChildren() {

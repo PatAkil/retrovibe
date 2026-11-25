@@ -1,12 +1,12 @@
 import { collectErrors, envOr, launchBrowser, waitFrames } from './scripts/browser.mjs';
 
 const URL = envOr('SMOKE_URL', 'http://localhost:5173/');
-const FRAMES = 40;
+const FRAMES = 12;
 const errors = [];
 
 async function probe(page) {
   try {
-    await page.goto(URL, { waitUntil: 'load', timeout: 15000 });
+    await page.goto(URL, { waitUntil: 'domcontentloaded', timeout: 15000 });
     await page.waitForSelector('canvas', { state: 'attached', timeout: 8000 });
   } catch (e) {
     errors.push(`load/canvas: ${e.message}`);

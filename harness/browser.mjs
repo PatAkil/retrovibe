@@ -1,7 +1,6 @@
 import { lstatSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { chromium } from 'playwright';
 
 const currentUid = typeof process.getuid === 'function' ? process.getuid() : null;
 const uid = currentUid !== null ? String(currentUid) : 'user';
@@ -50,7 +49,8 @@ export function chromiumPath() {
   return isSafeDir(EYES_DIR) && isSafeFile(WRAPPER) ? WRAPPER : undefined;
 }
 
-export function launchBrowser(options = {}) {
+export async function launchBrowser(options = {}) {
+  const { chromium } = await import('playwright');
   const executablePath = chromiumPath();
   return chromium.launch(executablePath ? { ...options, executablePath } : options);
 }

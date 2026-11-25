@@ -3,7 +3,7 @@ import {
   browserOnlyFailure, buildGame, canVerify, engineMissing, lintFiles, lintPaths, typeErrors, verifyGame,
 } from './feedback-checks.mjs';
 import { acquire, gatedFiles, readState, release, updateState } from './feedback-state.mjs';
-import { unitFiles, unitFingerprint } from './feedback-units.mjs';
+import { isPristineClone, unitFiles, unitFingerprint } from './feedback-units.mjs';
 
 const GATE_STALE_MS = 11 * 60 * 1000;
 const MAX_GATE_RUNS = 3;
@@ -46,10 +46,11 @@ export function runUnitGate(repo, unit) {
   return canVerify(repo.root, unit) ? verifyGame(repo.root, unit) : basicUserGate(repo, unit);
 }
 
-async function gateUnitSettled(repo, unit) {
+async function gateUnitSettled(repo, unit, initialAll) {
   for (let run = 1; ; run += 1) {
-    const before = unitFingerprint(repo.root, unit, gatedFiles(repo.root));
-    if (readState(repo.dir).green[unit.id] === before) {
+    const beforeFiles = run === 1 && initialAll ? initialAll : gatedFiles(repo.root);
+    const before = unitFingerprint(repo.root, unit, beforeFiles);
+    if (readState(repo.dir).green[unit.id] === before || isPristineClone(repo.root, unit, beforeFiles)) {
       return { unit, pass: true, cached: true, name: unit.id, out: '', failed: [], fp: before };
     }
     const result = await runUnitGate(repo, unit);
@@ -66,10 +67,9 @@ async function gateUnitSettled(repo, unit) {
   }
 }
 
-function allCached(repo, units) {
+function allCached(repo, units, all) {
   const green = readState(repo.dir).green;
-  const all = gatedFiles(repo.root);
-  return units.every((u) => green[u.id] === unitFingerprint(repo.root, u, all));
+  return units.every((u) => green[u.id] === unitFingerprint(repo.root, u, all) || isPristineClone(repo.root, u, all));
 }
 
 function summarise(results) {
@@ -86,8 +86,8 @@ function summarise(results) {
   };
 }
 
-export async function gateUnits(repo, units, waitMs) {
-  if (units.length === 0 || allCached(repo, units)) {
+export async function gateUnits(repo, units, waitMs, all = gatedFiles(repo.root)) {
+  if (units.length === 0 || allCached(repo, units, all)) {
     return summarise(units.map((unit) => ({ unit, pass: true, cached: true, name: unit.id, out: '', failed: [] })));
   }
   const lock = join(repo.dir, 'gate.lock');
@@ -97,7 +97,7 @@ export async function gateUnits(repo, units, waitMs) {
   try {
     const results = [];
     for (const unit of units) {
-      results.push(await gateUnitSettled(repo, unit));
+      results.push(await gateUnitSettled(repo, unit, all));
     }
     return summarise(results);
   } finally {

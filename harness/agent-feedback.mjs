@@ -1,13 +1,30 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
+import { relative, resolve } from 'node:path';
 import { killChildren } from './feedback-checks.mjs';
 import { gateByHand, precommit } from './feedback-commit.mjs';
 import { handleEdit } from './feedback-edit.mjs';
 import { handleStop } from './feedback-stop.mjs';
-import { agentKey, findRepo, freshAgent, logEvent, readState, releaseActiveLocks, updateState } from './feedback-state.mjs';
-import { ownFingerprints } from './feedback-units.mjs';
+import { agentKey, findRepo, freshAgent, gatedFiles, logEvent, readState, releaseActiveLocks, updateState } from './feedback-state.mjs';
+import { ownFingerprints, unitFingerprint, unitOf } from './feedback-units.mjs';
 
-const LIMIT_MS = { edit: 55000, stop: 580000, 'session-start': 25000, 'subagent-start': 25000, precommit: 590000, gate: 590000 };
+const LIMIT_MS = {
+  edit: 55000,
+  stop: 580000,
+  'session-start': 25000,
+  'subagent-start': 25000,
+  'record-green': 15000,
+  precommit: 590000,
+  gate: 590000,
+};
 const READS_HOOK_INPUT = new Set(['edit', 'stop', 'session-start', 'subagent-start']);
+
+function realPathOrSelf(path) {
+  try {
+    return realpathSync(path);
+  } catch {
+    return path;
+  }
+}
 
 function readInput(command) {
   if (!READS_HOOK_INPUT.has(command) || process.stdin.isTTY) {
@@ -23,8 +40,11 @@ function readInput(command) {
 function sessionStart(input, repo) {
   const session = String(input.session_id ?? 'cli');
   const existing = readState(repo.dir);
-  const fps = session in existing.baselines ? null : ownFingerprints(repo.root);
-  const agent = `main:${session}` in existing.agents ? null : freshAgent(repo.root, {});
+  const needsFps = !(session in existing.baselines);
+  const needsAgent = !(`main:${session}` in existing.agents);
+  const all = needsFps || needsAgent ? gatedFiles(repo.root) : null;
+  const fps = needsFps ? ownFingerprints(repo.root, all) : null;
+  const agent = needsAgent ? freshAgent(repo.root, {}, all) : null;
   updateState(repo.dir, (state) => {
     if (fps !== null) {
       state.baselines[session] ??= fps;
@@ -38,10 +58,35 @@ function sessionStart(input, repo) {
 
 function subagentStart(input, repo) {
   const key = `agent:${String(input.agent_id ?? 'unknown')}`;
-  const agent = freshAgent(repo.root, { startFps: ownFingerprints(repo.root) });
+  const all = gatedFiles(repo.root);
+  const agent = freshAgent(repo.root, { startFps: ownFingerprints(repo.root, all) }, all);
   updateState(repo.dir, (state) => {
     state.agents[key] = agent;
     state.active[key] = Date.now();
+  });
+  return { code: 0 };
+}
+
+function recordGreen(_input, repo) {
+  const arg = process.argv[3];
+  if (!arg) {
+    return { code: 0 };
+  }
+  const rel = relative(realPathOrSelf(repo.root), realPathOrSelf(resolve(arg))).replace(/\\/g, '/').replace(/\/+$/, '');
+  if (rel === '' || rel.startsWith('..')) {
+    return { code: 0 };
+  }
+  const unit = unitOf(repo.root, `${rel}/`);
+  if (unit.kind === 'gone' || unit.kind === 'tooling') {
+    return { code: 0 };
+  }
+  const all = gatedFiles(repo.root);
+  if (all.length === 0) {
+    return { code: 0 };
+  }
+  const fp = unitFingerprint(repo.root, unit, all);
+  updateState(repo.dir, (state) => {
+    state.green[unit.id] = fp;
   });
   return { code: 0 };
 }
@@ -51,6 +96,7 @@ const COMMANDS = {
   stop: handleStop,
   'session-start': sessionStart,
   'subagent-start': subagentStart,
+  'record-green': recordGreen,
   precommit: (_input, repo) => precommit(repo),
   gate: (_input, repo) => gateByHand(repo),
 };

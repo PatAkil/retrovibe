@@ -1,4 +1,13 @@
 {
+  "sandbox": {
+    "excludedCommands": [
+      "npm run dev",
+      "npm run look",
+      "npm run smoke",
+      "npm run verify",
+      "npm run setup"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {
@@ -36,18 +45,6 @@
       }
     ],
     "PostToolUse": [
-      {
-        "matcher": "Bash|Edit|MultiEdit|Write|NotebookEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "[ -f \"$CLAUDE_PROJECT_DIR/harness/agent-feedback.mjs\" ] && command -v node >/dev/null 2>&1 && exec node \"$CLAUDE_PROJECT_DIR/harness/agent-feedback.mjs\" edit; exit 0",
-            "timeout": 60
-          }
-        ]
-      }
-    ],
-    "PostToolUseFailure": [
       {
         "matcher": "Bash|Edit|MultiEdit|Write|NotebookEdit",
         "hooks": [
