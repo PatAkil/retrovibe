@@ -57,20 +57,20 @@ Discipline:
   always run `npm run look -- --scenes ...` yourself and inspect the screenshots
   before reporting — never draw blind. If a command sandbox blocks Chromium, retry
   outside the sandbox.
-- **Keep the dev hook working** for this game: `game/devhook.ts` snapshots this game's
-  state and builds fixtures for `playing`, `paused`, `gameover`, `win`; scenes the game
-  cannot reach go into `UNSUPPORTED`.
-- **Verification before reporting:** `npm run verify` must print `TOTAL PASS` and the
-  batched `npm run look -- --scenes title,playing,gameover` screenshots must be viewed
-  with zero errors. Do **not** run `npm run verify -- --full` on normal new-game
-  creation (reserve `--full` for structural/template changes, CI, or explicit
+- **Keep the dev hook working** for this game via `createDevHook` from `'../engine'`:
+  `game/devhook.ts` only needs `snapshot`, `reset`, `fixtureBuilders`, and `unsupported`
+  (~25–45 lines total).
+- **Verification before reporting:** when you are the sole writer, run
+  `npm run verify -- --scenes title,playing,gameover` (one Chromium launch) and view the
+  screenshots with zero errors. Do **not** run `npm run verify -- --full` on normal
+  new-game creation (reserve `--full` for structural/template changes, CI, or explicit
   full-audit requests). If `${TMPDIR:-/tmp}/retrovibe-<uid>/eyes.json` is not ready,
   run `npm run setup` at the repo root.
-- **Parallel writer fast paths (non-trivial games):** once `STYLE.md` + `state.ts`
-  (the shared `Game` contract) are written, writers can run in parallel against
+- **Parallel writer fast paths (default for non-trivial games):** once `STYLE.md` +
+  `state.ts` (the shared `Game` contract) are written, writers run in parallel against
   the same dev server:
-  - **2-writer split:** Writer A (Rules: `play.ts`, `flow.ts`, `frame.ts`, `devhook.ts`, `main.ts`) · Writer B (Art/UI: `theme.ts`, `sprites.ts`, `view.ts`, `screens.ts`).
-  - **3-writer split (rich / multi-boss games):** Writer A (Rules) · Writer B (Hero, enemies, HUD, screens) · Writer C (Backdrops, bosses).
+  - **3-writer split (default for full games):** Writer A (Rules: `play.ts`, `flow.ts`, `frame.ts`, `devhook.ts`, `main.ts`) · Writer B (Assets: `theme.ts`, `sprites.ts`) · Writer C (Renderer/UI: `view.ts`, `screens.ts` — runs `look --scenes` and fixes visual defects before returning).
+  - **2-writer split (smaller arcade games):** Writer A (Rules) · Writer B (Art/UI).
   Edit only the files your brief assigns, batch your `Write` calls in parallel, and
   name your files in Bash commands; never start, kill or restart a dev server; never
   run `npm install` or edit any `package.json` (except adding `sim`/`sim:quick` when

@@ -5,10 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "check": "tsc --noEmit",
-    "build": "tsc --noEmit && vite build",
+    "check": "node scripts/tool.mjs check",
+    "build": "node scripts/tool.mjs check && vite build",
     "smoke": "node smoke.mjs",
-    "lint": "eslint . --cache --cache-location ../../node_modules/.cache/retrovibe-eslintcache",
+    "lint": "node scripts/tool.mjs lint",
     "look": "node scripts/look.mjs",
     "verify": "node scripts/verify.mjs"
   }

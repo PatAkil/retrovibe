@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { EYES_MARKER } from './browser.mjs';
 
@@ -72,11 +72,18 @@ function eslintProblems(result, root) {
   });
 }
 
+function eslintCachePath(root, extraEnv) {
+  const dir = join(root, 'node_modules', '.cache', 'retrovibe', 'hooks');
+  mkdirSync(dir, { recursive: true });
+  return join(dir, extraEnv.RETROVIBE_FAST_LINT === '1' ? 'eslint-fast' : 'eslint-full');
+}
+
 export async function lintPaths(root, targets, extraEnv = {}) {
   if (targets.length === 0) {
     return [];
   }
-  const r = await execNode(root, [join(root, ENTRY.eslint), '--no-warn-ignored', '--format', 'json', ...targets], CHECK_MS * 2, extraEnv);
+  const cache = eslintCachePath(root, extraEnv);
+  const r = await execNode(root, [join(root, ENTRY.eslint), '--no-warn-ignored', '--cache', '--cache-location', cache, '--format', 'json', ...targets], CHECK_MS * 2, extraEnv);
   if (r.timedOut) {
     return [{ file: '(eslint)', text: `eslint timed out after ${String(CHECK_MS * 2 / 1000)}s` }];
   }
@@ -109,9 +116,17 @@ export function engineMissing(root, unit) {
   return unit.kind === 'fixture' && !existsSync(join(root, unit.dir, 'engine', 'index.ts'));
 }
 
+function tsBuildInfoPath(root, stateDir, unit, scope) {
+  if (scope === '') {
+    return join(stateDir, `tsc-${slug(unit.dir)}-${String(process.pid)}.tsbuildinfo`);
+  }
+  const dir = join(root, 'node_modules', '.cache', 'retrovibe', slug(unit.dir));
+  mkdirSync(dir, { recursive: true });
+  return join(dir, 'tsbuildinfo');
+}
+
 export async function typeErrors(root, stateDir, unit, scope = '') {
-  const tag = scope === '' ? String(process.pid) : scope;
-  const info = join(stateDir, `tsc-${slug(unit.dir)}-${tag}.tsbuildinfo`);
+  const info = tsBuildInfoPath(root, stateDir, unit, scope);
   const project = join(unit.dir, 'tsconfig.json');
   const args = [join(root, ENTRY.tsc), '-p', project, '--noEmit', '--pretty', 'false', '--incremental', '--tsBuildInfoFile', info];
   try {
@@ -140,7 +155,7 @@ const failedGates = (out) => /TOTAL FAIL \(([^)]*)\)/.exec(out)?.[1]?.split(', '
 
 export async function verifyGame(root, unit) {
   const cwd = join(root, unit.dir);
-  const r = await execNode(cwd, [join(cwd, 'scripts', 'verify.mjs')], GATE_MS);
+  const r = await execNode(cwd, [join(cwd, 'scripts', 'verify.mjs')], GATE_MS, { RETROVIBE_SKIP_RECORD_GREEN: '1' });
   const out = `${r.stdout}${r.stderr}${r.timedOut ? `\nverify timed out after ${String(GATE_MS / 1000)}s\n` : ''}`;
   return { name: `npm run verify in ${unit.dir}`, pass: r.code === 0 && !r.timedOut, out, failed: failedGates(r.stdout) };
 }

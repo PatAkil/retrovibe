@@ -19,9 +19,9 @@ For a run-based game the unit of fun is one **run**, and replayability is "the n
 - **Between-run progression** — unlocks, classes, a starting draft. The only way a *lost* run pays forward; keep it small so losing keeps its teeth.
 - **Variance** — events, curses, mutators, elite modifiers: "what will it throw at me this time".
 
-## 2. Put two or three options on the table
+## 2. Put two or three options on the table (skip if already specified)
 
-For each option, one line each: what it adds, what it costs (complexity, new screens at 240×160 and their label lengths, simulator work), which axis it moves, and a rough size (one milestone, a few). Recommend one and say why. Then **stop and ask** — this is the one place in the loop where blocking for the user is right: the wrong mechanic built well is wasted work. For a brand-new game, also confirm the scope cut (**helping-the-user**: one act, one deck, one dungeon first).
+If the user's prompt already specifies the core systems, stat/content tables, screens, and scope cut, **skip the Q&A stop** and write `DESIGN.md` directly from their spec. Otherwise, for each option write one line each: what it adds, what it costs (complexity, new screens at 240×160 and their label lengths, simulator work), which axis it moves, and a rough size (one milestone, a few). Recommend one and say why. Then **stop and ask** — when the design is open, blocking for the user prevents building the wrong mechanic. For a brand-new game, also confirm the scope cut (**helping-the-user**: one act, one deck, one dungeon first).
 
 ## 3. Write the contract before the code
 
@@ -41,8 +41,8 @@ The layout is fixed by the lint and dependency-cruiser boundary: rules are **hea
 
 Hand to **creating-a-game** (Step 4) or **iterating-on-a-game**:
 
-1. **Rules first, headless**: types, data and `game/sim/*` per **balancing-with-the-simulator**'s layout, with `sim/run.mjs` and its policies. After every save, from the game folder: `npm run check && npm run lint`; then `npm run sim` to see the new system move the numbers against the targets.
-2. **Presentation second**: screens, sprites, juice, per **ensuring-arcade-visuals** and `STYLE.md`; `npm run look -- --scene <scene>` at each screen. A sub-screen inside `PLAYING` gets reached by the dev hook — extend `game/devhook.ts`'s fixture builders so `--scene playing` lands on the screen that matters, and report the sub-screen in `state()`.
-3. **Quality pass last** (**improving-game-quality**), then `npm run verify -- --full`.
+1. **Rules first, headless**: write `types.ts`, `data.ts`, and `game/sim/*` per **balancing-with-the-simulator**'s layout in parallel `Write` calls, with `sim/run.mjs` and its policies. Run `npm run check && npm run lint` once at the end of the batch (not after every single file save); then run `npm run sim` to see the new system move the numbers against the targets.
+2. **Presentation second**: write screens, sprites, and juice per **ensuring-arcade-visuals** and `STYLE.md` in parallel `Write` calls; inspect all screens in **one batched** `npm run look -- --scenes title,playing,gameover` (plus any extra query params like `playing?screen=shop`). A sub-screen inside `PLAYING` gets reached by the dev hook — extend `game/devhook.ts`'s fixture builders so `--scenes` lands on the screen that matters, and report the sub-screen in `state()`.
+3. **Quality pass last** (**improving-game-quality**), then `npm run verify -- --scenes title,playing,gameover` (reserve `--full` for structural/template changes or explicit full audits).
 
 `DESIGN.md` moves with the code: a rules change edits the contract in the same milestone. A mechanic is done when its policy line in the simulator report is where the contract says it should be **and** the user has played it.

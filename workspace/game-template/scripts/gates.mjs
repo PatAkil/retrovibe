@@ -1,11 +1,11 @@
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { basename, dirname, join, parse, relative } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, relative } from 'node:path';
 import { envOr } from './browser.mjs';
 import { killChild, servesGame, startServer } from './devserver.mjs';
+import { cacheFile, GAME, walkUp } from './paths.mjs';
 
-const GAME = join(dirname(fileURLToPath(import.meta.url)), '..');
 const FULL = process.argv.includes('--full');
 const SCENES = ['title', 'playing', 'paused', 'gameover', 'win'];
 const DEFAULT_URL = 'http://localhost:5173/';
@@ -13,19 +13,15 @@ const HOOK_GLOBAL = '__retrovibe';
 const server = { url: envOr('LOOK_URL', envOr('SMOKE_URL', DEFAULT_URL)), stop: undefined };
 const activeChildren = new Set();
 
-function walkUp(rel) {
-  let dir = GAME;
-  for (;;) {
-    const candidate = join(dir, rel);
-    if (existsSync(candidate)) {
-      return candidate;
-    }
-    if (dir === parse(dir).root) {
-      return null;
-    }
-    dir = dirname(dir);
+function requestedScenes() {
+  const idx = process.argv.indexOf('--scenes');
+  if (idx === -1 || idx + 1 >= process.argv.length) {
+    return null;
   }
+  return process.argv[idx + 1].split(',').map((s) => s.trim()).filter(Boolean);
 }
+
+const CUSTOM_SCENES = requestedScenes();
 
 function run(cmd, args, options = {}) {
   return new Promise((resolve) => {
@@ -59,17 +55,6 @@ function rootConfig(file) {
   return walkUp(file) ?? join(GAME, file);
 }
 
-function cacheFile(name) {
-  const nodeModules = walkUp('node_modules');
-  const base = nodeModules ?? join(GAME, 'node_modules');
-  const tag = nodeModules === null
-    ? basename(GAME)
-    : relative(dirname(nodeModules), GAME).replace(/[^a-zA-Z0-9_-]/g, '_');
-  const dir = join(base, '.cache', 'retrovibe', tag);
-  mkdirSync(dir, { recursive: true });
-  return join(dir, name);
-}
-
 function knip() {
   const config = walkUp('knip.config.js');
   if (config === null) {
@@ -81,7 +66,20 @@ function knip() {
 
 const script = (file, ...args) => () => run(process.execPath, [join(GAME, file), ...args]);
 
+function eyesMarkerReady() {
+  const uid = typeof process.getuid === 'function' ? String(process.getuid()) : 'user';
+  const marker = join(tmpdir(), `retrovibe-${uid}`, 'eyes.json');
+  try {
+    return JSON.parse(readFileSync(marker, 'utf8')).ready === true;
+  } catch {
+    return false;
+  }
+}
+
 function eyes() {
+  if (eyesMarkerReady()) {
+    return Promise.resolve({ code: 0, out: '', note: 'ready (cached)' });
+  }
   const setup = walkUp(join('harness', 'setup-eyes.mjs'));
   return setup === null ? missing('harness/setup-eyes.mjs') : run(process.execPath, [setup]);
 }
@@ -138,7 +136,7 @@ function sceneVerdict(scene, item, fallback) {
     return { scene, status: 'fail', detail: fallback };
   }
   if (item.ok === true) {
-    return { scene, status: 'ok' };
+    return { scene, status: 'ok', shot: item.shot ?? null };
   }
   if (item.unsupported === true && (item.errors?.length ?? 0) === 0) {
     return { scene, status: 'unsupported' };
@@ -147,15 +145,15 @@ function sceneVerdict(scene, item, fallback) {
   return { scene, status: 'fail', detail: detail.slice(0, 400) };
 }
 
-async function lookAll() {
-  const r = await run(process.execPath, [join(GAME, 'scripts', 'look.mjs'), '--scenes', SCENES.join(',')]);
+async function lookScenes(list) {
+  const r = await run(process.execPath, [join(GAME, 'scripts', 'look.mjs'), '--scenes', list.join(',')]);
   const parsed = parseScenes(r.out);
   const fallback = r.out.trim().slice(0, 400);
-  const verdicts = SCENES.map((scene) => sceneVerdict(scene, parsed.get(scene), fallback));
+  const verdicts = list.map((scene) => sceneVerdict(scene, parsed.get(scene), fallback));
   const failed = verdicts.filter((v) => v.status === 'fail');
   const skipped = verdicts.filter((v) => v.status === 'unsupported').map((v) => v.scene);
   const out = verdicts.map((v) => `${v.scene}: ${v.status}${v.detail ? ` ${v.detail}` : ''}`).join('\n');
-  const ok = SCENES.length - failed.length - skipped.length;
+  const ok = list.length - failed.length - skipped.length;
   const note = `${ok} scenes ok${skipped.length > 0 ? `, unsupported by the game: ${skipped.join(', ')}` : ''}`;
   return { code: failed.length > 0 ? 1 : 0, out: `${out}\n`, note: failed.length > 0 ? '' : note };
 }
@@ -194,8 +192,18 @@ function fullGates() {
     { name: 'jscpd', exec: tool('jscpd', '--config', rootConfig('.jscpd.json'), ...sources) },
     { name: 'depcruise', exec: tool('depcruise', 'game', 'engine', '--config', rootConfig('.dependency-cruiser.cjs')) },
     { name: 'dist:no-hook', light: true, after: ['build'], exec: distClean },
-    { name: 'look:all', light: true, after: ['eyes', 'serve'], exec: lookAll },
+    { name: 'look:all', light: true, after: ['eyes', 'serve'], exec: () => lookScenes(SCENES) },
   ];
+}
+
+function browserGate() {
+  if (FULL) {
+    return [];
+  }
+  if (CUSTOM_SCENES !== null && CUSTOM_SCENES.length > 0) {
+    return [{ name: 'look', light: true, after: ['eyes', 'serve'], exec: () => lookScenes(CUSTOM_SCENES) }];
+  }
+  return [{ name: 'smoke', light: true, after: ['eyes', 'serve'], exec: script('smoke.mjs') }];
 }
 
 export function gates() {
@@ -205,13 +213,16 @@ export function gates() {
     { name: 'lint', exec: tool('eslint', '.', '--cache', '--cache-location', cacheFile('eslintcache')) },
     { name: 'check', exec: tool('tsc', '--noEmit', '--incremental', '--tsBuildInfoFile', cacheFile('tsbuildinfo')) },
     { name: 'build', exec: tool('vite', 'build', '--logLevel', 'warn') },
-    { name: 'smoke', light: true, after: ['eyes', 'serve'], exec: script('smoke.mjs') },
+    ...browserGate(),
     ...simGates(),
   ];
   return FULL ? list.concat(fullGates()) : list;
 }
 
 export async function recordGreen() {
+  if (process.env.RETROVIBE_SKIP_RECORD_GREEN === '1') {
+    return;
+  }
   const feedback = walkUp(join('harness', 'agent-feedback.mjs'));
   if (feedback === null) {
     return;

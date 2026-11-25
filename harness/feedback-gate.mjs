@@ -86,21 +86,25 @@ function summarise(results) {
   };
 }
 
+const lockName = (id) => `gate-${id.replace(/[^\w-]+/g, '_')}.lock`;
+
+async function gateUnitLocked(repo, unit, waitMs, all) {
+  const lock = join(repo.dir, lockName(unit.id));
+  if (!acquire(lock, { waitMs, staleMs: GATE_STALE_MS })) {
+    return { unit, pass: false, busy: true, name: unit.id, out: '', failed: [] };
+  }
+  try {
+    return await gateUnitSettled(repo, unit, all);
+  } finally {
+    release(lock);
+  }
+}
+
 export async function gateUnits(repo, units, waitMs, all = gatedFiles(repo.root)) {
   if (units.length === 0 || allCached(repo, units, all)) {
     return summarise(units.map((unit) => ({ unit, pass: true, cached: true, name: unit.id, out: '', failed: [] })));
   }
-  const lock = join(repo.dir, 'gate.lock');
-  if (!acquire(lock, { waitMs, staleMs: GATE_STALE_MS })) {
-    return { ...summarise([]), pass: false, busy: true };
-  }
-  try {
-    const results = [];
-    for (const unit of units) {
-      results.push(await gateUnitSettled(repo, unit, all));
-    }
-    return summarise(results);
-  } finally {
-    release(lock);
-  }
+  const results = await Promise.all(units.map((unit) => gateUnitLocked(repo, unit, waitMs, all)));
+  const summary = summarise(results);
+  return results.some((r) => r.busy === true) ? { ...summary, pass: false, busy: true } : summary;
 }

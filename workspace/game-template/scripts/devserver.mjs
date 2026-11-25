@@ -88,19 +88,30 @@ function stopper(child) {
 }
 
 async function waitReady(child, url, output) {
-  for (let i = 0; i < 300; i++) {
-    if (output.error !== null) {
-      throw new Error(`dev server failed to start: ${output.error.message}`, { cause: output.error });
+  let readyFromStdout = false;
+  const checkLine = () => {
+    if (output.text.includes('Local') && output.text.includes('ready in')) {
+      readyFromStdout = true;
     }
-    if (child.exitCode !== null) {
-      throw new Error(`dev server exited early (${child.exitCode}):\n${output.text}`);
+  };
+  child.stdout.on('data', checkLine);
+  try {
+    for (let i = 0; i < 300; i++) {
+      if (output.error !== null) {
+        throw new Error(`dev server failed to start: ${output.error.message}`, { cause: output.error });
+      }
+      if (child.exitCode !== null) {
+        throw new Error(`dev server exited early (${child.exitCode}):\n${output.text}`);
+      }
+      if (readyFromStdout || await answers(url)) {
+        return;
+      }
+      await sleep(50);
     }
-    if (await answers(url)) {
-      return;
-    }
-    await sleep(50);
+    throw new Error(`dev server did not answer on ${url} in 15s:\n${output.text}`);
+  } finally {
+    child.stdout.off('data', checkLine);
   }
-  throw new Error(`dev server did not answer on ${url} in 15s:\n${output.text}`);
 }
 
 export async function startServer(gameDir, viteBin, onSpawn) {
@@ -108,7 +119,7 @@ export async function startServer(gameDir, viteBin, onSpawn) {
   const url = `http://localhost:${port}/`;
   const child = spawn(viteBin, ['--port', String(port), '--strictPort'], {
     cwd: gameDir,
-    env: { ...process.env, VITE_PORT: String(port), FORCE_COLOR: '0', RETROVIBE_LOCAL_HMR: '1' },
+    env: { ...process.env, VITE_PORT: String(port), FORCE_COLOR: '0', NO_COLOR: '1', RETROVIBE_LOCAL_HMR: '1' },
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: true,
   });

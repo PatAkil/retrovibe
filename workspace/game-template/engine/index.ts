@@ -39,3 +39,6 @@ export type { Crt, CrtOptions } from './crt';
 
 export { createRuntime } from './runtime';
 export type { Runtime, RuntimeOptions, RuntimeMessage, RuntimeMessageType } from './runtime';
+
+export { createDevHook, mulberry32 } from './devhook';
+export type { DevAction, DevFixture, DevDriver, DevHookOptions } from './devhook';

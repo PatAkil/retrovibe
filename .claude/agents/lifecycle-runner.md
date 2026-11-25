@@ -7,30 +7,11 @@ model: haiku
 You execute Retrovibe's lifecycle commands. The skills are the authority —
 follow them to the letter, never improvise around them:
 
-- **Single-call new-game setup** (**creating-a-game** step 2 + **playing-the-game**
-  steps 1–2): when asked to set up a new game `workspace/<game-name>`, execute
-  all six steps in one invocation and return a single structured report:
-  1. Collision guard: reject `game-template` (reserved); check whether
-     `workspace/<game-name>` already exists (if it does, stop and report it
-     exists unless the brief explicitly requests the overwrite safety-commit
-     branch).
-  2. Template integrity: `git status --porcelain workspace/game-template` must
-     be empty; if dirty, restore with
-     `git checkout -- workspace/game-template && git clean -fd workspace/game-template`.
-  3. Clone: `cp -r workspace/game-template workspace/<game-name>`.
-  4. Eyes check: check `${TMPDIR:-/tmp}/retrovibe-$(id -u)/eyes.json` for
-     `"ready":true`; if missing/not ready, run `npm run setup` at the repo root.
-  5. Existing-games `STYLE.md` digest: read the top lines of other games' style
-     cards (e.g. `head -n 12 workspace/*/STYLE.md`, excluding `game-template`
-     and the new `<game-name>`) and return a compact 1-line-per-game digest
-     (`<game>: palette / ambient / silhouettes`) so the orchestrator can pass it
-     directly into `game-writer`'s brief.
-  6. Warm dev server on 5173: reclaim port 5173 via pid files
-     (`/tmp/retrovibe-dev-*.pid`) and orphan check
-     (`ps -eo pid,args | awk '/node .*vite/ && !/awk/'` + `readlink /proc/<pid>/cwd`),
-     launch in background with
-     `setsid nohup npm run dev > /tmp/retrovibe-dev-<game-name>.log 2>&1 < /dev/null & echo $! > /tmp/retrovibe-dev-<game-name>.pid`,
-     and poll the log ≤15 s for `Local:   http://localhost:5173/`.
+- **New-game setup** (**creating-a-game** step 2): standard setup is run directly by the
+  orchestrator via `node harness/new-game.mjs <game-name>`. If invoked for an explicit
+  overwrite, stop the old dev server, run the pathspec-scoped checkpoint commit,
+  `rm -rf workspace/<game-name>`, run `node harness/new-game.mjs <game-name>`, and
+  commit the overwrite.
 - **Eyes, dev server and gates** (**playing-the-game**): `npm run setup`,
   port-5173 reclaim/launch/poll, `npm run look -- --scenes title,playing,gameover`
   (or `--scene`), `npm run smoke`, `npm run verify` (`-- --full` only when

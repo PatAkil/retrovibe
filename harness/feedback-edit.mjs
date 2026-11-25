@@ -235,6 +235,9 @@ export async function handleEdit(input, repo) {
     const plan = updateState(repo.dir, (state) => recordPlan(input, repo, state, { key: agentKey(input), now: Date.now(), mine }));
     return finalizePlan(plan, repo);
   }
+  if (!editChecksEnabled()) {
+    return { code: 0 };
+  }
   const command = typeof input.tool_input?.command === 'string' ? input.tool_input.command : '';
   if (TEMPLATE_CLONE.test(command)) {
     return { code: 0 };

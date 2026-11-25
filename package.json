@@ -7,7 +7,7 @@
     "prepare": "node harness/install-git-hooks.mjs",
     "gate": "node harness/agent-feedback.mjs gate",
     "setup": "node harness/setup-eyes.mjs",
-    "lint": "node harness/sync-fixture-engines.mjs && eslint .",
+    "lint": "node harness/sync-fixture-engines.mjs && eslint workspace/game-template harness verification tools eslint.config.mjs knip.config.js .dependency-cruiser.cjs --cache --cache-location node_modules/.cache/retrovibe-root-eslintcache",
     "lint:full": "npm run lint && knip && jscpd workspace/game-template/game workspace/game-template/engine && depcruise workspace/game-template/game workspace/game-template/engine --config .dependency-cruiser.cjs"
   },
   "devDependencies": {

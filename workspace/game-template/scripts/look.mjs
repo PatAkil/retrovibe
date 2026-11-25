@@ -1,4 +1,4 @@
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -22,6 +22,7 @@ const HOOK_ACTIONS = {
   keyp: 'PAUSE', p: 'PAUSE', escape: 'PAUSE',
 };
 const EXIT_UNSUPPORTED = 2;
+const PNG_PREFIX = 'data:image/png;base64,';
 
 const { values: opts } = parseArgs({
   options: {
@@ -119,9 +120,13 @@ function readHook(page) {
   return page.evaluate(() => {
     const hook = window.__retrovibe;
     if (typeof hook?.state !== 'function') {
-      return { hooked: false, unsupported: [] };
+      return { hooked: false, canReset: false, unsupported: [] };
     }
-    return { hooked: true, unsupported: Array.isArray(hook.unsupported) ? hook.unsupported.map(String) : [] };
+    return {
+      hooked: true,
+      canReset: typeof hook.resetScene === 'function',
+      unsupported: Array.isArray(hook.unsupported) ? hook.unsupported.map(String) : [],
+    };
   });
 }
 
@@ -133,8 +138,7 @@ function sceneMismatch(scene, state) {
   return state.scene.toUpperCase() === want ? null : `asked for scene ${scene} but the hook reports ${state.scene}`;
 }
 
-async function drive(page, scene, errors) {
-  const { hooked } = await readHook(page);
+async function drive(page, scene, hooked, errors) {
   if (!hooked && scene !== undefined && scene !== 'title') {
     errors.push(`--scene ${scene} needs the dev hook, but the page has no window.__retrovibe`);
     return null;
@@ -156,27 +160,42 @@ async function drive(page, scene, errors) {
   return state;
 }
 
-async function capture(canvas, spec, seed, multi) {
+async function capture(page, canvas, ctx) {
   if (opts['no-shot'] || !canvas) {
     return null;
   }
-  const path = shotPath(spec, seed, multi);
+  const path = shotPath(ctx.spec, ctx.seed, ctx.multi);
   mkdirSync(dirname(path), { recursive: true });
+  const dataUrl = await page.evaluate(() => {
+    const el = document.querySelector('canvas');
+    return typeof el?.toDataURL === 'function' ? el.toDataURL('image/png') : '';
+  }).catch(() => '');
+  if (dataUrl.startsWith(PNG_PREFIX)) {
+    writeFileSync(path, Buffer.from(dataUrl.slice(PNG_PREFIX.length), 'base64'));
+    return path;
+  }
   await canvas.screenshot({ path });
   return path;
 }
 
-async function unsupportedScene(page, scene) {
-  if (scene === undefined) {
-    return false;
+function labelFor(spec) {
+  return spec.query === '' ? spec.scene : `${spec.scene}?${spec.query}`;
+}
+
+async function captureSceneOnLoadedPage(page, canvas, hook, ctx) {
+  const base = ctx.multi ? { scene: labelFor(ctx.spec) } : {};
+  const result = { ...base, ok: false, state: null, errors: ctx.errors, shot: null };
+  if (ctx.spec.scene !== undefined && hook.unsupported.includes(ctx.spec.scene)) {
+    return { ...result, unsupported: true };
   }
-  const { unsupported } = await readHook(page);
-  return unsupported.includes(scene);
+  result.state = await drive(page, ctx.spec.scene, hook.hooked, ctx.errors);
+  result.shot = await capture(page, canvas, ctx);
+  result.ok = ctx.errors.length === 0;
+  return result;
 }
 
 async function lookOnPage(page, ctx) {
-  const label = ctx.spec.query === '' ? ctx.spec.scene : `${ctx.spec.scene}?${ctx.spec.query}`;
-  const base = ctx.multi ? { scene: label } : {};
+  const base = ctx.multi ? { scene: labelFor(ctx.spec) } : {};
   const result = { ...base, ok: false, state: null, errors: ctx.errors, shot: null };
   await page.goto(pageUrl(ctx.spec, ctx.seed), { waitUntil: 'domcontentloaded', timeout: 15000 });
   const canvas = await page.waitForSelector('canvas', { state: 'attached', timeout: 8000 }).catch(() => null);
@@ -184,19 +203,13 @@ async function lookOnPage(page, ctx) {
     ctx.errors.push('no live <canvas> after module ran');
     return result;
   }
-  if (await unsupportedScene(page, ctx.spec.scene)) {
-    return { ...result, unsupported: true };
-  }
-  result.state = await drive(page, ctx.spec.scene, ctx.errors);
-  result.shot = await capture(canvas, ctx.spec, ctx.seed, ctx.multi);
-  result.ok = ctx.errors.length === 0;
-  return result;
+  const hook = await readHook(page);
+  return captureSceneOnLoadedPage(page, canvas, hook, ctx);
 }
 
 async function runScene(browser, spec, multi) {
   const errors = [];
   const seed = seedFor(spec.scene);
-  const label = spec.query === '' ? spec.scene : `${spec.scene}?${spec.query}`;
   let page;
   try {
     page = await browser.newPage();
@@ -204,9 +217,46 @@ async function runScene(browser, spec, multi) {
     return await lookOnPage(page, { spec, seed, multi, errors });
   } catch (e) {
     errors.push(`look: ${e.message.split('\n')[0]}`);
-    return { ...(multi ? { scene: label } : {}), ok: false, state: null, errors, shot: null };
+    return { ...(multi ? { scene: labelFor(spec) } : {}), ok: false, state: null, errors, shot: null };
   } finally {
     await page?.close().catch(() => undefined);
+  }
+}
+
+async function runReusedPage(browser, specs) {
+  const [first, ...rest] = specs;
+  const page = await browser.newPage();
+  const errors = [];
+  collectErrors(page, errors);
+  try {
+    const firstSeed = seedFor(first.scene);
+    await page.goto(pageUrl(first, firstSeed), { waitUntil: 'domcontentloaded', timeout: 15000 });
+    const canvas = await page.waitForSelector('canvas', { state: 'attached', timeout: 8000 }).catch(() => null);
+    if (!canvas) {
+      errors.push('no live <canvas> after module ran');
+      return specs.map((spec) => ({ scene: labelFor(spec), ok: false, state: null, errors: [...errors], shot: null }));
+    }
+    const hook = await readHook(page);
+    const results = [await captureSceneOnLoadedPage(page, canvas, hook, { spec: first, seed: firstSeed, multi: true, errors: [...errors] })];
+    if (!hook.canReset) {
+      const remaining = await Promise.all(rest.map((spec) => runScene(browser, spec, true)));
+      return [...results, ...remaining];
+    }
+    for (const spec of rest) {
+      const sceneErrors = [];
+      const seed = seedFor(spec.scene);
+      if (hook.unsupported.includes(spec.scene)) {
+        results.push({ scene: labelFor(spec), ok: false, state: null, errors: sceneErrors, shot: null, unsupported: true });
+        continue;
+      }
+      const errStart = errors.length;
+      await page.evaluate(({ s, n }) => window.__retrovibe.resetScene(s, n), { s: spec.scene, n: Number(seed ?? 1) });
+      sceneErrors.push(...errors.slice(errStart));
+      results.push(await captureSceneOnLoadedPage(page, canvas, hook, { spec, seed, multi: true, errors: sceneErrors }));
+    }
+    return results;
+  } finally {
+    await page.close().catch(() => undefined);
   }
 }
 
@@ -225,7 +275,10 @@ async function runMulti() {
   let browser;
   try {
     browser = await launchBrowser();
-    const results = await Promise.all(specs.map((spec) => runScene(browser, spec, true)));
+    const allPlain = specs.every((s) => s.query === '');
+    const results = allPlain
+      ? await runReusedPage(browser, specs)
+      : await Promise.all(specs.map((spec) => runScene(browser, spec, true)));
     for (const r of results) {
       console.log(JSON.stringify(r));
     }
